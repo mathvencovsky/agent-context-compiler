@@ -20,7 +20,14 @@ extratores existentes — por isso o harness de avaliação faz parte do produto
 - **M0 — Fundação do repositório: concluído.** Projeto roda, testa e faz lint
   desde o primeiro commit (uv, FastAPI, Postgres 16 + pgvector, S3 local via
   SeaweedFS, Alembic, structlog, CI).
-- Próximo: **M1 — Fetcher seguro** (SSRF, limites, robots.txt).
+- **M1 — Fetcher seguro: concluído.** Aquisição HTTP com proteção contra SSRF
+  (guard que resolve e valida todos os IPs, falha fechada, conexão no IP
+  validado para fechar DNS rebinding), limites de corpo/timeout, redirecionamentos
+  re-validados e respeito a robots.txt (SPEC §3.1, §3.2, §8). Aprovado em revisão
+  de segurança independente (veredito APPROVED, sem findings HIGH/MEDIUM; o único
+  LOW corrigido).
+- Próximo: **M2 — Corpus congelado, harness e baselines** (requer lista humana
+  de sites e tarefas validadas).
 
 Acompanhe `PROGRESS.md` para o detalhe de cada marco.
 

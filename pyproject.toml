@@ -24,6 +24,7 @@ dev = [
     "pytest-asyncio",
     "syrupy",
     "boto3-stubs[s3]",
+    "trustme>=1.2",
 ]
 # bench: filled in M2 (benchmark harness). Declared placeholder for now.
 bench = []
@@ -55,4 +56,5 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
     "integration: tests that require real Postgres/S3 (SeaweedFS) services",
+    "allow_network: loopback-server tests that opt out of the no-network guard",
 ]

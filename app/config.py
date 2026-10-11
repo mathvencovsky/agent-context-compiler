@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -44,6 +45,14 @@ class Settings(BaseSettings):
     connect_timeout: int = 5
     max_redirects: int = 5
 
+    # Fetcher destination policy (SPEC 3.1). Ports outside this allow-list are
+    # rejected with blocked_destination. Accept a comma-separated env string
+    # (e.g. ALLOWED_PORTS="80,443,8443") and normalize to a tuple of ints.
+    allowed_ports: Annotated[tuple[int, ...], NoDecode] = (80, 443)
+
+    # robots.txt per-domain cache TTL in seconds (SPEC 3.2 — 24h default).
+    robots_cache_ttl_seconds: int = 86400
+
     # Render decision (SPEC 3.3).
     render_min_text_chars: int = 500
 
@@ -56,6 +65,29 @@ class Settings(BaseSettings):
     coverage_low: float = 0.2
     coverage_high: float = 0.5
     rrf_k: int = 60
+
+    @field_validator("allowed_ports", mode="before")
+    @classmethod
+    def _parse_allowed_ports(cls, value: object) -> object:
+        """Accept a comma-separated string from the environment.
+
+        pydantic-settings hands tuple fields the raw env string; parse
+        ``"80,443,8443"`` into ``(80, 443, 8443)``. Non-string values (the
+        default tuple, a list) are passed through for pydantic to coerce.
+        """
+        if isinstance(value, str):
+            parts = [p.strip() for p in value.split(",") if p.strip()]
+            return tuple(int(p) for p in parts)
+        return value
+
+    def user_agent(self) -> str:
+        """Effective User-Agent string, SPEC §3.1 form.
+
+        ``AgentContextBot/0.1 (+<contact_url>)`` built from
+        ``fetcher_contact_url`` so the bot identity and the contact URL stay in
+        sync regardless of the stored ``fetcher_user_agent`` literal.
+        """
+        return f"AgentContextBot/0.1 (+{self.fetcher_contact_url})"
 
     @property
     def database_url(self) -> str:
