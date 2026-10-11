@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from app.config import Settings, get_settings
 from app.index.tokens import count_tokens
-from app.providers.llm.base import LLMResult, ResponseFormat
+from app.providers.llm.base import DEFAULT_SEED, LLMResult, ResponseFormat
 
 
 class MissingAPIKey(RuntimeError):
@@ -31,10 +31,15 @@ class OpenAIProvider:
         self,
         prompt: str,
         *,
-        temperature: float = 0.0,
+        seed: int = DEFAULT_SEED,
         response_format: ResponseFormat = "text",
     ) -> LLMResult:
-        """Call the OpenAI chat completions API honoring the response format."""
+        """Call the OpenAI chat completions API honoring the response format.
+
+        Temperature is NOT sent: the current ``gpt-*`` generation rejects any
+        explicit temperature (deprecated). A fixed ``seed`` is passed instead for
+        best-effort reproducibility (DECISIONS.md 2026-10-11).
+        """
         api_key = self._settings.bench_answerer_api_key
         if not api_key:
             raise MissingAPIKey(
@@ -61,7 +66,7 @@ class OpenAIProvider:
 
         completion = client.chat.completions.create(
             model=self.model,
-            temperature=temperature,
+            seed=seed,
             messages=messages,
             response_format=fmt,
         )

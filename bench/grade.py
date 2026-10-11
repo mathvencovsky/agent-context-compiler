@@ -144,7 +144,7 @@ def _grade_correct(
         expected="\n".join(task.expected),
         answer=result.answer,
     )
-    completion = judge.complete(prompt, temperature=0.0, response_format="json")
+    completion = judge.complete(prompt, response_format="json")
     try:
         payload = json.loads(completion.text)
     except (ValueError, TypeError):

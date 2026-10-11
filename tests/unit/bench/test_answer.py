@@ -66,7 +66,7 @@ class _InsufficientProvider:
         self,
         prompt: str,
         *,
-        temperature: float = 0.0,
+        seed: int = 7,
         response_format: ResponseFormat = "text",
     ) -> LLMResult:
         return LLMResult(
@@ -93,7 +93,7 @@ class _BrokenProvider:
         self,
         prompt: str,
         *,
-        temperature: float = 0.0,
+        seed: int = 7,
         response_format: ResponseFormat = "text",
     ) -> LLMResult:
         return LLMResult(

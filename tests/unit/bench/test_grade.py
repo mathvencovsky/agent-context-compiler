@@ -39,7 +39,7 @@ class _Judge:
         self,
         prompt: str,
         *,
-        temperature: float = 0.0,
+        seed: int = 7,
         response_format: ResponseFormat = "text",
     ) -> LLMResult:
         import json

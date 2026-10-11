@@ -24,7 +24,7 @@ import hashlib
 import json
 
 from app.index.tokens import count_tokens
-from app.providers.llm.base import LLMResult, ResponseFormat
+from app.providers.llm.base import DEFAULT_SEED, LLMResult, ResponseFormat
 
 #: A small deterministic word pool; the hash selects a slice to build text.
 _WORDS = (
@@ -69,6 +69,49 @@ def _looks_like_judge_prompt(prompt: str) -> bool:
     return "correct" in lowered and ("judge" in lowered or "rubric" in lowered)
 
 
+#: Marker the draft prompt (``bench/draft_tasks.py``) always contains.
+_DRAFT_EXCERPT_MARKER = "Excerpt:\n"
+
+
+def _looks_like_draft_prompt(prompt: str) -> bool:
+    """Heuristic: does ``prompt`` ask the model to draft a benchmark question?
+
+    The draft prompt embeds the source block after an ``Excerpt:`` marker and
+    asks for a ``{question, answer, quote}`` object. The fake answers it with a
+    quote taken LITERALLY from that excerpt, so the draft path (which discards
+    unverifiable quotes) is exercised rather than always failing.
+    """
+    return "draft" in prompt.lower() and _DRAFT_EXCERPT_MARKER in prompt
+
+
+def _draft_json(prompt: str, digest: bytes, derived: str) -> str:
+    """Build a draft-shaped JSON object with a quote literal to the excerpt.
+
+    An unanswerable draft (the prompt asks for an answer NOT in the excerpt)
+    yields ``answer="INSUFFICIENT"`` and an empty quote; an answerable one yields
+    a verbatim substring of the excerpt as the quote so
+    ``bench.draft_tasks`` can verify it.
+    """
+    excerpt = prompt.split(_DRAFT_EXCERPT_MARKER, 1)[1].strip()
+    if "insufficient" in prompt.lower():
+        payload: dict[str, object] = {
+            "question": f"What unlisted detail about {derived} is omitted here?",
+            "answer": "INSUFFICIENT",
+            "quote": "",
+        }
+    else:
+        # A deterministic verbatim window of the excerpt (>= 12 chars so the
+        # draft generator's quote check accepts it).
+        start = digest[0] % max(1, len(excerpt) - 40) if len(excerpt) > 52 else 0
+        quote = excerpt[start : start + 40].strip() or excerpt[:40]
+        payload = {
+            "question": f"Which specific value does this {derived} section state?",
+            "answer": quote.split()[0] if quote.split() else derived,
+            "quote": quote,
+        }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
 class FakeLLMProvider:
     """Deterministic, network-free :class:`~app.providers.llm.base.LLMProvider`."""
 
@@ -79,26 +122,29 @@ class FakeLLMProvider:
         self,
         prompt: str,
         *,
-        temperature: float = 0.0,
+        seed: int = DEFAULT_SEED,
         response_format: ResponseFormat = "text",
     ) -> LLMResult:
         """Return a deterministic result derived from the prompt hash.
 
-        ``temperature`` is accepted for interface parity but does not affect the
-        output: the fake is always deterministic.
+        ``seed`` is accepted for interface parity but does not affect the output:
+        the fake is always fully deterministic from the prompt.
         """
         digest = _digest(self.model, response_format, prompt)
         derived = _derive_text(digest)
 
         if response_format == "json":
-            if _looks_like_judge_prompt(prompt):
+            if _looks_like_draft_prompt(prompt):
+                text = _draft_json(prompt, digest, derived)
+            elif _looks_like_judge_prompt(prompt):
                 payload: dict[str, object] = {
                     "correct": bool(digest[0] & 1),
                     "reason": derived,
                 }
+                text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
             else:
                 payload = {"answer": derived, "citations": []}
-            text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+                text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         else:
             text = derived
 

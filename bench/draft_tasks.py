@@ -1,30 +1,43 @@
 """Draft benchmark tasks with the answerer LLM (SPEC §10.2).
 
-``draft_tasks`` seeds ``tasks.yaml`` with AI-authored *drafts* a human later
-reviews (``bench/review_tasks.py``). Each draft:
+``draft`` seeds ``tasks.yaml`` with AI-authored *drafts* a human later reviews
+(``bench/review_tasks.py``). Quality matters: a draft whose quote is page chrome
+or whose question is trivial wastes the human's validation time, so this
+generator works from the CLEAN intermediate representation (the M3/M4
+``extract_html``/``extract_pdf``), never the raw HTML, and asks the model for a
+specific-detail question with a verbatim quote.
 
-* is tied to one corpus URL and a canonical task category (the five of SPEC
-  §10.2), chosen by mapping the site's rich labels through
-  :func:`rich_label_to_category`;
-* has its question written by the injected answerer :class:`LLMProvider` (the
-  deterministic fake in tests, the real OpenAI model in the human run);
-* carries an :class:`~bench.tasks_schema.Evidence` whose ``quote`` is copied
-  LITERALLY from the snapshot document — a draft whose quote cannot be located
-  in the source text is DISCARDED, so every quote is verifiable (SPEC §10.4);
-* is marked ``author="ai_draft"``, ``validated=False``;
-* is unanswerable (``expected=["INSUFFICIENT"]``) for roughly 10% of drafts, so
-  the reviewed set exercises the INSUFFICIENT path.
+For each ``ok`` corpus entry it:
 
-Nothing here touches the network: the provider is injected and the text comes
-from the frozen :class:`~bench.corpus_store.CorpusStore`. The real run uses the
-real answerer; the tests use the fake.
+* builds the IR with the real extractor, so blocks are clean content (no CSS,
+  nav or ``<title>`` boilerplate);
+* picks several *quotable* blocks — paragraphs, tables, code and lists with
+  enough substance to carry a specific detail (a parameter, default, limit,
+  header, version, status code, …);
+* asks the injected answerer :class:`LLMProvider` to turn each block into one
+  ``{"question", "answer", "quote"}`` JSON object, and keeps the draft only when
+  the returned ``quote`` is found LITERALLY in the block text (SPEC §10.4);
+* assigns a canonical category (SPEC §10.2) from IR signals (a parameter table →
+  ``params_table``, a changelog URL/title → ``changelog``) falling back to the
+  site's rich labels;
+* marks every draft ``author="ai_draft"``, ``validated=False``;
+* makes roughly 10% unanswerable (``expected=["INSUFFICIENT"]``) by asking a
+  question whose answer is deliberately absent from the block.
+
+Nothing here touches the network: the provider is injected (the deterministic
+fake in tests, the real OpenAI answerer in the human run) and all text comes
+from the frozen :class:`~bench.corpus_store.CorpusStore`.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Sequence
 
+from app.extract.html import extract_html
+from app.extract.ir import Block, Document, SourceInfo
+from app.extract.pdf import extract_pdf
 from app.fetch.detect import parse_content_type
 from app.providers.llm.base import LLMProvider
 from bench.corpus_store import CorpusStore, ManifestEntry
@@ -39,11 +52,6 @@ _RICH_LABEL_MAP: dict[str, Category] = {
     "sql_reference": "api_reference",
     "cli_reference": "api_reference",
     "language_reference": "api_reference",
-    "guide": "guide",
-    "tutorial": "guide",
-    "troubleshooting": "guide",
-    "storage": "guide",
-    "spa_js": "guide",
     "configuration_reference": "params_table",
     "build_reference": "params_table",
     "changelog": "changelog",
@@ -51,17 +59,31 @@ _RICH_LABEL_MAP: dict[str, Category] = {
     "pdf": "pdf",
     "standards": "pdf",
     "protocol_specification": "pdf",
+    "guide": "guide",
+    "tutorial": "guide",
+    "troubleshooting": "guide",
+    "storage": "guide",
+    "spa_js": "guide",
 }
 
-#: Fraction of drafts made unanswerable (``expected=["INSUFFICIENT"]``).
+#: Draft at most this many tasks per corpus entry (several quotable blocks each).
+_TASKS_PER_ENTRY = 3
+
+#: One in this many drafts is made unanswerable (``expected=["INSUFFICIENT"]``).
 _INSUFFICIENT_EVERY = 10
 
-#: A quote is this many characters of literal source text.
-_QUOTE_LEN = 80
+#: A quotable block must carry at least this much text to host a specific detail.
+_MIN_BLOCK_CHARS = 60
+#: …and no more than this, so the quote stays a focused literal substring.
+_MAX_BLOCK_CHARS = 1500
 
-#: Collapse runs of whitespace when deriving readable text from HTML.
+#: Signals (in URL or title) that a page is a changelog/release page.
+_CHANGELOG_RE = re.compile(
+    r"(change\s*log|release[-\s]?notes|whatsnew|what's new|releases|releaselog)",
+    re.IGNORECASE,
+)
+
 _WS_RE = re.compile(r"\s+")
-_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def rich_label_to_category(labels: Sequence[str]) -> Category:
@@ -78,39 +100,114 @@ def rich_label_to_category(labels: Sequence[str]) -> Category:
     return "guide"
 
 
-def _entry_text(store: CorpusStore, entry: ManifestEntry) -> str:
-    """Return readable text for ``entry`` from the frozen corpus.
+def _category_for_entry(entry: ManifestEntry, doc: Document, block: Block) -> Category:
+    """Choose a canonical category from IR signals, then the site's rich labels.
 
-    PDFs are left as-is (their bytes are not HTML); for HTML the rendered copy is
-    preferred when present, else the raw body is decoded and stripped of tags.
-    Whitespace is collapsed so a derived quote is a clean literal substring.
+    PDFs are always ``pdf``. A changelog signal in the URL or document title wins
+    next; a parameter/data table block maps to ``params_table``. Otherwise the
+    site's rich labels decide (``rich_label_to_category``).
     """
-    media = entry.content_type
-    if media not in ("text/html", "application/xhtml+xml"):
-        raw = store.raw_bytes(entry.url)
-        return _WS_RE.sub(" ", raw.decode("utf-8", errors="replace")).strip()
+    if entry.content_type == "application/pdf":
+        return "pdf"
+    haystack = f"{entry.url} {doc.metadata.title or ''}"
+    if _CHANGELOG_RE.search(haystack):
+        return "changelog"
+    if block.type == "table":
+        return "params_table"
+    return rich_label_to_category(entry.rich_categories)
+
+
+def _document_for(store: CorpusStore, entry: ManifestEntry) -> Document:
+    """Build the clean IR for a corpus entry using the real M3/M4 extractor."""
+    raw = store.raw_bytes(entry.url)
+    source = SourceInfo(
+        url=entry.url,
+        final_url=entry.final_url,
+        content_type=entry.content_type,
+        fetched_at=_parse_dt(entry.fetched_at),
+        etag=None,
+        last_modified=None,
+        content_hash=entry.content_hash,
+        render_mode="pdf" if entry.content_type == "application/pdf" else "http",
+    )
+    if entry.content_type == "application/pdf":
+        return extract_pdf(raw, source)
 
     rendered = store.rendered_html(entry.url)
     if rendered is not None:
-        html = rendered
-    else:
-        raw = store.raw_bytes(entry.url)
-        _m, charset = parse_content_type(media)
-        html = raw.decode(charset or "utf-8", errors="replace")
-    stripped = _TAG_RE.sub(" ", html)
-    return _WS_RE.sub(" ", stripped).strip()
+        return extract_html(rendered, source)
+    _media, charset = parse_content_type(entry.content_type)
+    return extract_html(raw.decode(charset or "utf-8", errors="replace"), source)
 
 
-def _derive_quote(text: str) -> str | None:
-    """Return a literal substring of ``text`` to use as evidence, or ``None``.
+def _quotable_blocks(doc: Document) -> list[Block]:
+    """Return content blocks substantial enough to host a specific-detail quote.
 
-    The quote is a deterministic window of :data:`_QUOTE_LEN` characters taken
-    from the first non-trivial content. ``None`` when the source has too little
-    text to quote (that draft is discarded).
+    Headings and tiny blocks are skipped (they rarely carry a verifiable detail);
+    paragraphs, tables, code and lists within a sane length window are kept, in
+    document order, so block selection is deterministic.
     """
-    if len(text) < _QUOTE_LEN:
+    out: list[Block] = []
+    for block in doc.blocks:
+        if block.type == "heading":
+            continue
+        length = len(block.text)
+        if _MIN_BLOCK_CHARS <= length <= _MAX_BLOCK_CHARS:
+            out.append(block)
+    return out
+
+
+def _draft_prompt(entry: ManifestEntry, block: Block, *, unanswerable: bool) -> str:
+    """Build the fixed drafting prompt for one block (answerable or not)."""
+    heading = " > ".join(block.heading_path) if block.heading_path else "(top level)"
+    if unanswerable:
+        instruction = (
+            "Write ONE question about this topic whose answer is NOT present in "
+            "the excerpt below (so a reader with only this text must answer "
+            "INSUFFICIENT). Return JSON "
+            '{"question": "...", "answer": "INSUFFICIENT", "quote": ""}.'
+        )
+    else:
+        instruction = (
+            "Write ONE question answerable ONLY from the excerpt, targeting a "
+            "SPECIFIC detail (a parameter, default value, limit, header, status "
+            "code, flag, version or exact name) — not a summary. Give the short "
+            "exact answer, and a QUOTE copied VERBATIM from the excerpt that "
+            'contains the answer. Return JSON {"question": "...", "answer": '
+            '"...", "quote": "<verbatim substring of the excerpt>"}.'
+        )
+    return (
+        f"You are drafting a benchmark question about {entry.site} "
+        f"documentation (section: {heading}).\n"
+        f"{instruction}\n"
+        "The quote must be an exact substring of the excerpt. "
+        "Return ONLY the JSON object.\n\n"
+        f"Excerpt:\n{block.text}"
+    )
+
+
+def _parse_draft_json(text: str) -> dict[str, str] | None:
+    """Parse the model's JSON object, tolerating code fences; ``None`` on failure."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        cleaned = cleaned[cleaned.find("{") : cleaned.rfind("}") + 1]
+    try:
+        obj = json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
         return None
-    return text[:_QUOTE_LEN]
+    if not isinstance(obj, dict):
+        return None
+    return {str(k): str(v) for k, v in obj.items()}
+
+
+def _quote_in_block(quote: str, block: Block) -> bool:
+    """True if ``quote`` occurs in ``block.text`` modulo whitespace runs."""
+    if not quote:
+        return False
+    norm_quote = _WS_RE.sub(" ", quote).strip()
+    norm_block = _WS_RE.sub(" ", block.text).strip()
+    return len(norm_quote) >= 12 and norm_quote in norm_block
 
 
 def draft(
@@ -119,66 +216,103 @@ def draft(
     *,
     provider: LLMProvider,
 ) -> list[Task]:
-    """Draft one AI task per ``ok`` corpus entry with a verifiable quote.
+    """Draft specific-detail tasks from the clean IR of each ``ok`` corpus entry.
 
-    ``sites`` is accepted for signature parity with the human workflow (the
-    canonical category is derived from each entry's ``rich_categories`` recorded
-    in the manifest); it is unused here. ``provider`` is the answerer LLM used to
-    phrase the question. Every returned task is ``author="ai_draft"``,
-    ``validated=False`` and carries a quote that exists literally in its source
-    document; drafts whose quote cannot be derived are skipped.
+    ``sites`` is accepted for signature parity with the human workflow; the
+    canonical category comes from IR signals and each entry's recorded
+    ``rich_categories``. ``provider`` is the answerer LLM that phrases the
+    question. Up to :data:`_TASKS_PER_ENTRY` drafts are produced per entry, each
+    from a distinct quotable block. Answerable drafts whose returned quote cannot
+    be located verbatim in the block are DISCARDED, so every stored quote is
+    verifiable (SPEC §10.4). All drafts are ``author="ai_draft"``,
+    ``validated=False``.
     """
     tasks: list[Task] = []
     draft_index = 0
+
     for entry in store.entries():
         if entry.status != "ok":
             continue
 
-        text = _entry_text(store, entry)
-        quote = _derive_quote(text)
-        if quote is None:
+        doc = _document_for(store, entry)
+        blocks = _quotable_blocks(doc)
+        if not blocks:
             continue
 
-        category = rich_label_to_category(entry.rich_categories)
-        is_insufficient = draft_index % _INSUFFICIENT_EVERY == _INSUFFICIENT_EVERY - 1
+        # Spread the picked blocks across the document deterministically.
+        step = max(1, len(blocks) // _TASKS_PER_ENTRY)
+        picked = blocks[::step][:_TASKS_PER_ENTRY]
 
-        prompt = (
-            "Write one specific-detail question answerable only from this "
-            f"documentation excerpt about {entry.site}:\n\n{quote}"
-        )
-        completion = provider.complete(prompt, temperature=0.0, response_format="text")
-        question = completion.text.strip() or f"What does {entry.site} document here?"
+        for block in picked:
+            unanswerable = draft_index % _INSUFFICIENT_EVERY == _INSUFFICIENT_EVERY - 1
+            prompt = _draft_prompt(entry, block, unanswerable=unanswerable)
+            completion = provider.complete(prompt, response_format="json")
+            parsed = _parse_draft_json(completion.text)
+            if parsed is None or not parsed.get("question"):
+                continue
 
-        task = Task(
-            id=f"draft-{draft_index:04d}",
-            category=category,
-            split="dev",
-            urls=[entry.url],
-            question=question,
-            answer_type="judge",
-            expected=["INSUFFICIENT"] if is_insufficient else [quote],
-            expected_evidence=(
-                [] if is_insufficient else [Evidence(url=entry.url, quote=quote)]
-            ),
-            author="ai_draft",
-            validated=False,
-        )
-        tasks.append(task)
-        draft_index += 1
+            category = _category_for_entry(entry, doc, block)
+
+            if unanswerable:
+                task = Task(
+                    id=f"draft-{draft_index:04d}",
+                    category=category,
+                    split="dev",
+                    urls=[entry.url],
+                    question=parsed["question"].strip(),
+                    answer_type="judge",
+                    expected=["INSUFFICIENT"],
+                    expected_evidence=[],
+                    author="ai_draft",
+                    validated=False,
+                )
+                tasks.append(task)
+                draft_index += 1
+                continue
+
+            quote = parsed.get("quote", "")
+            if not _quote_in_block(quote, block):
+                # Unverifiable quote → discard rather than store page chrome.
+                continue
+            answer = parsed.get("answer", "").strip()
+            if not answer:
+                continue
+
+            task = Task(
+                id=f"draft-{draft_index:04d}",
+                category=category,
+                split="dev",
+                urls=[entry.url],
+                question=parsed["question"].strip(),
+                answer_type="judge",
+                expected=[answer],
+                expected_evidence=[Evidence(url=entry.url, quote=quote.strip())],
+                author="ai_draft",
+                validated=False,
+            )
+            tasks.append(task)
+            draft_index += 1
 
     return tasks
+
+
+def _parse_dt(value: str):  # type: ignore[no-untyped-def]
+    """Parse an ISO timestamp from the manifest into a datetime."""
+    from datetime import datetime
+
+    return datetime.fromisoformat(value)
 
 
 def main() -> None:  # pragma: no cover - human entry point, uses the real provider.
     """Human entry point: draft tasks with the real answerer provider.
 
     Spends API tokens; NOT run by the test suite. Wiring (store path, output
-    path, provider construction) is intentionally left to the human operator who
-    runs the snapshot first.
+    path, provider construction) lives in ``bench/run_draft.py``.
     """
     raise SystemExit(
-        "bench.draft_tasks.main is a human-run entry point; wire the real "
-        "CorpusStore and OpenAIProvider before calling it."
+        "bench.draft_tasks.main is a human-run entry point; run "
+        "`python -m bench.run_draft` which wires the real CorpusStore and "
+        "OpenAIProvider."
     )
 
 

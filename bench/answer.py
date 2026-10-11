@@ -109,7 +109,7 @@ def answer(task: Task, context_text: str, *, provider: LLMProvider) -> AnswerRes
     :data:`INSUFFICIENT` (fail explicit — the harness never guesses an answer).
     """
     prompt = build_prompt(task, context_text)
-    result = provider.complete(prompt, temperature=0.0, response_format="json")
+    result = provider.complete(prompt, response_format="json")
 
     try:
         payload = json.loads(result.text)

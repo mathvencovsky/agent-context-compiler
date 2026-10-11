@@ -1,12 +1,19 @@
 """LLM provider interface and result type (SPEC §10.3 / §10.4).
 
-The benchmark answers each task with a fixed answerer model at temperature 0 and
-grades the answer with a *different* judge model (SPEC §10.3 "mesmo LLM responde,
-temperatura 0, prompt fixo"; §10.4 "juiz = modelo diferente do respondedor").
-Both roles are expressed through :class:`LLMProvider`, a synchronous seam that
-mirrors the rest of the network stack (``app.fetch`` is synchronous). Callers
-inject a provider; tests inject the deterministic fake so no test touches the
-network (CLAUDE.md).
+The benchmark answers each task with a fixed answerer model and grades the answer
+with a *different* judge model (SPEC §10.4 "juiz = modelo diferente do
+respondedor"). Both roles are expressed through :class:`LLMProvider`, a
+synchronous seam that mirrors the rest of the network stack (``app.fetch`` is
+synchronous). Callers inject a provider; tests inject the deterministic fake so
+no test touches the network (CLAUDE.md).
+
+Reproducibility (DECISIONS.md 2026-10-11 — "temperatura 0 indisponível"): SPEC
+§10.3 asked for temperature 0, but the current OpenAI and Anthropic model
+generations have DEPRECATED the temperature parameter (every model tested
+rejects it). The benchmark therefore relies on a FIXED prompt plus an optional
+fixed ``seed`` (honored by providers that support it) and the bootstrap
+confidence intervals in the report (SPEC §10.5) for reproducibility, instead of
+temperature 0. ``complete`` takes ``seed``; temperature is not passed.
 
 :class:`LLMResult` carries the token counts the report needs to compute cost per
 task from ``bench/prices.yaml`` (SPEC §10.5).
@@ -39,14 +46,21 @@ class LLMResult:
     model: str
 
 
+#: Fixed seed used across the benchmark for reproducibility (providers that
+#: support a ``seed`` honor it; others ignore it). Replaces temperature 0, which
+#: current models no longer accept.
+DEFAULT_SEED = 7
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     """Synchronous completion seam for the benchmark answerer and judge.
 
-    Implementations must be deterministic for a given ``(prompt, temperature,
-    response_format)`` when the underlying model is (the fake is; real models are
-    at ``temperature=0``). When ``response_format == "json"`` the returned
-    ``text`` MUST be a single valid JSON document.
+    Implementations should be as deterministic as the underlying model allows for
+    a given ``(prompt, seed, response_format)`` (the fake is fully deterministic;
+    real models use a fixed ``seed`` where supported, since temperature control
+    was removed). When ``response_format == "json"`` the returned ``text`` MUST
+    be a single valid JSON document.
     """
 
     #: Stable model identifier (e.g. ``"gpt-6.1-sol"``), surfaced in reports.
@@ -56,7 +70,7 @@ class LLMProvider(Protocol):
         self,
         prompt: str,
         *,
-        temperature: float = 0.0,
+        seed: int = DEFAULT_SEED,
         response_format: ResponseFormat = "text",
     ) -> LLMResult:
         """Complete ``prompt`` and return the text plus token accounting."""

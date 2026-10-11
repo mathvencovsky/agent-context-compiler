@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from app.config import Settings, get_settings
 from app.index.tokens import count_tokens
-from app.providers.llm.base import LLMResult, ResponseFormat
+from app.providers.llm.base import DEFAULT_SEED, LLMResult, ResponseFormat
 from app.providers.llm.openai import MissingAPIKey
 
 #: Cap on judge output; the verdict JSON is tiny.
@@ -31,7 +31,7 @@ class AnthropicProvider:
         self,
         prompt: str,
         *,
-        temperature: float = 0.0,
+        seed: int = DEFAULT_SEED,
         response_format: ResponseFormat = "text",
     ) -> LLMResult:
         """Call the Anthropic messages API.
@@ -40,6 +40,12 @@ class AnthropicProvider:
         is ``"json"`` the harness prompt itself instructs the model to answer
         with a single JSON document (``bench/grade.py``), so the format argument
         is accepted for interface parity.
+
+        Temperature is NOT sent: ``claude-*-5-5`` reports it as deprecated and
+        rejects the request. This generation also exposes no ``seed`` parameter,
+        so ``seed`` is accepted for interface parity but not forwarded; the fixed
+        prompt and the report's bootstrap CIs carry reproducibility
+        (DECISIONS.md 2026-10-11).
         """
         api_key = self._settings.bench_judge_api_key
         if not api_key:
@@ -55,14 +61,10 @@ class AnthropicProvider:
 
         client = Anthropic(api_key=api_key)
         messages: list[MessageParam] = [{"role": "user", "content": prompt}]
-        # This SDK version does not expose a typed ``temperature`` parameter on
-        # ``messages.create``; pass it through ``extra_body`` so the judge still
-        # runs deterministically at temperature 0 (SPEC §10.3).
         message = client.messages.create(
             model=self.model,
             max_tokens=_MAX_TOKENS,
             messages=messages,
-            extra_body={"temperature": temperature},
         )
         text = "".join(block.text for block in message.content if block.type == "text")
 
