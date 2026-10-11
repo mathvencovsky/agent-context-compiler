@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    env:
+      # Settings/env mapping (1:1 with app.config.Settings and .env.example).
+      # Services run via docker compose below; from the runner host they are
+      # reachable on localhost through the compose-published ports.
+      ENV: dev
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: nina
+      S3_ENDPOINT_URL: http://localhost:8333
+      S3_ACCESS_KEY: nina-dev-access-key
+      S3_SECRET_KEY: nina-dev-secret-key
+      S3_BUCKET: nina-blobs
+      S3_REGION: us-east-1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      # Object storage is SeaweedFS (Apache-2.0, S3-compatible). GitHub Actions
+      # service containers cannot override the image command, and this image's
+      # entrypoint does not start the S3 gateway by default, so we bring the
+      # whole verified compose stack up in-job instead (Postgres + SeaweedFS +
+      # one-shot bucket init). See DECISIONS.md.
+      - name: Start infrastructure
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait postgres seaweedfs
+          docker compose up s3-init
+          docker compose ps
+
+      - name: Apply migrations
+        run: make migrate
+
+      - name: Lint, types and tests
+        run: make check
+
+      - name: Tear down infrastructure
+        if: always()
+        run: docker compose down -v

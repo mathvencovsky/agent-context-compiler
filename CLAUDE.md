@@ -31,7 +31,7 @@ A tese do produto só vale se o benchmark provar vantagem sobre extratores exist
 
 ## Stack (fixa, salvo decisão registrada em DECISIONS.md)
 
-Python 3.12, uv, FastAPI, Pydantic v2, SQLAlchemy 2 + Alembic, Postgres 16 + pgvector, httpx, lxml, readability-lxml, extruct, trafilatura (somente em baselines), Playwright com Chromium, pdfplumber, tiktoken, MinIO como S3 local, pytest, syrupy (snapshots), ruff, mypy (strict em `app/`), structlog, Docker Compose, SDK oficial de MCP para Python.
+Python 3.12, uv, FastAPI, Pydantic v2, SQLAlchemy 2 + Alembic, Postgres 16 + pgvector, httpx, lxml, readability-lxml, extruct, trafilatura (somente em baselines), Playwright com Chromium, pdfplumber, tiktoken, SeaweedFS como S3 local (boto3; AWS S3 em produção — ver DECISIONS.md 2026-10-11), pytest, syrupy (snapshots), ruff, mypy (strict em `app/`), structlog, Docker Compose, SDK oficial de MCP para Python.
 
 Provedores externos (embeddings, reranker, LLM do benchmark, Firecrawl) ficam sempre atrás de uma interface em `app/providers/`, com uma implementação fake e determinística para testes. Testes nunca acessam a rede externa.
 
@@ -52,7 +52,7 @@ Crawler de sites, indexação contínua, grafo de conhecimento, ações em sites
 
 ## Comandos
 
-- `make up` / `make down`: sobe e derruba Postgres e MinIO.
+- `make up` / `make down`: sobe e derruba Postgres e o armazenamento S3 local (SeaweedFS).
 - `make migrate`: aplica migrações.
 - `make check`: ruff, mypy e pytest.
 - `make test`: somente pytest.

@@ -1,0 +1,63 @@
+# NINA local infrastructure (dev only).
+# All values come from .env (copy .env.example -> .env). No secrets live here.
+# Object storage is SeaweedFS (Apache-2.0, S3-compatible) instead of MinIO:
+# MinIO stopped publishing free community images in Oct/2025 and is AGPL-3.0,
+# which CLAUDE.md forbids. See DECISIONS.md (2026-10-11). In production (M10)
+# the S3 target is managed AWS S3; boto3 and the S3 contracts are unchanged.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # SeaweedFS S3 gateway. `server -s3` brings up master+volume+filer+S3 on 8333.
+  # Default dev mode allows anonymous S3 access (no static credentials file),
+  # so S3_ACCESS_KEY/S3_SECRET_KEY are ignored locally and only matter against
+  # real AWS in production.
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.80
+    # -ip.bind=0.0.0.0 makes the S3 gateway listen on loopback too, so the
+    # in-container healthcheck can reach it via localhost.
+    command: server -s3 -dir=/data -ip.bind=0.0.0.0
+    ports:
+      - "8333:8333"
+    volumes:
+      - seaweed_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8333/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot bucket creation via boto3-compatible aws-cli (Apache-2.0), no `mc`.
+  # Idempotent: `aws s3 mb` on an existing bucket is treated as success.
+  s3-init:
+    image: amazon/aws-cli:2.17.0
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: ${S3_REGION}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        aws --endpoint-url http://seaweedfs:8333 s3 mb s3://${S3_BUCKET}
+        || aws --endpoint-url http://seaweedfs:8333 s3 ls s3://${S3_BUCKET}
+
+volumes:
+  pg_data:
+  seaweed_data:

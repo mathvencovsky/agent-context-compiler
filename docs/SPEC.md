@@ -39,7 +39,7 @@ app/
   store/
     models.py            SQLAlchemy
     repo.py              acesso a dados
-    blobs.py             S3/MinIO
+    blobs.py             S3 (SeaweedFS local, AWS S3 em produção)
   index/
     tokens.py            contagem de tokens
     chunker.py           IR -> chunks
@@ -202,7 +202,7 @@ api_keys(id pk, key_hash unique, name, created_at, revoked_at null, limits jsonb
 usage_events(id pk, api_key_id fk, endpoint, ts, status_code, latency_ms, units jsonb)
 ```
 
-O HTML ou PDF bruto e a IR completa ficam no MinIO/S3. O Postgres guarda metadados, chunks e índices. Chaves de API são armazenadas apenas como hash (sha256) e mostradas uma única vez na criação.
+O HTML ou PDF bruto e a IR completa ficam no armazenamento S3 (SeaweedFS no dev local, AWS S3 em produção — ver DECISIONS.md 2026-10-11). O Postgres guarda metadados, chunks e índices. Chaves de API são armazenadas apenas como hash (sha256) e mostradas uma única vez na criação.
 
 ## 8. Contratos de API
 

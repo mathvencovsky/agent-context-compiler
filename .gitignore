@@ -51,3 +51,6 @@ test-results/
 
 # Docker volumes (local)
 .data/
+
+# Workflow orchestration artifacts (plans, reviews, task specs) — not product
+.agents/
