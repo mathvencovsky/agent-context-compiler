@@ -14,6 +14,9 @@ dependencies = [
     "boto3",
     "structlog",
     "httpx",
+    "lxml>=6.1.3",
+    "readability-lxml>=0.9",
+    "extruct>=0.18.0",
 ]
 
 [dependency-groups]
@@ -50,6 +53,13 @@ module = ["tests.*", "bench.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
+
+# Third-party HTML/metadata parsers used by app/extract ship no type stubs
+# (lxml-stubs is incomplete; readability-lxml and extruct ship none). The M3
+# extraction code is still strictly typed at its own boundaries.
+[[tool.mypy.overrides]]
+module = ["lxml.*", "readability.*", "extruct.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,10 +1,94 @@
 # PROGRESS
 
-Marco atual: M1 (Fetcher seguro) — concluído e aprovado na revisão de segurança
-independente (veredito APPROVED, sem findings HIGH/MEDIUM); o único LOW-1 foi
-corrigido. Aguarda aprovação humana antes de iniciar o M2.
+Marco atual: M3 (IR e extração de HTML) — concluído. A camada HTML→IR
+(`app/extract/`) está implementada e coberta por testes unitários e por uma
+suíte de aceite sobre 18 fixtures HTML reais (snapshots syrupy de Markdown e da
+IR serializada, cobertura 100% de `<table>`/`<pre>` do conteúdo principal,
+limpeza de chrome, estabilidade de `block_id` e `heading_path`). Gate completo
+verde (só o teste de integração do /health do M0 fica deselecionado sem Docker).
+Próximo: M2 — Corpus congelado, harness e baselines (requer lista humana de
+sites e tarefas validadas).
+
+M1 (Fetcher seguro) permanece concluído e aprovado na revisão de segurança
+independente (veredito APPROVED, sem findings HIGH/MEDIUM; o LOW-1 foi corrigido).
 
 ## Concluídos
+
+### M3 — IR e extração de HTML
+
+Conversão determinística de HTML público em IR (SPEC §4), sem LLM e sem rede no
+caminho de extração. Pacote `app/extract/`:
+
+- `app/extract/ir.py`: modelos Pydantic v2 da IR (`Document`, `Block`,
+  `SourceInfo`, `Metadata`, `Link`, `Warning`), ids estáveis
+  (`make_document_id`, `make_version_id`, `base_block_id`) e `assign_block_ids`
+  (disambiguação `_2`/`_3` por chave de conteúdo — ver DECISIONS 2026-10-11
+  "block_id estável sob edição"), além de `normalize_text`.
+- `app/extract/jsonld.py`: `extract_metadata` (title/lang/published_at/
+  modified_at com fallbacks documentados; JSON-LD preservado inalterado via
+  extruct).
+- `app/extract/html.py`: `extract_html` com decodificação por charset, seleção
+  robusta de conteúdo principal (`<main>`/`<article>` → `role="main"` →
+  contêineres Sphinx/MkDocs conhecidos), isolamento por readability-lxml com
+  fallback obrigatório para o `<main>` original quando o readability descarta
+  `table/pre/ul/ol/dl`, limpeza de chrome por tag/role/classe, e um walker que
+  emite os oito tipos de bloco. O walker desce em contêineres aninhados
+  (`<dd>`, `<li>`, admonitions, blockquotes, web components) para nunca perder
+  blocos estruturais, e trata `table.highlighttable` como código (ver as três
+  decisões de 2026-10-11 no DECISIONS.md).
+- `app/extract/to_markdown.py`: `to_markdown` gera Markdown SEMPRE a partir da
+  IR (nunca do HTML), com tabelas GFM, blocos de código cercados com linguagem,
+  headings por nível e listas aninhadas com indentação de 2 espaços.
+
+Fixtures e aceite (FEAT-003/FEAT-004):
+
+- `tests/fixtures/html/` traz 18 páginas de documentação técnica real baixadas
+  uma única vez pelo fetcher seguro do M1 (primeiro acesso de rede autorizado;
+  licenças só MIT/BSD/Apache-2.0/PSF), com `SOURCES.md` registrando URL, fonte,
+  licença, categoria e data. O downloader `_download_html_fixtures.py` usa só
+  `app.fetch.client.fetch` e não é coletado pelo pytest.
+- `tests/unit/extract/test_fixtures_snapshots.py`: snapshots syrupy do Markdown
+  e da IR serializada (`model_dump(mode="json")`) por fixture, com `fetched_at`
+  fixo e `content_hash` = sha256 dos bytes para determinismo. 36 snapshots em
+  `tests/unit/extract/__snapshots__/` (versionados).
+- `test_fixtures_coverage.py`: afirma que 100% das `<table>` de dados e dos
+  `<pre>` de código do conteúdo principal viram blocos table/code na IR (conta
+  espelhando a classificação do walker: `highlighttable` é código, calha de
+  numeração não é conteúdo). Passa nas 18 fixtures.
+- `test_fixtures_cleanup.py`: lista de strings proibidas por fixture (chrome de
+  navegação/rodapé/feedback/ToC/permalink) que não podem aparecer em
+  `block.text`.
+- `test_block_id_stability.py`: mesma página duas vezes → ids idênticos; editar
+  um parágrafo → só o id daquele bloco muda.
+- `test_fixtures_heading_path.py`: `heading_path` em fixtures representativas.
+
+#### Amostragem manual de heading_path (M3)
+
+Verificado manualmente nas fixtures abaixo (observado = esperado, travado por
+`test_fixtures_heading_path.py`):
+
+- `python_tutorial_classes` (guia longo CPython):
+  - heading h1 "9. Classes" → `heading_path == []` (é o topo).
+  - parágrafo "Classes provide a means of bundling data and functionality…" →
+    `["9. Classes"]`.
+  - parágrafo "This is an example demonstrating how to reference…" →
+    `["9. Classes", "9.2. Python Scopes and Namespaces",
+    "9.2.1. Scopes and Namespaces Example"]` (h1 > h2 > h3).
+- `python_stdlib_argparse` (guia de módulo CPython):
+  - h1 do módulo ("argparse — …") → `heading_path == []`.
+  - h2 "ArgumentParser objects" → `[<título do módulo>]`.
+  - parágrafo "By default, ArgumentParser calculates the name of the program…"
+    (subseção "prog") → `[<título do módulo>, "ArgumentParser objects", "prog"]`.
+- `fastapi_first_steps` (tutorial FastAPI, MkDocs-Material):
+  - h1 "First Steps" → `heading_path == []`.
+  - parágrafo "In this case, OpenAPI is a specification…" →
+    `["First Steps", "OpenAPI", 'API "schema"']` (h1 > h3 > h4).
+
+O título do módulo em `python_stdlib_argparse` contém um travessão cujo byte
+depende do charset; o teste captura o texto real do h1 em vez de fixá-lo, para
+não acoplar a asserção à decodificação.
+
+### M1 — Fetcher seguro
 
 ### M1 — Fetcher seguro
 
@@ -167,9 +251,18 @@ testes de TLS real (SNI confirmado + controle sem SNI).
   sucesso precisam tratar esse caso. (Revisão de segurança INFO-2.)
 - `app/fetch/render.py` continua placeholder (Playwright é M4), assim como os
   demais módulos abaixo.
-- Módulos placeholder (docstring-only) em `app/extract`,
-  `app/store`, `app/index`, `app/retrieve`, `app/providers/*`, `app/usage`,
-  `app/mcp_server` — implementados a partir do M1.
+- `app/extract/pdf.py` continua placeholder (PDF é M4). O restante de
+  `app/extract` (ir, html, jsonld, to_markdown) foi implementado no M3.
+- Módulos placeholder (docstring-only) em `app/store`, `app/index`,
+  `app/retrieve`, `app/providers/*`, `app/usage`, `app/mcp_server` —
+  implementados a partir dos marcos seguintes.
+- M3 (dívida/escopo): a limpeza de chrome e a seleção de conteúdo principal
+  cobrem os padrões Sphinx/MkDocs/Starlight presentes nas 18 fixtures; outros
+  temas podem exigir novos seletores (a postura é conservadora — na dúvida, não
+  remover conteúdo, e o teste de strings proibidas guia). A estabilidade de
+  `block_id` entre cópias idênticas é local às ocorrências anteriores (ver
+  DECISIONS 2026-10-11 "block_id estável sob edição"). O gatilho de
+  `readability_fallback` é por documento, não por bloco.
 - `EMBEDDING_DIM=1024` é provisório; revisar ao escolher o provedor de
   embeddings no M6 (pode exigir migração do esquema).
 - Grupo de dependências `bench` está vazio (placeholder); o harness entra no M2.
@@ -214,3 +307,40 @@ A validação pura de URL (sem buscar nada) pode ser inspecionada com
 `app.fetch.guard.validate_url(url, resolver=SocketResolver())` — devolve
 `(normalized_url, hostname, validated_ip, port)` ou levanta um erro tipado.
 Rodar só a suíte de fetch: `uv run pytest tests/unit/fetch -q`.
+
+### IR e extração de HTML (M3)
+
+A extração é determinística, lê fixtures salvas (sem rede) e não usa LLM. Para
+exercitar manualmente sobre uma das fixtures reais:
+
+```python
+from datetime import UTC, datetime
+from app.extract.html import extract_html
+from app.extract.to_markdown import to_markdown
+from app.extract.ir import SourceInfo
+
+body = open("tests/fixtures/html/flask_api_reference.html", "rb").read()
+src = SourceInfo(
+    url="https://example.test/flask",
+    final_url="https://example.test/flask",
+    content_type="text/html; charset=utf-8",
+    fetched_at=datetime(2026, 10, 11, tzinfo=UTC),
+    etag=None,
+    last_modified=None,
+    content_hash="0" * 64,
+    render_mode="http",
+)
+doc = extract_html(body, src)
+print(len(doc.blocks), "blocks;", [w.code for w in doc.warnings])
+print(to_markdown(doc)[:500])
+```
+
+Rodar só a suíte de extração: `uv run pytest tests/unit/extract -q`. Para
+regenerar os snapshots syrupy após uma mudança intencional na extração:
+`uv run pytest tests/unit/extract --snapshot-update` e depois `uv run pytest
+tests/unit/extract` (sem a flag) para confirmar que o run limpo fica verde, sem
+snapshots obsoletos. O gate completo do M3 (host Windows, sem Docker):
+`uv run ruff check . ; uv run ruff format --check . ; uv run mypy app ;
+uv run pytest -m "not integration"` → ruff All checks passed; format 92 files
+already formatted; mypy Success (48 arquivos); pytest 218 passed, 1 deselected
+(só o teste de integração do /health do M0, que exige Docker), 36 snapshots.

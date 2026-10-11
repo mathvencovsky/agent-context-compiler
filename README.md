@@ -26,8 +26,19 @@ extratores existentes — por isso o harness de avaliação faz parte do produto
   re-validados e respeito a robots.txt (SPEC §3.1, §3.2, §8). Aprovado em revisão
   de segurança independente (veredito APPROVED, sem findings HIGH/MEDIUM; o único
   LOW corrigido).
-- Próximo: **M2 — Corpus congelado, harness e baselines** (requer lista humana
-  de sites e tarefas validadas).
+- **M3 — IR e extração de HTML: concluído.** Modelos Pydantic v2 da IR (SPEC §4),
+  ids estáveis e normalização de texto em `app/extract/ir.py`; `extract_html`
+  (seleção robusta de conteúdo principal, isolamento por readability com fallback
+  obrigatório, limpeza de chrome e walker dos oito tipos de bloco), metadados +
+  JSON-LD (`jsonld.py`) e `to_markdown` sempre a partir da IR. Coberto por testes
+  unitários e por uma suíte de aceite sobre 18 fixtures HTML reais: snapshots
+  syrupy de Markdown e da IR, cobertura 100% de `<table>`/`<pre>` do conteúdo
+  principal, limpeza de chrome, estabilidade de `block_id` e `heading_path`.
+  Dependências de runtime: lxml (BSD), readability-lxml (Apache-2.0), extruct (BSD).
+- Próximo: **M4 — Renderização por navegador e extração de PDF** (Playwright e
+  o walker de PDF; `app/fetch/render.py` e `app/extract/pdf.py` seguem placeholder
+  até lá). O **M2 — Corpus congelado, harness e baselines** depende de insumo
+  humano (lista de sites e 100 tarefas validadas) e corre em paralelo.
 
 Acompanhe `PROGRESS.md` para o detalhe de cada marco.
 
