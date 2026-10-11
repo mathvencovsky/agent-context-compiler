@@ -1,0 +1,21 @@
+# Normalize line endings: LF in the repo, auto on checkout.
+* text=auto eol=lf
+
+# Scripts and config stay LF.
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.sh text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf
+
+# Binary assets must not be touched.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
