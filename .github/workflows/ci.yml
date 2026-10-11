@@ -27,6 +27,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The runner ships ~25 GB of preinstalled SDKs we never use (Android,
+      # .NET, GHC, CodeQL, Swift). Chromium (~500 MB) plus the Docker stack
+      # (Postgres + SeaweedFS + aws-cli) can exhaust the ~14 GB free disk and
+      # fail a late step with "No space left on device". Reclaim space first.
+      - name: Free disk space
+        run: |
+          echo "Before:"; df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell \
+            /usr/share/swift || true
+          sudo docker image prune --all --force || true
+          echo "After:"; df -h /
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
