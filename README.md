@@ -98,18 +98,19 @@ verde no GitHub Actions.
 | **M2** | Corpus congelado, harness e baselines | ⏳ Bloqueado (insumo humano) |
 | **M3** | IR e extração de HTML | ✅ Concluído |
 | **M4** | Renderização por navegador e extração de PDF | ✅ Concluído |
-| **M5** | Persistência e endpoint `resolve` | ◻️ Próximo |
-| **M6** | Chunking e indexação | ◻️ Pendente (chave de embeddings) |
+| **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
+| **M6** | Chunking e indexação | ◻️ Próximo (chave de embeddings) |
 | **M7** | Busca, seleção e endpoint `assemble` | ◻️ Pendente (chave de reranker) |
 | **M8** | Benchmark completo e calibração | ◻️ Ponto de decisão |
 | **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
 | **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
-**Pipeline de aquisição e extração (M1, M3, M4) está completo e verificado:**
-HTTP seguro → HTML/PDF → IR → Markdown/JSON. Os marcos de segurança (M1, M4)
-passaram por revisão adversarial independente, sem findings HIGH/MEDIUM em
-aberto. O detalhe por marco está em [`PROGRESS.md`](PROGRESS.md); as decisões
-técnicas não óbvias, em [`DECISIONS.md`](DECISIONS.md).
+**Pipeline de aquisição, extração e persistência (M1, M3, M4, M5) está completo
+e verificado:** HTTP seguro → HTML/PDF → IR → Markdown/JSON → persistência +
+cache → `resolve`/`get-document`. Os marcos de segurança (M1, M4) passaram por
+revisão adversarial independente, sem findings HIGH/MEDIUM em aberto. O detalhe
+por marco está em [`PROGRESS.md`](PROGRESS.md); as decisões técnicas não óbvias,
+em [`DECISIONS.md`](DECISIONS.md).
 
 > **M2 depende de você.** O benchmark precisa de insumos humanos (lista de sites,
 > chaves de LLM, 100 tarefas validadas). Veja [o que fazer](#benchmark-o-que-depende-de-você).
@@ -173,6 +174,110 @@ S3 estiverem indisponíveis — nunca 200 com uma dependência quebrada.
 - `integration`: exige Postgres e S3 reais (via `make up`).
 - `browser`: exige Chromium (`uv run playwright install chromium`); roda num
   passo dedicado do CI.
+
+---
+
+## API: `resolve` e `get-document` (M5)
+
+O primeiro endpoint público transforma uma URL em um documento estruturado com
+proveniência e o persiste com cache. É consumível por HTTP hoje; o SDK Python e
+o servidor MCP entram no M9. A especificação completa dos contratos está em
+[`docs/SPEC.md`](docs/SPEC.md) §8; o schema OpenAPI vivo (com exemplos) fica em
+`http://localhost:8000/openapi.json` e a UI interativa em
+`http://localhost:8000/docs`.
+
+Autenticação está **desligada em `ENV=dev`** (o Bearer token é do M9).
+
+### `POST /v1/documents/resolve`
+
+Resolve uma URL: valida pelo guard SSRF, serve do cache quando há uma versão
+recente, senão busca (pelo cliente auditado), extrai para a IR, persiste o corpo
+bruto e a IR no S3 e devolve o envelope da SPEC §8.
+
+**Corpo da requisição**
+
+| Campo | Tipo | Default | Descrição |
+|---|---|---|---|
+| `url` | `string` | — (obrigatório) | URL pública http/https a resolver |
+| `formats` | `("markdown" \| "blocks")[]` | `["markdown","blocks"]` | quais representações incluir na resposta |
+| `force_refresh` | `boolean` | `false` | ignora o cache e força nova busca |
+| `render` | `"auto" \| "never" \| "always"` | `"auto"` | política de renderização por navegador (SPA) |
+
+```bash
+curl -s -X POST http://localhost:8000/v1/documents/resolve \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://peps.python.org/pep-0008/"}'
+```
+
+**Corpo da resposta (200)**
+
+```jsonc
+{
+  "document_id": "doc_0123456789abcdef",   // doc_ + sha1(url_normalizada)[:16]
+  "version_id":  "ver_fedcba9876543210",   // ver_ + sha256(corpo_bruto)[:16]
+  "source":   { "url": "...", "final_url": "...", "content_type": "text/html",
+                "fetched_at": "...", "etag": "...", "last_modified": "...",
+                "content_hash": "...", "render_mode": "http" },
+  "metadata": { "title": "...", "lang": "en", "published_at": null,
+                "modified_at": null, "jsonld": [] },
+  "markdown": "# ...",         // presente se "markdown" ∈ formats, senão null
+  "blocks":   [ /* ... */ ],   // presente se "blocks"   ∈ formats, senão null
+  "stats":    { "blocks": 42, "tokens_markdown": 1234,
+                "tokens_raw_html": 5678, "cache_hit": false },
+  "warnings": [],
+  "trust":    "untrusted_source"
+}
+```
+
+Cada bloco carrega `block_id`, `type`, `heading_path`, `text`, `links` e, em
+PDFs, `page` — a proveniência exigida pelo CLAUDE.md. `trust` é sempre
+`"untrusted_source"`: o conteúdo externo é dado, nunca instrução.
+
+### Cache e versionamento
+
+- **Hit:** se existe uma versão com `fetched_at` dentro do TTL
+  (`RESOLVE_CACHE_TTL_SECONDS`, default 24h) e `force_refresh=false`, a resposta
+  vem do storage com `stats.cache_hit=true` e **zero** rede.
+- **Miss:** respeita `robots.txt`, busca pelo cliente seguro e extrai.
+- **Conteúdo inalterado:** se o `content_hash` do corpo bate com o da versão atual,
+  só o `fetched_at` é atualizado — **nenhuma versão nova** é criada (dedup).
+- **Conteúdo alterado:** um `content_hash` diferente cria uma **nova versão** e
+  passa a ser a versão corrente do documento.
+- **304 Not Modified:** quando um cache/transport à frente responde 304, só o
+  `fetched_at` é atualizado, sem nova versão. (O cliente auditado não envia
+  headers condicionais — ver [`DECISIONS.md`](DECISIONS.md) 2026-10-11.)
+
+### `GET /v1/documents/{document_id}`
+
+Recupera um documento já resolvido **direto do storage, sem refetch**
+(`stats.cache_hit=true`). Query params opcionais: `version_id` (default = versão
+corrente) e `formats`.
+
+```bash
+curl -s "http://localhost:8000/v1/documents/doc_0123456789abcdef"
+curl -s "http://localhost:8000/v1/documents/doc_0123456789abcdef?formats=markdown"
+```
+
+### Erros (SPEC §8)
+
+Todos os erros usam o mesmo envelope, com o HTTP da tabela §8:
+
+```json
+{ "error": { "code": "blocked_destination", "message": "...", "details": {} } }
+```
+
+| `code` | HTTP | Quando |
+|---|---|---|
+| `invalid_url` | 400 | URL malformada ou esquema não http/https |
+| `blocked_destination` | 400 | destino resolve para IP interno/metadados ou porta fora da allow-list |
+| `robots_disallowed` | 403 | `robots.txt` proíbe o caminho |
+| `robots_unavailable` | 503 | `robots.txt` indisponível (falha fechada) |
+| `too_large` | 413 | corpo excede o limite de tamanho |
+| `unsupported_content_type` | 415 | conteúdo não é HTML nem PDF |
+| `extraction_empty` | 422 | PDF sem texto extraível (OCR fora de escopo) |
+| `fetch_failed` | 502 | falha de transporte (DNS, conexão, redirects demais) |
+| `timeout` | 504 | timeout de conexão ou total |
+| `not_found` | 404 | GET de documento/versão inexistente |
 
 ---
 

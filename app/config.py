@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     # robots.txt per-domain cache TTL in seconds (SPEC 3.2 — 24h default).
     robots_cache_ttl_seconds: int = 86400
 
+    # resolve cache TTL in seconds (SPEC §5 — a stored version younger than this
+    # is served from storage when force_refresh is False; 24h default).
+    resolve_cache_ttl_seconds: int = 86400
+
     # Render decision (SPEC 3.3).
     render_min_text_chars: int = 500
 

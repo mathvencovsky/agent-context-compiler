@@ -13,9 +13,13 @@ import boto3
 from botocore.config import Config as BotoConfig
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute, request_response
 from sqlalchemy import create_engine, text
 
+from app.api.documents import router as documents_router
+from app.api.errors import fetch_error_handler, generic_exception_handler
 from app.config import Settings, get_settings
+from app.fetch.errors import FetchError
 from app.logging import RequestIdMiddleware, configure_logging, logger
 
 CheckStatus = Literal["ok", "error"]
@@ -76,6 +80,28 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="NINA", version="0.1.0")
     app.add_middleware(RequestIdMiddleware)
+
+    # Register the M5 routes directly on the app router so they appear flat in
+    # ``app.routes`` (FastAPI 0.143 makes ``include_router`` a lazy
+    # ``_IncludedRouter`` wrapper whose paths are not enumerable up front; the
+    # resolve router carries no prefix, so extending is equivalent and keeps the
+    # routes — and their OpenAPI schema — fully materialized).
+    app.router.routes.extend(documents_router.routes)
+    # Extending the routes directly (above) keeps them enumerable in
+    # ``app.routes``, but — unlike ``include_router`` — it leaves each route's
+    # ``dependency_overrides_provider`` unset. The provider is captured when the
+    # route handler is built (in ``APIRoute.__init__``), so ``app.dependency_
+    # overrides`` would be silently ignored on the resolve/get-document routes.
+    # Point the provider at the app AND rebuild the cached route handler so the
+    # injectable ``Depends`` seams can actually be overridden (the integration
+    # tests rely on this). No runtime behavior change when nothing is
+    # overridden. See DECISIONS.md 2026-10-11.
+    for route in documents_router.routes:
+        if isinstance(route, APIRoute):
+            route.dependency_overrides_provider = app
+            route.app = request_response(route.get_route_handler())
+    app.add_exception_handler(FetchError, fetch_error_handler)
+    app.add_exception_handler(Exception, generic_exception_handler)
 
     @app.get("/health")
     def health() -> JSONResponse:

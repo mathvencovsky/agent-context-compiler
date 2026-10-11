@@ -36,6 +36,11 @@ from app.fetch.guard import GuardResult, Resolver, SocketResolver, validate_url
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
+#: Public alias for the injectable transport seam. Exported so callers (e.g. the
+#: M5 API layer) can type a ``transport`` dependency WITHOUT importing ``httpx``
+#: themselves — ``httpx`` stays confined to ``app/fetch`` (CLAUDE.md).
+Transport = httpx.BaseTransport
+
 
 @dataclass(frozen=True)
 class FetchResult:

@@ -153,3 +153,71 @@ Decisões (em `app/extract/pdf.py`):
 - Código vs. parágrafo: a SPEC permite `code` por heurística simples e determinística. Usamos o NOME da fonte: uma linha cuja fonte dominante é monoespaçada (`courier`/`mono`/`consol`/`menlo` no nome PostScript) é tratada como código; execuções consecutivas de linhas monoespaçadas viram um único bloco `code` (texto verbatim, sem normalizar espaços). As demais linhas são `paragraph`. As fixtures geradas não usam fonte monoespaçada, então na prática produzem parágrafos; a heurística existe para PDFs reais com trechos de código.
 
 Consequências: a extração é 100% determinística e sem rede/LLM/OCR. `low_text_content` é emitido quando o texto principal (exclui `code`) fica abaixo de `settings.render_min_text_chars` (500). PDF totalmente sem texto extraível levanta `ExtractionEmpty` (HTTP 422), novo erro tipado em `app/fetch/errors.py` alinhado ao mapa SPEC §8 (`extraction_empty=422`). Coberto por `tests/unit/extract/test_pdf.py` sobre fixtures geradas por reportlab (`tests/fixtures/_generate_pdf_fixtures.py`), incluindo a asserção de remoção de cabeçalho/rodapé e o caso `extraction_empty`.
+
+## 2026-10-11: M5 — requisição condicional no resolve sem alterar o cliente auditado
+Contexto: o plano M5 (item 8, passo 5) previa enviar `If-None-Match`/`If-Modified-Since` a partir do `etag`/`last_modified` da versão atual para economizar banda num 304. Mas o cliente HTTP auditado (`app/fetch/client.py::fetch`) NÃO aceita headers de request fornecidos pelo chamador — a assinatura é `fetch(url, *, resolver, transport, settings, method)` — e o plano manda explicitamente NÃO reescrever o cliente auditado (reabriria a superfície de segurança já revisada do M1).
+Decisão: o resolve faz um GET completo pelo cliente auditado, sem headers condicionais, e deduplica por `content_hash`: um corpo idêntico ao da versão atual atualiza só `fetched_at` e NÃO cria nova versão (mesma economia de armazenamento/trabalho de extração que um 304 traria). O ramo 304 do fluxo é mantido mesmo assim: se o `transport` injetado (ou um cache condicional à frente) devolver `304 Not Modified`, o resolve atualiza `fetched_at` e devolve a versão existente sem baixar corpo nem criar versão.
+Alternativas: (a) estender a assinatura do cliente auditado para carregar headers condicionais — descartada por reabrir a revisão de segurança do M1; (b) montar um `httpx.Client` próprio na camada API com os headers condicionais — descartada porque `httpx` fica confinado a `app/fetch` (regra do CLAUDE.md) e duplicaria a lógica de guard/redirect/limite auditada.
+Consequências: `app/api/documents.py` não envia headers condicionais; a economia de "conteúdo inalterado" vem do dedup por `content_hash`, e o ramo 304 cobre transports/caches que já respondam 304. Sem alteração no cliente auditado.
+
+## 2026-10-11: M5 — código de erro `not_found` (404) para GET de documento inexistente
+Contexto: `GET /v1/documents/{document_id}` precisa falhar quando o documento (ou a versão pedida) não existe no armazenamento. A tabela de erros da SPEC §8 cobre falhas de fetch/extração (invalid_url, blocked_destination, robots_*, too_large, unsupported_content_type, extraction_empty, fetch_failed, timeout), mas não cobre "documento armazenado não encontrado".
+Decisão: introduzir `NotFound` (code `not_found`, HTTP 404) em `app/api/errors.py` como subclasse de `FetchError`, para serializar pelo MESMO handler global no envelope SPEC §8 `{"error":{code,message,details}}`. Não é um código de conteúdo inventado na resposta de sucesso — é um erro de recurso ausente, análogo ao 404 HTTP padrão.
+Alternativas: (a) devolver 200 com corpo vazio — descartada por violar a regra de falha explícita (nunca 200 sem conteúdo/aviso); (b) reusar `fetch_failed`(502) — descartada por semântica errada (não houve fetch) e por confundir o cliente; (c) levantar `HTTPException` do FastAPI — descartada por não produzir o envelope SPEC §8 que todos os outros erros usam.
+Consequências: `app/api/errors.py` ganha `NotFound`; o GET levanta `NotFound` para documento/versão ausente e o handler global o serializa como `{"error":{"code":"not_found",...}}` com 404.
+
+## 2026-10-11: M5 — aviso `empty_content` para garantir a regra de falha explícita
+Contexto: o CLAUDE.md/SPEC proíbem 200 com conteúdo vazio e nenhum warning. A extração HTML pode, em casos degenerados, produzir zero blocos sem emitir warning próprio (o PDF já cobre o caso extremo com `ExtractionEmpty`=422).
+Decisão: antes de persistir, se o documento extraído tiver zero blocos E nenhum warning, anexar um `Warning(code="empty_content")`. Assim nenhuma resposta 200 sai vazia e sem aviso.
+Alternativas: (a) levantar `ExtractionEmpty`(422) também para HTML vazio — descartada porque HTML pode legitimamente ter pouco conteúdo estrutural sem ser uma falha de extração; o aviso é mais fiel que um erro; (b) não fazer nada — descartada por violar a regra de falha explícita.
+Consequências: `app/api/documents.py::_ensure_not_empty` anexa `empty_content` quando aplicável; o envelope sempre carrega ao menos um warning quando não há blocos.
+
+## 2026-10-11: M5 — registro das rotas do resolve via extensão direta do router da app
+Contexto: a verificação do FEAT-002 enumera `app.routes` esperando os paths `/v1/documents/resolve` e `/v1/documents/{document_id}` de forma achatada. O FastAPI 0.143 tornou `app.include_router(...)` preguiçoso: ele insere um wrapper `_IncludedRouter` cujos paths não são enumeráveis antecipadamente (materializam no tempo de request), então `include_router` deixaria a verificação sem ver os paths.
+Decisão: registrar as rotas do M5 estendendo diretamente `app.router.routes` com `documents_router.routes` em `create_app`. O router do resolve não tem prefixo nem dependências de router, então estender é equivalente a incluir e mantém as rotas (e o schema OpenAPI com exemplos) totalmente materializadas e visíveis em `app.routes`.
+Alternativas: (a) manter `include_router` e mudar o comando de verificação para atravessar `_IncludedRouter` — descartada porque o comando de verificação do FEAT-002 é autoritativo e não deve ser afrouxado; (b) definir os handlers direto na app com `@app.post` — descartada por divergir do plano (APIRouter) e espalhar as rotas fora de `app/api/documents.py`.
+Consequências: `app/main.py::create_app` faz `app.router.routes.extend(documents_router.routes)`; `/health` e a estrutura da fábrica permanecem inalterados; o OpenAPI expõe os dois paths com exemplos.
+
+Addendum (M5/FEAT-003, 2026-10-11): a extensão direta deixava um buraco não previsto. Ao contrário do `include_router`, estender `app.router.routes` NÃO define o `dependency_overrides_provider` de cada rota, e esse provider é capturado quando o handler da rota é construído (em `APIRoute.__init__`), então `app.dependency_overrides` era SILENCIOSAMENTE ignorado nas rotas do resolve/get-document — o que anularia toda a injeção de dependências (os selos `Depends` que os testes de integração sobrepõem). Correção: após estender, para cada `APIRoute` do router define-se `route.dependency_overrides_provider = app` E reconstrói-se o handler em cache com `route.app = request_response(route.get_route_handler())`, para o provider valer. Sem mudança de comportamento em runtime quando nada é sobreposto; `app.routes` continua enumerável e os overrides passam a funcionar.
+
+## 2026-10-11: M5 — esquema de chaves de blob no S3
+Contexto: o resolve persiste no S3 tanto o corpo bruto quanto a IR serializada de cada versão de um documento, e precisa de um esquema de chaves estável e idempotente.
+Decisão: usar `raw/{version_id}` para o corpo bruto e `ir/{version_id}.json` para a IR (`Document.model_dump_json()`). Como `version_id = ver_ + sha256(corpo)[:16]` é determinístico pela versão, a chave é estável e a reescrita é idempotente (mesmos bytes → mesma chave → mesmo objeto).
+Alternativas: chavear por `document_id` foi descartado porque colidiria entre versões distintas do mesmo documento (cada versão sobrescreveria a anterior); chaves aleatórias (uuid) foram descartadas por quebrarem a idempotência e exigirem um índice extra para localizar o objeto.
+Consequências: `app/store/blobs.py` lê/grava sob `raw/{version_id}` e `ir/{version_id}.json` via `put_object` (overwrite idempotente); o round-trip real é exercitado pelos testes de integração do M5 contra o SeaweedFS.
+
+## 2026-10-11: M5 — resolve é síncrono por baixo (reuso do M1/M4)
+Contexto: o resolve reusa o fetcher/render/SQLAlchemy do M1/M3/M4, todos síncronos e já auditados. A questão era se os handlers FastAPI deveriam ser `async def` (exigindo reescrever esse stack para async) ou `def`.
+Decisão: handlers com `def` (não `async def`), para o FastAPI rodar o I/O síncrono (httpx.Client, Playwright sync, SQLAlchemy síncrono) num threadpool, SEM reescrever o fetcher/render auditados para async — não reabrir a superfície de segurança já revisada. Decisão humana registrada.
+Alternativas: reescrever o stack de fetch/render para async foi descartado por reabrir a revisão de segurança do M1 e multiplicar o esforço; usar `async def` chamando o stack síncrono diretamente foi descartado por bloquear o event loop.
+Consequências: `app/api/documents.py` define `resolve`/`get_document` com `def`; o FastAPI os executa em threadpool. `httpx` permanece confinado a `app/fetch` (o selo de transport é tipado via o alias `app.fetch.client.Transport`).
+
+## 2026-10-11: M5 — TTL de cache configurável
+Contexto: um resolve deve servir do armazenamento quando já existe uma versão recente, mas "recente" precisa de um limite configurável.
+Decisão: adicionar `resolve_cache_ttl_seconds` em `Settings` (default 86400 = 24h), espelhado em `.env.example` (`RESOLVE_CACHE_TTL_SECONDS=86400`). A última versão com `fetched_at` dentro do TTL e `force_refresh=False` responde do storage (`cache_hit=true`), sem rede.
+Alternativas: TTL fixo em código foi descartado por não permitir ajuste por ambiente; sem cache (sempre refetch) foi descartado por desperdiçar banda e trabalho de extração e ir contra o objetivo do marco (primeiro endpoint COM cache).
+Consequências: `app/config.py` e `.env.example` ganham o campo; o fluxo do resolve compara `now - fetched_at` com o TTL. Os testes de integração exercitam a janela avançando um relógio injetado.
+
+## 2026-10-11: M5 — robots no caminho de resolve
+Contexto: a SPEC §3.2 exige respeitar robots.txt em toda busca de rede; o resolve é o primeiro endpoint que de fato busca.
+Decisão: antes de qualquer fetch de corpo (e só num cache miss), o resolve chama `RobotsChecker().is_allowed(normalized_url)`, podendo emitir `robots_disallowed`(403)/`robots_unavailable`(503). Num cache hit nenhuma checagem de robots ocorre (não há rede).
+Alternativas: ignorar robots no resolve foi descartado por violar a SPEC §3.2; checar robots mesmo no cache hit foi descartado por fazer rede num caminho que deve ser zero-rede.
+Consequências: `app/api/documents.py` chama o robots antes do fetch; o `fetch_fn` do `RobotsChecker` passa pelo mesmo cliente guardado, então o `/robots.txt` também é SSRF-safe e, nos testes, servido pelo `MockTransport`.
+
+## 2026-10-11: M5 — tiktoken como contador de tokens
+Contexto: `stats.tokens_markdown`/`stats.tokens_raw_html` precisam de uma contagem de tokens determinística e sem rede, com licença compatível com o CLAUDE.md.
+Decisão: usar `tiktoken` (openai/tiktoken, licença MIT) com o encoding `cl100k_base`, carregado uma vez e cacheado (`functools.lru_cache`). `count_tokens(text) -> int`; texto vazio → 0. Versão fixada no `pyproject.toml` (`tiktoken>=0.7,<1`).
+Alternativas: contagem por whitespace/split foi descartada por ser imprecisa como proxy de custo de contexto; tokenizadores GPL/AGPL foram descartados pela regra de licenças; chamar um serviço remoto foi descartado pela proibição de rede no caminho determinístico.
+Consequências: `app/index/tokens.py` expõe `count_tokens`; o encoding vem embutido no pacote (sem download em runtime). `pyproject.toml`/`uv.lock` fixam a dependência.
+
+## 2026-10-11: M5 — enum textual `status` de `document_versions`
+Contexto: o modelo `document_versions` tem um campo `status`, mas no MVP uma versão só é persistida após extração bem-sucedida, então só há um estado real.
+Decisão: `status` é um enum textual com o único valor `'ready'` no MVP, reservado para estados futuros (ex.: `pending`, `failed`) sem inventar o contrato agora. A versão é gravada já como `ready`.
+Alternativas: um Enum SQL rígido foi descartado por exigir migração a cada novo estado; omitir o campo foi descartado por obrigar uma migração futura para introduzi-lo.
+Consequências: `app/store/models.py` define `status` como `str` default `'ready'`; o contrato fica documentado para que marcos futuros não reinventem o conjunto de estados.
+
+## 2026-10-11: M5 — `GET /v1/documents/{id}` lê do storage sem refetch
+Contexto: recuperar um documento já resolvido não deve tocar a rede nem reprocessar; precisa devolver o mesmo envelope do resolve.
+Decisão: `GET /v1/documents/{document_id}` resolve o `version_id` (query opcional; default = `current_version_id` do source), carrega a IR do S3 e devolve o mesmo envelope do resolve com `stats.cache_hit=true` (sempre vem do storage), sem tocar a rede. Documento/versão ausente → `not_found`(404).
+Alternativas: refazer o fetch no GET foi descartado por desperdiçar rede e poder divergir do que foi persistido; devolver um envelope diferente do resolve foi descartado por quebrar a simetria do contrato §8.
+Consequências: `app/api/documents.py::get_document` lê a versão do repo e a IR do S3, com contador de transport inalterado (provado nos testes de integração do M5); nenhuma chamada de rede no caminho de GET.

@@ -1,21 +1,87 @@
 # PROGRESS
 
-Marco atual: M4 (Renderização por navegador e extração de PDF) — concluído e
-aprovado nas duas revisões independentes (revisão técnica e red-team de
-segurança SSRF: ambos APPROVED, sem findings HIGH/MEDIUM). Entregou a decisão de
-renderização pura (`should_render`, SPEC §3.3), a renderização por navegador com
-interceptação pelo guard em TODA requisição do Playwright (`app/fetch/render.py`,
-SPEC §3.4) e a extração PDF→IR página a página (`app/extract/pdf.py`, SPEC §4).
-Gate rápido verde (261 passed, 10 deselected) e passo dedicado de navegador
-verde (9 browser tests passed) após `uv run playwright install chromium`.
-Próximo: M2 — Corpus congelado, harness e baselines (requer lista humana de
-sites e tarefas validadas), que corre em paralelo.
+Marco atual: M5 (Persistência e endpoint `resolve`) — implementado. Entregou os
+modelos SQLAlchemy 2 (`sources`/`document_versions`) + migração Alembic 0002, o
+`BlobStore` S3 (bruto + IR), o `DocumentRepo` com dedup por `content_hash`, a
+contagem de tokens via tiktoken (`cl100k_base`), os schemas Pydantic da SPEC §8,
+a máquina de estados de cache do `POST /v1/documents/resolve`, o
+`GET /v1/documents/{id}` que lê do storage sem refetch e o handler global de
+erros no envelope §8. Gate rápido verde (268 passed, 29 deselected) e suíte de
+integração verde (20 passed) com Postgres + SeaweedFS reais e HTTP sempre
+mockado via `httpx.MockTransport` (nenhum teste toca a internet). Próximo: M2 —
+Corpus congelado, harness e baselines (requer lista humana de sites e tarefas
+validadas), que corre em paralelo.
 
-M1 (Fetcher seguro) e M3 (IR e extração de HTML) permanecem concluídos; o M1 foi
-aprovado na revisão de segurança independente (veredito APPROVED, sem findings
-HIGH/MEDIUM; o LOW-1 foi corrigido).
+M1 (Fetcher seguro), M3 (IR e extração de HTML) e M4 (navegador + PDF)
+permanecem concluídos; M1 e M4 foram aprovados nas revisões de segurança
+independentes (APPROVED, sem findings HIGH/MEDIUM).
 
 ## Concluídos
+
+### M5 — Persistência e endpoint `resolve`
+
+Primeiro endpoint público COM cache (SPEC §5, §7, §8), sem LLM no caminho de
+extração/seleção e com toda saída de rede passando pelo guard do M1. Entregue em
+três features:
+
+- **FEAT-001 — Fundação de persistência.** Dependência `tiktoken` (MIT) fixada
+  em `pyproject.toml` (`tiktoken>=0.7,<1`) + `uv.lock`; campo de config
+  `resolve_cache_ttl_seconds=86400` (SPEC §5) em `app/config.py` espelhado no
+  `.env.example` (`RESOLVE_CACHE_TTL_SECONDS`). `app/index/tokens.py::count_tokens`
+  carrega `cl100k_base` uma vez (`@lru_cache`), conta `len(enc.encode(text))`,
+  texto vazio → 0, sem rede. `app/store/models.py`: modelos SQLAlchemy 2 tipados
+  (`Base`, `Source`, `DocumentVersion`) com a FK circular
+  `sources.current_version_id ↔ document_versions.id` quebrada por `use_alter`,
+  unique `(source_id, content_hash)` para dedup no nível do esquema, `warnings`
+  em JSONB e `status` textual default `'ready'`. Migração Alembic
+  `0002_sources_document_versions` (down_revision `0001_enable_vector`) cria as
+  duas tabelas e a FK circular via `ALTER TABLE`; `migrations/env.py` aponta
+  `target_metadata = Base.metadata`. `app/store/blobs.py::BlobStore` grava/lê
+  `raw/{version_id}` e `ir/{version_id}.json` (boto3, overwrite idempotente).
+  `app/store/repo.py`: `make_engine`/`make_session_factory` e `DocumentRepo`
+  (get_or_create_source, get_current_version, get_version, get_version_by_hash,
+  create_version que seta `current_version_id`, touch_fetched_at), com
+  `domain_from_url`.
+- **FEAT-002 — API + máquina de cache + handler de erros.** `app/api/schemas.py`
+  com `ResolveRequest`/`Stats`/`ResolveResponse` EXATOS da SPEC §8 (+`examples`
+  no OpenAPI) e `ErrorBody`. `app/api/errors.py`: `fetch_error_handler`
+  serializa qualquer `FetchError` como `{"error":{code,message,details}}` com
+  `status=exc.http_status` (zero casing por erro), `generic_exception_handler`
+  devolve 500 sem vazar stack, e `NotFound`(404) para GET de documento
+  inexistente. `app/api/documents.py`: handlers `def` (threadpool reusa o stack
+  síncrono auditado), com os selos injetáveis via `Depends` (session factory,
+  BlobStore, RobotsChecker, resolver, transport, relógio, settings). Fluxo do
+  `POST /v1/documents/resolve`: validar URL pelo guard → source/versão atual →
+  CACHE HIT (versão fresca, sem force_refresh) serve do S3 com `cache_hit=true`
+  e ZERO rede → senão robots → GET pelo cliente auditado → 304 só atualiza
+  `fetched_at` → senão `content_hash`: igual ao atual deduplica (sem nova
+  versão), diferente extrai (PDF→`extract_pdf`; HTML→decodifica, `extract_html`,
+  `should_render`→render+re-extrai) → `_ensure_not_empty` garante a regra de
+  falha explícita → persiste blobs + versão → monta o envelope com
+  `markdown`/`blocks` conforme `formats`. `GET /v1/documents/{id}` lê a versão
+  (query `version_id` ou a atual) do storage com `cache_hit=true`, sem refetch.
+- **FEAT-003 — Prova de aceite: testes de integração + docs.** `tests/integration/`
+  (marcado `integration`) com Postgres + SeaweedFS reais e HTTP SEMPRE mockado
+  por um `httpx.MockTransport` instrumentado (contador de chamadas + script por
+  path, servindo `/robots.txt`), um `FakeResolver` (host→IP público), um
+  `BlobStore` real e uma session factory ligada ao Postgres de teste; migrações
+  aplicadas no setup, tabelas truncadas entre casos. Cobre: primeira busca (miss,
+  rows + blobs criados), cache hit com **contador do transport inalterado**
+  (prova de zero rede), 304 (sem nova versão), conteúdo alterado (nova versão,
+  `current_version_id` atualizado), mesmo hash (sem nova versão), stats
+  (`tokens_raw_html`/`tokens_markdown` > 0), GET do storage sem refetch e todos
+  os erros §8 que o resolve emite (invalid_url 400, blocked_destination 400,
+  robots_disallowed 403, too_large 413, unsupported_content_type 415,
+  fetch_failed 502, timeout 504, extraction_empty 422), cada um com o envelope
+  `{"error":{code,message,details}}` e o HTTP exato. `tests/integration/
+  test_openapi.py` NÃO é marcado `integration` (não toca DB) — roda no gate
+  rápido e afirma os dois paths e os `examples` nos schemas. Correção de wiring
+  (ver DECISIONS 2026-10-11 addendum): a extensão direta das rotas em
+  `create_app` não definia o `dependency_overrides_provider`, então
+  `app.dependency_overrides` era ignorado silenciosamente nos endpoints do
+  resolve; `create_app` passou a setar o provider e reconstruir o handler em
+  cache de cada `APIRoute`, mantendo as rotas enumeráveis em `app.routes` e
+  fazendo os selos injetáveis valerem (sem mudança de comportamento em runtime).
 
 ### M4 — Renderização por navegador e extração de PDF
 
@@ -345,9 +411,17 @@ testes de TLS real (SNI confirmado + controle sem SNI).
   fixtures reportlab; comportamento em PDFs reais de layout irregular não é
   testado. O restante de `app/extract` (ir, html, jsonld, to_markdown) foi
   implementado no M3.
-- Módulos placeholder (docstring-only) em `app/store`, `app/index`,
-  `app/retrieve`, `app/providers/*`, `app/usage`, `app/mcp_server` —
-  implementados a partir dos marcos seguintes.
+- `app/store` (models, repo, blobs) e `app/index/tokens.py` foram implementados
+  no M5. `app/index/chunker`/`indexer`, `app/retrieve`, `app/providers/*`,
+  `app/usage` e `app/mcp_server` seguem como placeholders (docstring-only),
+  implementados a partir dos marcos seguintes (M6+).
+- M5 (dívida/escopo): o resolve NÃO envia headers condicionais
+  `If-None-Match`/`If-Modified-Since` (o cliente auditado do M1 não os carrega);
+  a economia de "conteúdo inalterado" vem do dedup por `content_hash`, e o ramo
+  304 cobre transports/caches que já respondam 304 (ver DECISIONS 2026-10-11
+  "M5 — requisição condicional ..."). `document_versions.status` só tem o valor
+  `'ready'` no MVP (estados futuros reservados). Autenticação (Bearer) é do M9 e
+  está DESLIGADA em `ENV=dev`.
 - M3 (dívida/escopo): a limpeza de chrome e a seleção de conteúdo principal
   cobrem os padrões Sphinx/MkDocs/Starlight presentes nas 18 fixtures; outros
   temas podem exigir novos seletores (a postura é conservadora — na dúvida, não
@@ -498,3 +572,52 @@ format 98 files already formatted; mypy Success (48 arquivos); pytest 261 passed
 `169.254.169.254` e `10.0.0.1`). Rodar só a suíte de PDF:
 `uv run pytest tests/unit/extract/test_pdf.py -q`; só a de navegador:
 `uv run pytest -m "browser" -q`.
+
+### Persistência e endpoint `resolve` (M5)
+
+Pré-requisito: infra no ar (`docker compose up -d --wait postgres seaweedfs ;
+docker compose up s3-init`) e migrações aplicadas (`uv run alembic upgrade head`).
+Suba a API com `uv run uvicorn app.main:app --reload`.
+
+Resolver uma URL pública (primeira busca → `cache_hit=false`; repita dentro de
+24h → `cache_hit=true`, sem rede):
+
+```powershell
+curl.exe -s -X POST http://localhost:8000/v1/documents/resolve `
+  -H "Content-Type: application/json" `
+  -d '{\"url\":\"https://peps.python.org/pep-0008/\"}'
+```
+
+O corpo de resposta é o envelope da SPEC §8: `document_id`, `version_id`,
+`source`, `metadata`, `markdown`/`blocks` (conforme `formats`), `stats`
+(`blocks`, `tokens_markdown`, `tokens_raw_html`, `cache_hit`), `warnings` e
+`trust="untrusted_source"`. Campos opcionais do request: `formats` (default
+`["markdown","blocks"]`), `force_refresh` (default `false`, ignora o cache) e
+`render` (`auto`/`never`/`always`).
+
+Recuperar um documento já resolvido direto do storage (sem refetch,
+`cache_hit=true`), usando o `document_id` devolvido acima; `version_id` é um
+query param opcional (default = versão atual):
+
+```powershell
+curl.exe -s "http://localhost:8000/v1/documents/doc_xxxxxxxxxxxxxxxx"
+curl.exe -s "http://localhost:8000/v1/documents/doc_xxxxxxxxxxxxxxxx?version_id=ver_yyyyyyyyyyyyyyyy&formats=markdown"
+```
+
+Erros seguem o envelope `{"error":{"code","message","details"}}` com o HTTP da
+tabela §8 (ex.: `invalid_url` 400, `blocked_destination` 400, `robots_disallowed`
+403, `too_large` 413, `unsupported_content_type` 415, `extraction_empty` 422,
+`fetch_failed` 502, `timeout` 504; `not_found` 404 para um documento/versão
+inexistente no GET). O schema (com exemplos) está em
+`http://localhost:8000/openapi.json` e na UI `http://localhost:8000/docs`.
+
+Gate completo do M5. Gate rápido (sem serviços):
+`uv run ruff check . ; uv run ruff format --check . ; uv run mypy app ;
+uv run pytest -m "not integration and not browser" -q` → ruff All checks passed;
+format limpo; mypy Success (51 arquivos); pytest 268 passed, 29 deselected,
+37 snapshots. Suíte de integração (com infra):
+`docker compose up -d --wait postgres seaweedfs ; docker compose up s3-init ;
+uv run alembic upgrade head ; uv run pytest -m "integration" -q` → 20 passed,
+277 deselected. Rodar só a suíte do resolve:
+`uv run pytest tests/integration -q` (os casos que não precisam de DB, como o de
+OpenAPI, rodam mesmo sem infra).

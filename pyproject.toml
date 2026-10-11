@@ -19,6 +19,7 @@ dependencies = [
     "extruct>=0.18.0",
     "playwright>=1.40",
     "pdfplumber>=0.11",
+    "tiktoken>=0.7,<1",
 ]
 
 [dependency-groups]
