@@ -1,121 +1,235 @@
-# NINA — Agent Context Compiler (MVP)
+# NINA
 
-NINA é uma API que transforma URLs de documentação técnica pública (HTML e PDF)
-em contexto otimizado para agentes de IA, com proveniência e evidência rastreável:
+**Compilador de contexto para agentes.** NINA transforma documentação técnica
+pública (HTML e PDF) em pacotes de contexto otimizados para agentes de IA, com
+proveniência e evidência rastreável em cada fragmento retornado.
 
-- **`resolve`**: uma URL vira um documento estruturado (árvore de blocos) com
-  proveniência, renderizável em Markdown e JSON.
-- **`assemble`**: pergunta + lista de URLs + orçamento de tokens viram os
-  fragmentos mais úteis, com evidência citável.
+Agentes que leem documentação ao vivo gastam tokens com navegação, rodapés e
+HTML irrelevante, e frequentemente citam trechos que não existem. NINA resolve
+isso em duas operações:
 
-A API é exposta por HTTP, por um SDK Python e por um servidor MCP. A tese do
-produto só se sustenta se o benchmark (`bench/`) provar vantagem sobre
-extratores existentes — por isso o harness de avaliação faz parte do produto.
+| Operação | Entrada | Saída |
+|---|---|---|
+| **`resolve`** | uma URL | documento estruturado (árvore de blocos) com proveniência, em Markdown e JSON |
+| **`assemble`** | pergunta + URLs + orçamento de tokens | os fragmentos mais úteis, cada um com evidência citável |
 
-> "NINA" é o codinome do projeto. O pacote de distribuição é `nina`; o código da
-> aplicação vive em `app/` conforme `docs/SPEC.md` §2.
+A API é consumível por **HTTP**, por um **SDK Python** e por um **servidor MCP**.
 
-## Estado atual
+> **Codinome e nomes.** "NINA" é o codinome do projeto; o pacote de distribuição
+> é `nina` e o código da aplicação vive em `app/`, conforme a estrutura fixada em
+> [`docs/SPEC.md`](docs/SPEC.md) §2.
 
-- **M0 — Fundação do repositório: concluído.** Projeto roda, testa e faz lint
-  desde o primeiro commit (uv, FastAPI, Postgres 16 + pgvector, S3 local via
-  SeaweedFS, Alembic, structlog, CI).
-- **M1 — Fetcher seguro: concluído.** Aquisição HTTP com proteção contra SSRF
-  (guard que resolve e valida todos os IPs, falha fechada, conexão no IP
-  validado para fechar DNS rebinding), limites de corpo/timeout, redirecionamentos
-  re-validados e respeito a robots.txt (SPEC §3.1, §3.2, §8). Aprovado em revisão
-  de segurança independente (veredito APPROVED, sem findings HIGH/MEDIUM; o único
-  LOW corrigido).
-- **M3 — IR e extração de HTML: concluído.** Modelos Pydantic v2 da IR (SPEC §4),
-  ids estáveis e normalização de texto em `app/extract/ir.py`; `extract_html`
-  (seleção robusta de conteúdo principal, isolamento por readability com fallback
-  obrigatório, limpeza de chrome e walker dos oito tipos de bloco), metadados +
-  JSON-LD (`jsonld.py`) e `to_markdown` sempre a partir da IR. Coberto por testes
-  unitários e por uma suíte de aceite sobre 18 fixtures HTML reais: snapshots
-  syrupy de Markdown e da IR, cobertura 100% de `<table>`/`<pre>` do conteúdo
-  principal, limpeza de chrome, estabilidade de `block_id` e `heading_path`.
-  Dependências de runtime: lxml (BSD), readability-lxml (Apache-2.0), extruct (BSD).
-- **M4 — Renderização por navegador e extração de PDF: concluído.** Fundação
-  (FEAT-001): dependências Playwright (Apache-2.0) e pdfplumber (MIT, com
-  pdfminer.six MIT) de runtime e reportlab (BSD) de dev, marcador de teste
-  `browser`, campo de config `render_networkidle_timeout_ms` (SPEC §3.4, 15 s) e a
-  decisão de renderização PURA `should_render` em `app/fetch/detect.py` (SPEC §3.3:
-  `auto`/`never`/`always` + sinais de SPA), coberta por testes sem rede nem
-  navegador. Renderização por navegador (FEAT-002): `app/fetch/render.py` usa
-  Playwright com `page.route('**/*')` (e `page.route_web_socket('**/*')`)
-  roteando TODA requisição pelo guard (abortando destinos bloqueados, falha
-  fechada), contexto efêmero por chamada e o teste CENTRAL de SSRF que prova zero
-  conexões a `169.254.169.254`/`10.0.0.1`. Extração de PDF (FEAT-003):
-  `app/extract/pdf.py` lê o PDF página a página com pdfplumber (determinístico,
-  sem OCR), infere títulos por tamanho de fonte relativo, extrai tabelas via
-  `extract_tables` (com `table_no_header`), remove cabeçalhos/rodapés repetidos em
-  >50% das páginas e levanta `extraction_empty` (HTTP 422) para PDF sem texto;
-  fixtures geradas por reportlab em `tests/fixtures/pdf/`. O CI mantém o gate
-  principal rápido (`-m "not browser"`) e roda os testes de navegador num passo
-  dedicado que instala o Chromium. Aprovado nas duas revisões independentes
-  (técnica e red-team de segurança SSRF: ambos APPROVED, sem findings
-  HIGH/MEDIUM). **Setup:** rode `uv run playwright install chromium` uma vez antes
-  de executar os testes marcados `browser` (`uv run playwright install --with-deps
-  chromium` no Linux/CI). O **M2 — Corpus congelado, harness e baselines** depende
-  de insumo humano (lista de sites e 100 tarefas validadas) e corre em paralelo.
+---
 
-Acompanhe `PROGRESS.md` para o detalhe de cada marco.
+## Por que NINA é diferente
 
-## Rodando localmente
+- **Determinístico, sem LLM no caminho crítico.** Extração e seleção não usam
+  modelos de linguagem — o resultado é reproduzível e auditável. LLMs aparecem
+  apenas no benchmark (para responder e julgar).
+- **Proveniência obrigatória.** Todo bloco e todo fragmento carrega
+  `document_id`, `version_id`, `block_id`, `source_url` e, em PDFs, `page`.
+  Nenhuma saída sem origem.
+- **Seguro por construção.** Toda requisição de saída — do cliente HTTP e do
+  navegador headless — passa por um guard único com proteção contra SSRF
+  (validação de todos os IPs resolvidos, bloqueio de endereços internos e de
+  metadados de nuvem, respeito a `robots.txt`).
+- **Conteúdo tratado como não confiável.** O texto extraído de páginas externas
+  é dado, nunca instrução; as respostas o marcam com `trust: "untrusted_source"`.
+- **A tese é mensurável.** Um harness de avaliação (`bench/`) compara NINA com
+  extratores existentes (incluindo um RAG ingênuo competente) em tarefas reais.
+  Se não houver vantagem demonstrável, o projeto não avança — a medição faz
+  parte do produto, não é acessório.
 
-Pré-requisitos: Docker, [uv](https://docs.astral.sh/uv/) e Python 3.12
-(o uv instala/fixa a versão por projeto).
+---
 
-```bash
-cp .env.example .env        # ajuste se necessário; .env fica fora do git
-make up                     # Postgres + S3 local (SeaweedFS) + criação do bucket
-make migrate                # habilita a extensão pgvector
-uv run playwright install chromium  # navegador p/ renderização (testes 'browser')
-make check                  # ruff + mypy (strict em app/) + pytest
-make dev                    # API local com reload (http://localhost:8000)
-make down                   # derruba a infra
+## Arquitetura
+
+```
+                       ┌─────────────────── app/fetch (guard SSRF) ───────────────────┐
+   URL ───────────────▶│  guard → cliente HTTP (conecta no IP validado) → robots.txt  │
+                       └───────────────────────────────┬──────────────────────────────┘
+                                                        │ HTML / PDF
+                              ┌─────────────────────────┼─────────────────────────┐
+                              ▼                          ▼                         ▼
+                       HTML (readability           PDF (pdfplumber,          SPA → navegador
+                       + walker lxml)              página a página)          (Playwright, guard)
+                              └─────────────────────────┼─────────────────────────┘
+                                                        ▼
+                                          IR — árvore de blocos (app/extract)
+                                                        │
+                              ┌─────────────────────────┼─────────────────────────┐
+                              ▼                                                     ▼
+                       Markdown / JSON                                  chunks → índice léxico
+                       (resolve)                                        + vetorial (pgvector)
+                                                                                    │
+   pergunta + URLs + orçamento ──▶ busca híbrida (RRF) ──▶ rerank ──▶ seleção sob orçamento ──▶
+                                                              fragmentos + evidência (assemble)
 ```
 
-> A renderização por navegador (M4) e os testes marcados `browser` precisam de
-> um Chromium real. Instale-o uma vez com `uv run playwright install chromium`
-> (no Linux/CI, `uv run playwright install --with-deps chromium`). O gate rápido
-> (`-m "not browser"`) não exige o navegador.
+O MVP opera **sob demanda**: `assemble` resolve as URLs recebidas (usando cache
+quando possível), indexa e consulta. Não há crawler. Veja a especificação
+completa — contratos de API, esquemas da IR, modelo de dados e algoritmos de
+chunking/seleção — em [`docs/SPEC.md`](docs/SPEC.md).
 
-`GET /health` responde `{"status":"ok","db":"ok","blobs":"ok"}` quando Postgres
-e o armazenamento S3 estão de pé, e `503` com o campo quebrado em `"error"`
-quando algo falha (falha explícita, nunca 200 com dependência quebrada).
+### Stack
 
-> No Windows/PowerShell, `make` pode não estar disponível; rode os comandos que
-> cada alvo encapsula (ex.: `docker compose up -d`, `uv run alembic upgrade head`,
-> `uv run ruff check . ; uv run mypy app ; uv run pytest`).
+Python 3.12 · FastAPI · Pydantic v2 · SQLAlchemy 2 + Alembic ·
+Postgres 16 + pgvector · httpx · lxml / readability-lxml / extruct ·
+Playwright (Chromium) · pdfplumber · tiktoken · S3 (SeaweedFS local, AWS em
+produção) · structlog · pytest · ruff · mypy (strict em `app/`) · Docker Compose.
 
-## Documentos do projeto
+Todas as dependências são MIT/BSD/Apache-2.0. Provedores externos (embeddings,
+reranker, LLM do benchmark, Firecrawl) ficam atrás de interfaces em
+`app/providers/`, cada uma com uma implementação fake determinística; os testes
+nunca acessam a rede externa.
 
-| Arquivo | Para quem | Função |
+---
+
+## Status
+
+NINA é construído em marcos (M0–M10), um de cada vez. Cada marco fecha com o
+gate verde (`ruff` + `mypy` + `pytest`), critérios de aceite atendidos e CI
+verde no GitHub Actions.
+
+| Marco | Entrega | Status |
 |---|---|---|
-| `CLAUDE.md` | Agente | Regras permanentes, lidas em toda sessão |
-| `docs/SPEC.md` | Agente | Arquitetura, contratos, esquemas e algoritmos (fonte da verdade) |
-| `docs/ROADMAP.md` | Agente e você | 11 marcos (M0–M10) com tarefas e critérios de aceite |
-| `docs/PROMPTS.md` | Você | O que colar no agente de código em cada etapa |
-| `docs/HUMANO.md` | Você | O que só você pode fazer e quando (bloqueios de marco) |
-| `PROGRESS.md` | Agente | Estado atual, atualizado a cada marco |
-| `DECISIONS.md` | Agente e você | Decisões técnicas registradas |
+| **M0** | Fundação: repositório, infraestrutura, CI | ✅ Concluído |
+| **M1** | Fetcher seguro (SSRF, limites, robots.txt) | ✅ Concluído |
+| **M2** | Corpus congelado, harness e baselines | ⏳ Bloqueado (insumo humano) |
+| **M3** | IR e extração de HTML | ✅ Concluído |
+| **M4** | Renderização por navegador e extração de PDF | ✅ Concluído |
+| **M5** | Persistência e endpoint `resolve` | ◻️ Próximo |
+| **M6** | Chunking e indexação | ◻️ Pendente (chave de embeddings) |
+| **M7** | Busca, seleção e endpoint `assemble` | ◻️ Pendente (chave de reranker) |
+| **M8** | Benchmark completo e calibração | ◻️ Ponto de decisão |
+| **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
+| **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
-## Processo de construção
+**Pipeline de aquisição e extração (M1, M3, M4) está completo e verificado:**
+HTTP seguro → HTML/PDF → IR → Markdown/JSON. Os marcos de segurança (M1, M4)
+passaram por revisão adversarial independente, sem findings HIGH/MEDIUM em
+aberto. O detalhe por marco está em [`PROGRESS.md`](PROGRESS.md); as decisões
+técnicas não óbvias, em [`DECISIONS.md`](DECISIONS.md).
 
-1. Um marco por vez; cada um fecha com `make check` verde, critérios de aceite
-   atendidos, `PROGRESS.md` atualizado e aprovação humana.
-2. Antes de codar um marco: plano curto (arquivos, abordagem, riscos, dúvidas) e
-   aprovação. Durante: o contexto vive nos arquivos, não na conversa.
-3. Nos marcos M1, M4, M7 e M9, rode também a revisão independente (ver
-   `docs/PROMPTS.md`, prompt 5).
-4. Não pule o M8: é o ponto de decisão (seguir, ajustar o nicho ou parar).
+> **M2 depende de você.** O benchmark precisa de insumos humanos (lista de sites,
+> chaves de LLM, 100 tarefas validadas). Veja [o que fazer](#benchmark-o-que-depende-de-você).
 
-## O que esperar
+---
 
-- O código anda rápido; o gargalo provável é humano: validar 100 tarefas do
-  benchmark, revisar cada marco e conseguir pilotos.
-- Os marcos mais difíceis para a IA são o M3 (HTML real é bagunçado) e o M7
-  (seleção e calibração).
-- Revise de verdade os testes do M1. Segurança de rede é onde um erro silencioso
-  custa mais caro.
+## Começando
+
+**Pré-requisitos:** Docker, [uv](https://docs.astral.sh/uv/) e Python 3.12
+(o uv instala e fixa a versão por projeto).
+
+```bash
+# 1. Dependências e configuração
+uv sync
+cp .env.example .env                   # .env fica fora do git
+
+# 2. Infraestrutura local (Postgres + pgvector, S3 via SeaweedFS, bucket)
+make up
+make migrate                           # habilita a extensão pgvector
+
+# 3. (Opcional) navegador para renderização de SPA e testes 'browser'
+uv run playwright install chromium     # --with-deps chromium no Linux/CI
+
+# 4. Rodar
+make check                             # ruff + mypy (strict) + pytest
+make dev                               # API local em http://localhost:8000
+make down                              # derruba a infraestrutura
+```
+
+Verifique a saúde do serviço:
+
+```bash
+curl http://localhost:8000/health
+# {"status":"ok","db":"ok","blobs":"ok"}  (HTTP 200)
+```
+
+O `/health` retorna **503** com o campo quebrado em `"error"` se Postgres ou o
+S3 estiverem indisponíveis — nunca 200 com uma dependência quebrada.
+
+### Comandos (`Makefile`)
+
+| Comando | Ação |
+|---|---|
+| `make up` / `make down` | sobe / derruba Postgres e o S3 local |
+| `make migrate` | aplica as migrações do Alembic |
+| `make check` | `ruff` + `mypy` + `pytest` (gate completo) |
+| `make test` | somente `pytest` |
+| `make dev` | API local com reload |
+| `make bench ARGS="..."` | executa o benchmark |
+
+> **Windows / PowerShell.** `make` pode não estar disponível; rode os comandos
+> que cada alvo encapsula (ex.: `docker compose up -d`,
+> `uv run alembic upgrade head`,
+> `uv run ruff check . ; uv run mypy app ; uv run pytest`). O separador de
+> comandos é `;`, não `&&`.
+
+### Marcadores de teste
+
+- Gate padrão: `uv run pytest -m "not integration and not browser"` — rápido, sem
+  serviços nem navegador.
+- `integration`: exige Postgres e S3 reais (via `make up`).
+- `browser`: exige Chromium (`uv run playwright install chromium`); roda num
+  passo dedicado do CI.
+
+---
+
+## Benchmark: o que depende de você
+
+O harness de avaliação (M2) é o que prova a tese do produto. O código é
+construído automaticamente, mas estes insumos exigem julgamento humano, contas
+pagas e decisões de produto:
+
+1. **Sites (`bench/sites.yaml`)** — 10 a 15 sites de documentação pública com
+   estruturas variadas (referência de API com tabelas, guias longos, changelogs,
+   ≥2 SPAs, ≥3 PDFs), 5 a 15 URLs por site, com `robots.txt` e termos de uso
+   conferidos.
+2. **LLMs do benchmark** — um modelo respondedor e um modelo juiz (de
+   preferência diferentes), com as chaves no `.env`.
+3. **Preços (`bench/prices.yaml`)** — preço por milhão de tokens de cada modelo,
+   para o relatório calcular custo por tarefa concluída.
+4. **100 tarefas validadas** — rascunhadas pela IA e **revisadas por você** (70
+   `dev` para calibração, 30 `test` reservadas). É o passo mais importante do
+   projeto: tarefas erradas tornam o benchmark sem sentido.
+5. **(Opcional) chave do Firecrawl** — para o baseline comercial; sem ela, esse
+   runner é pulado.
+
+Detalhes e checklist completo em [`docs/HUMANO.md`](docs/HUMANO.md).
+
+---
+
+## Documentação do projeto
+
+| Arquivo | Conteúdo |
+|---|---|
+| [`docs/SPEC.md`](docs/SPEC.md) | Arquitetura, contratos de API, esquemas e algoritmos (fonte da verdade) |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Os 11 marcos (M0–M10) com tarefas e critérios de aceite |
+| [`docs/HUMANO.md`](docs/HUMANO.md) | O que depende de você e quando (bloqueios de marco) |
+| [`docs/PROMPTS.md`](docs/PROMPTS.md) | Prompts de condução do projeto |
+| [`PROGRESS.md`](PROGRESS.md) | Estado atual detalhado, atualizado a cada marco |
+| [`DECISIONS.md`](DECISIONS.md) | Registro de decisões técnicas não óbvias |
+| [`CLAUDE.md`](CLAUDE.md) | Regras permanentes de engenharia do projeto |
+
+---
+
+## Segurança
+
+- **SSRF:** toda saída de rede (httpx e Playwright) passa por `app/fetch/guard.py`,
+  que valida todos os IPs resolvidos e bloqueia loopback, redes privadas,
+  link-local, CGNAT e o endereço de metadados de nuvem (`169.254.169.254`). O
+  cliente HTTP conecta no IP já validado para fechar a janela de DNS rebinding.
+- **Segredos:** nunca no código nem nos testes — apenas em `.env` (fora do git);
+  `.env.example` documenta todas as variáveis.
+- **Licenças:** apenas MIT/BSD/Apache-2.0; GPL/AGPL são proibidas.
+
+Encontrou um problema de segurança? Abra uma issue privada ou contate o
+mantenedor; não divulgue publicamente antes da correção.
+
+---
+
+## Licença
+
+Projeto privado durante o MVP. A licença será definida antes de qualquer
+distribuição pública.
