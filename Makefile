@@ -10,7 +10,7 @@ migrate:
 	uv run alembic upgrade head
 
 check:
-	uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest
+	uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -m "not browser"
 
 test:
 	uv run pytest

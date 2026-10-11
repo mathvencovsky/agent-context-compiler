@@ -17,6 +17,8 @@ dependencies = [
     "lxml>=6.1.3",
     "readability-lxml>=0.9",
     "extruct>=0.18.0",
+    "playwright>=1.40",
+    "pdfplumber>=0.11",
 ]
 
 [dependency-groups]
@@ -28,6 +30,7 @@ dev = [
     "syrupy",
     "boto3-stubs[s3]",
     "trustme>=1.2",
+    "reportlab>=4",
 ]
 # bench: filled in M2 (benchmark harness). Declared placeholder for now.
 bench = []
@@ -67,4 +70,5 @@ asyncio_mode = "auto"
 markers = [
     "integration: tests that require real Postgres/S3 (SeaweedFS) services",
     "allow_network: loopback-server tests that opt out of the no-network guard",
+    "browser: tests that require a real Chromium (Playwright); run in a dedicated CI step",
 ]

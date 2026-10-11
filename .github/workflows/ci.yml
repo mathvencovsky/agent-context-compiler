@@ -51,8 +51,20 @@ jobs:
       - name: Apply migrations
         run: make migrate
 
+      # Main gate: lint, types and the full suite EXCLUDING browser tests, so it
+      # stays fast and needs no Chromium. The `check` target runs
+      # `uv run pytest -m "not browser"` (integration runs here because the
+      # compose infra above is up).
       - name: Lint, types and tests
         run: make check
+
+      # Dedicated browser step: install Chromium (with its OS deps on Linux)
+      # and run ONLY the browser-marked Playwright tests. Kept separate so a
+      # browser-tooling failure never blocks the fast gate above.
+      - name: Browser tests (Chromium)
+        run: |
+          uv run playwright install --with-deps chromium
+          uv run pytest -m "browser" --maxfail=1
 
       - name: Tear down infrastructure
         if: always()

@@ -35,10 +35,29 @@ extratores existentes — por isso o harness de avaliação faz parte do produto
   syrupy de Markdown e da IR, cobertura 100% de `<table>`/`<pre>` do conteúdo
   principal, limpeza de chrome, estabilidade de `block_id` e `heading_path`.
   Dependências de runtime: lxml (BSD), readability-lxml (Apache-2.0), extruct (BSD).
-- Próximo: **M4 — Renderização por navegador e extração de PDF** (Playwright e
-  o walker de PDF; `app/fetch/render.py` e `app/extract/pdf.py` seguem placeholder
-  até lá). O **M2 — Corpus congelado, harness e baselines** depende de insumo
-  humano (lista de sites e 100 tarefas validadas) e corre em paralelo.
+- **M4 — Renderização por navegador e extração de PDF: concluído.** Fundação
+  (FEAT-001): dependências Playwright (Apache-2.0) e pdfplumber (MIT, com
+  pdfminer.six MIT) de runtime e reportlab (BSD) de dev, marcador de teste
+  `browser`, campo de config `render_networkidle_timeout_ms` (SPEC §3.4, 15 s) e a
+  decisão de renderização PURA `should_render` em `app/fetch/detect.py` (SPEC §3.3:
+  `auto`/`never`/`always` + sinais de SPA), coberta por testes sem rede nem
+  navegador. Renderização por navegador (FEAT-002): `app/fetch/render.py` usa
+  Playwright com `page.route('**/*')` (e `page.route_web_socket('**/*')`)
+  roteando TODA requisição pelo guard (abortando destinos bloqueados, falha
+  fechada), contexto efêmero por chamada e o teste CENTRAL de SSRF que prova zero
+  conexões a `169.254.169.254`/`10.0.0.1`. Extração de PDF (FEAT-003):
+  `app/extract/pdf.py` lê o PDF página a página com pdfplumber (determinístico,
+  sem OCR), infere títulos por tamanho de fonte relativo, extrai tabelas via
+  `extract_tables` (com `table_no_header`), remove cabeçalhos/rodapés repetidos em
+  >50% das páginas e levanta `extraction_empty` (HTTP 422) para PDF sem texto;
+  fixtures geradas por reportlab em `tests/fixtures/pdf/`. O CI mantém o gate
+  principal rápido (`-m "not browser"`) e roda os testes de navegador num passo
+  dedicado que instala o Chromium. Aprovado nas duas revisões independentes
+  (técnica e red-team de segurança SSRF: ambos APPROVED, sem findings
+  HIGH/MEDIUM). **Setup:** rode `uv run playwright install chromium` uma vez antes
+  de executar os testes marcados `browser` (`uv run playwright install --with-deps
+  chromium` no Linux/CI). O **M2 — Corpus congelado, harness e baselines** depende
+  de insumo humano (lista de sites e 100 tarefas validadas) e corre em paralelo.
 
 Acompanhe `PROGRESS.md` para o detalhe de cada marco.
 
@@ -51,10 +70,16 @@ Pré-requisitos: Docker, [uv](https://docs.astral.sh/uv/) e Python 3.12
 cp .env.example .env        # ajuste se necessário; .env fica fora do git
 make up                     # Postgres + S3 local (SeaweedFS) + criação do bucket
 make migrate                # habilita a extensão pgvector
+uv run playwright install chromium  # navegador p/ renderização (testes 'browser')
 make check                  # ruff + mypy (strict em app/) + pytest
 make dev                    # API local com reload (http://localhost:8000)
 make down                   # derruba a infra
 ```
+
+> A renderização por navegador (M4) e os testes marcados `browser` precisam de
+> um Chromium real. Instale-o uma vez com `uv run playwright install chromium`
+> (no Linux/CI, `uv run playwright install --with-deps chromium`). O gate rápido
+> (`-m "not browser"`) não exige o navegador.
 
 `GET /health` responde `{"status":"ok","db":"ok","blobs":"ok"}` quando Postgres
 e o armazenamento S3 estão de pé, e `503` com o campo quebrado em `"error"`

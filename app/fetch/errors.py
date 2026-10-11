@@ -81,6 +81,21 @@ class UnsupportedContentType(FetchError):
     http_status = 415
 
 
+class ExtractionEmpty(FetchError):
+    """Extraction produced no usable content (SPEC §8 extraction_empty=422).
+
+    Raised by the PDF extractor (``app.extract.pdf``) when a document yields no
+    extractable text at all — e.g. a scanned/image-only PDF. OCR is explicitly
+    out of scope for M4, so such a document fails closed with a 422 rather than
+    returning a 200 with empty content (CLAUDE.md / SPEC §4). The name mirrors
+    the SPEC §8 ``extraction_empty`` code; it lives here with the rest of the
+    typed errors so the M5 handler serializes it uniformly.
+    """
+
+    code = "extraction_empty"
+    http_status = 422
+
+
 class FetchFailed(FetchError):
     """Transport-level failure: DNS failure, connection reset, too many redirects."""
 

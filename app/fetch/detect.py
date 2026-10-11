@@ -9,8 +9,14 @@ and depend only on the standard library.
 from __future__ import annotations
 
 import codecs
+import re
+from typing import Literal
+
+from app.config import Settings, get_settings
 
 _DEFAULT_CHARSET = "utf-8"
+
+RenderDecision = Literal["auto", "never", "always"]
 
 
 def parse_content_type(header_value: str | None) -> tuple[str, str | None]:
@@ -68,3 +74,71 @@ def _sniff_bom(body: bytes) -> str | None:
     if body.startswith(codecs.BOM_UTF16_LE) or body.startswith(codecs.BOM_UTF16_BE):
         return "utf-16"
     return None
+
+
+def should_render(
+    *,
+    main_text_len: int,
+    html_text: str,
+    render: RenderDecision = "auto",
+    settings: Settings | None = None,
+) -> bool:
+    """Decide whether a browser render is needed (SPEC §3.3).
+
+    ``never`` -> never render; ``always`` -> always render. In ``auto`` (the
+    default) render ONLY IF both hold: the already-extracted main text is
+    shorter than ``settings.render_min_text_chars`` AND the HTML carries SPA
+    signals (see ``_has_spa_signals``). This function is pure: it reasons over
+    ``main_text_len`` (measured by the caller from the HTTP HTML) and the raw
+    ``html_text`` string plus config only — it performs NO network and NO
+    browser work. ``settings`` is resolved via ``get_settings()`` when ``None``.
+    """
+    if render == "never":
+        return False
+    if render == "always":
+        return True
+
+    if settings is None:
+        settings = get_settings()
+
+    return main_text_len < settings.render_min_text_chars and _has_spa_signals(
+        html_text
+    )
+
+
+# An element whose id is "root" or "app" (quotes optional) holding only
+# whitespace before its closing tag — the classic empty SPA mount point.
+_EMPTY_ROOT_CONTAINER = re.compile(
+    r"<div\b[^>]*\bid\s*=\s*[\"']?(?:root|app)[\"']?[^>]*>\s*</div>",
+    re.IGNORECASE,
+)
+# A <noscript> block that asks the visitor to enable/turn on JavaScript.
+_NOSCRIPT_NEEDS_JS = re.compile(
+    r"<noscript\b[^>]*>(?P<body>.*?)</noscript>",
+    re.IGNORECASE | re.DOTALL,
+)
+_JS_PROMPT = re.compile(r"javascript", re.IGNORECASE)
+
+
+def _has_spa_signals(html_text: str) -> bool:
+    """Return True if ``html_text`` looks like an unrendered SPA (SPEC §3.3).
+
+    Pure string inspection — no parsing of the DOM, no network. Signals:
+
+    * an empty root/app mount container (``<div id="root"></div>`` /
+      ``<div id="app"></div>`` with no textual content);
+    * a client-side framework data island (``__NEXT_DATA__`` or
+      ``window.__NUXT__``) with no rendered content around it;
+    * a ``<noscript>`` block asking the visitor for JavaScript.
+    """
+    if _EMPTY_ROOT_CONTAINER.search(html_text):
+        return True
+
+    if "__NEXT_DATA__" in html_text or "window.__NUXT__" in html_text:
+        return True
+
+    for match in _NOSCRIPT_NEEDS_JS.finditer(html_text):
+        if _JS_PROMPT.search(match.group("body")):
+            return True
+
+    return False

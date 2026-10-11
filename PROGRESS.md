@@ -1,18 +1,98 @@
 # PROGRESS
 
-Marco atual: M3 (IR e extração de HTML) — concluído. A camada HTML→IR
-(`app/extract/`) está implementada e coberta por testes unitários e por uma
-suíte de aceite sobre 18 fixtures HTML reais (snapshots syrupy de Markdown e da
-IR serializada, cobertura 100% de `<table>`/`<pre>` do conteúdo principal,
-limpeza de chrome, estabilidade de `block_id` e `heading_path`). Gate completo
-verde (só o teste de integração do /health do M0 fica deselecionado sem Docker).
+Marco atual: M4 (Renderização por navegador e extração de PDF) — concluído e
+aprovado nas duas revisões independentes (revisão técnica e red-team de
+segurança SSRF: ambos APPROVED, sem findings HIGH/MEDIUM). Entregou a decisão de
+renderização pura (`should_render`, SPEC §3.3), a renderização por navegador com
+interceptação pelo guard em TODA requisição do Playwright (`app/fetch/render.py`,
+SPEC §3.4) e a extração PDF→IR página a página (`app/extract/pdf.py`, SPEC §4).
+Gate rápido verde (261 passed, 10 deselected) e passo dedicado de navegador
+verde (9 browser tests passed) após `uv run playwright install chromium`.
 Próximo: M2 — Corpus congelado, harness e baselines (requer lista humana de
-sites e tarefas validadas).
+sites e tarefas validadas), que corre em paralelo.
 
-M1 (Fetcher seguro) permanece concluído e aprovado na revisão de segurança
-independente (veredito APPROVED, sem findings HIGH/MEDIUM; o LOW-1 foi corrigido).
+M1 (Fetcher seguro) e M3 (IR e extração de HTML) permanecem concluídos; o M1 foi
+aprovado na revisão de segurança independente (veredito APPROVED, sem findings
+HIGH/MEDIUM; o LOW-1 foi corrigido).
 
 ## Concluídos
+
+### M4 — Renderização por navegador e extração de PDF
+
+Renderização sob demanda por navegador e extração determinística de PDF digital
+(SPEC §3.3, §3.4, §4, §8), sem LLM e sem rede fora do guard. Entregue em três
+features:
+
+- **FEAT-001 — Fundação + decisão de renderização.** Dependências de runtime
+  Playwright (Apache-2.0) e pdfplumber (MIT, puxa pdfminer.six MIT) e de dev
+  reportlab (BSD) — todas MIT/BSD/Apache-2.0, nenhuma GPL/AGPL, sem PyMuPDF.
+  Marcador de teste `browser` registrado no pyproject.toml; campo de config
+  `render_networkidle_timeout_ms=15000` (cap do SPEC §3.4) espelhado no
+  `.env.example`, com `render_min_text_chars=500` mantido. `app/fetch/detect.py`
+  ganhou a decisão de renderização PURA `should_render(*, main_text_len,
+  html_text, render='auto', settings=None)` (SPEC §3.3: `never`→False,
+  `always`→True, `auto`→True só se texto principal < limiar E há sinais de SPA)
+  e o helper `_has_spa_signals` (contêiner-raiz vazio, `__NEXT_DATA__`/
+  `window.__NUXT__`, `<noscript>` pedindo JS) — por string, sem rede nem
+  navegador. `parse_content_type`/`detect_charset` ficaram inalterados.
+- **FEAT-002 — Renderização por navegador (núcleo de segurança SSRF).**
+  `app/fetch/render.py::render_url(url, *, resolver=None, settings=None,
+  browser_launch_args=None) -> RenderResult(final_url, html, status)` usa a API
+  SYNC do Playwright, com contexto efêmero por chamada (`accept_downloads=False`)
+  e Chromium sempre fechado em try/finally. ANTES de navegar registra DOIS
+  handlers de interceptação cobrindo os dois seams de saída: `page.route("**/*")`
+  para HTTP(S) e `page.route_web_socket("**/*")` para WebSocket (que esta build
+  do Playwright não roteia por `page.route`). Cada requisição interceptada passa
+  pelo guard `app.fetch.guard.validate_url`: `image`/`media`/`font` são abortados
+  por economia; qualquer `FetchError` ou exceção inesperada aborta (falha
+  fechada); só um sucesso do guard chama `route.continue_()`/`connect_to_server`.
+  A URL de entrada também é validada pelo guard ANTES de lançar o Chromium (ponto
+  de entrada ilegal falha com o erro tipado do guard, sem browser). O guard é a
+  ÚNICA autoridade de destino — nenhuma política de IP/porta é duplicada aqui.
+  Espera: `goto(wait_until="domcontentloaded")` + `wait_for_load_state(
+  "networkidle", timeout=render_networkidle_timeout_ms)`, com timeout de
+  networkidle NÃO fatal (captura `page.content()` mesmo assim). O chamador do M5
+  marca `SourceInfo.render_mode='browser'` e anexa o warning
+  `rendered_with_browser`. httpx NÃO é importado em `render.py`.
+- **FEAT-003 — Extração PDF→IR + passo de CI dedicado.**
+  `app/extract/pdf.py::extract_pdf(raw, source, *, settings=None) -> Document`
+  abre o PDF com pdfplumber, itera páginas (1-based, `page` em TODO bloco e não
+  decrescente), infere títulos pelos 2 maiores tamanhos de fonte acima do corpo
+  (nível 1/2), extrai tabelas via find_tables/extract (header só quando a 1ª
+  linha está cheia e há ≥1 linha de corpo, senão `headers=[]` + warning
+  `table_no_header` pareado ao bloco), remove cabeçalhos/rodapés repetidos em
+  >50% das páginas (bandas de 15% topo/base, token de número de página
+  descartado), junta linhas monoespaçadas consecutivas em bloco `code` e emite
+  `low_text_content` quando o texto fica abaixo do limiar. PDF sem texto levanta
+  `ExtractionEmpty` (HTTP 422, OCR fora de escopo), novo erro tipado em
+  `app/fetch/errors.py` (SPEC §8). Fixtures geradas por reportlab em
+  `tests/fixtures/pdf/` (3 PDFs técnicos + 1 sem texto, documentadas em
+  `SOURCES.md`). O CI mantém o gate principal rápido (`-m "not integration and
+  not browser"`) e tem um passo dedicado que roda `uv run playwright install
+  --with-deps chromium` e depois `uv run pytest -m "browser"`.
+
+Teste central de SSRF (o que torna a prova não vacuosa): a suíte de navegador
+usa `--host-resolver-rules` do Chromium para mapear o host BLOQUEADO
+(`169.254.169.254` / `10.0.0.1`) ao servidor contador em loopback — ou seja, o
+contador É alcançável pelo Chromium, e a única coisa que mantém seu contador em
+ZERO é o guard abortando a requisição em `page.route` ANTES de o Chromium
+conectar. O guard é usado verbatim (não é monkeypatched); páginas de fixture são
+servidas sob hostnames públicos fictícios que o `FakeResolver` mapeia para um IP
+público para o guard APROVAR, e o `--host-resolver-rules` redireciona a conexão
+real para a porta de loopback. Resultado: 9 testes de navegador verdes, com o
+caso central (parametrizado em `169.254.169.254` e `10.0.0.1`) provando contador
+== 0.
+
+Revisões independentes (rodada em 2026): revisão técnica APPROVED (gate verde,
+critérios de aceite 1–6 atendidos, httpx confinado a `app/fetch/client.py`, sem
+PyMuPDF) e red-team de segurança SSRF APPROVED (interceptação registrada antes de
+navegar, falha fechada, URL de entrada guardada, teste central significativo). O
+único resíduo é a janela de rebinding DNS DENTRO do navegador (o Chromium faz a
+própria resolução e não expõe seam de conectar-no-IP-validado como o cliente
+httpx do M1), documentado honestamente em DECISIONS.md e registrado como dívida
+de M10 (restringir o egress do processo de navegador). Artefatos das revisões em
+`.agents/tasks/m4-browser-pdf/`: `m4-review.json`, `m4-security-review.md`,
+`m4-security-verdict.json`.
 
 ### M3 — IR e extração de HTML
 
@@ -249,10 +329,22 @@ testes de TLS real (SNI confirmado + controle sem SNI).
   sucesso com o status 3xx (não vira `fetch_failed`). Sem impacto de segurança
   no M1 (corpo limitado, destino guardado), mas marcos que assumirem 2xx em
   sucesso precisam tratar esse caso. (Revisão de segurança INFO-2.)
-- `app/fetch/render.py` continua placeholder (Playwright é M4), assim como os
-  demais módulos abaixo.
-- `app/extract/pdf.py` continua placeholder (PDF é M4). O restante de
-  `app/extract` (ir, html, jsonld, to_markdown) foi implementado no M3.
+- `app/fetch/render.py` foi implementado no M4 (Playwright + interceptação pelo
+  guard). Dívida: a janela de rebinding DNS DENTRO do navegador (entre a checagem
+  do guard e a resolução/conexão PRÓPRIA do Chromium na MESMA requisição) NÃO é
+  fechada como no cliente httpx do M1, porque o Chromium resolve o DNS sozinho e
+  não expõe um seam para conectar no IP já validado. A mitigação é operacional e
+  está registrada como dívida de M10: o processo do navegador deve rodar com
+  egress restrito à internet pública e sem acesso a credenciais de nuvem (ver
+  DECISIONS 2026-10-11 "M4 — janela de DNS rebinding no navegador").
+- `app/extract/pdf.py` foi implementado no M4 (pdfplumber página a página,
+  determinístico, sem LLM). Dívida/escopo: OCR está FORA de escopo — PDF sem
+  texto extraível levanta `extraction_empty` (HTTP 422). As heurísticas (corpo
+  pelos tamanhos de fonte, bandas de 15% para cabeçalho/rodapé repetido em >50%
+  das páginas, monoespaçado→código) são determinísticas e validadas contra as
+  fixtures reportlab; comportamento em PDFs reais de layout irregular não é
+  testado. O restante de `app/extract` (ir, html, jsonld, to_markdown) foi
+  implementado no M3.
 - Módulos placeholder (docstring-only) em `app/store`, `app/index`,
   `app/retrieve`, `app/providers/*`, `app/usage`, `app/mcp_server` —
   implementados a partir dos marcos seguintes.
@@ -344,3 +436,65 @@ snapshots obsoletos. O gate completo do M3 (host Windows, sem Docker):
 uv run pytest -m "not integration"` → ruff All checks passed; format 92 files
 already formatted; mypy Success (48 arquivos); pytest 218 passed, 1 deselected
 (só o teste de integração do /health do M0, que exige Docker), 36 snapshots.
+
+### Renderização por navegador e extração de PDF (M4)
+
+Os testes de navegador exigem um Chromium real e, por isso, só rodam num passo
+dedicado (não no gate rápido). Instale o Chromium uma vez antes de rodá-los:
+
+```powershell
+uv run playwright install chromium
+```
+
+No Linux/CI use `uv run playwright install --with-deps chromium`.
+
+Decisão de renderização (pura, sem rede nem navegador):
+
+```python
+from app.fetch.detect import should_render
+
+# auto: só renderiza com texto principal curto E sinais de SPA
+print(should_render(main_text_len=120, html_text='<div id="root"></div>'))  # True
+print(should_render(main_text_len=5000, html_text='<div id="root"></div>'))  # False
+print(should_render(main_text_len=0, html_text="", render="always"))  # True
+print(should_render(main_text_len=0, html_text="", render="never"))  # False
+```
+
+Extração de PDF (determinística, lê fixtures salvas, sem rede e sem OCR):
+
+```python
+from datetime import UTC, datetime
+from app.extract.pdf import extract_pdf
+from app.extract.to_markdown import to_markdown
+from app.extract.ir import SourceInfo
+
+raw = open("tests/fixtures/pdf/api_reference.pdf", "rb").read()
+src = SourceInfo(
+    url="https://example.test/api.pdf",
+    final_url="https://example.test/api.pdf",
+    content_type="application/pdf",
+    fetched_at=datetime(2026, 10, 11, tzinfo=UTC),
+    etag=None,
+    last_modified=None,
+    content_hash="0" * 64,
+    render_mode="pdf",
+)
+doc = extract_pdf(raw, src)
+print(len(doc.blocks), "blocks;", [w.code for w in doc.warnings])
+print(to_markdown(doc)[:500])
+# PDF sem texto (tests/fixtures/pdf/textless.pdf) levanta ExtractionEmpty (422).
+```
+
+Para regenerar as fixtures de PDF (geradas por reportlab, versionadas):
+`uv run python tests/fixtures/_generate_pdf_fixtures.py`.
+
+Gate completo do M4 (host Windows, sem Docker). Gate rápido:
+`uv run ruff check . ; uv run ruff format --check . ; uv run mypy app ;
+uv run pytest -m "not integration and not browser" -q` → ruff All checks passed;
+format 98 files already formatted; mypy Success (48 arquivos); pytest 261 passed,
+10 deselected, 37 snapshots. Passo dedicado de navegador:
+`uv run playwright install chromium ; uv run pytest -m "browser" -q` → 9 passed,
+262 deselected (inclui o teste central de SSRF com contador == 0 para
+`169.254.169.254` e `10.0.0.1`). Rodar só a suíte de PDF:
+`uv run pytest tests/unit/extract/test_pdf.py -q`; só a de navegador:
+`uv run pytest -m "browser" -q`.

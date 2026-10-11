@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # Render decision (SPEC 3.3).
     render_min_text_chars: int = 500
 
+    # Browser render wait cap (SPEC 3.4 — domcontentloaded + networkidle, 15s).
+    render_networkidle_timeout_ms: int = 15000
+
     # Embeddings — provisional until M6.
     embedding_dim: int = 1024
 
