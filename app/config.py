@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     coverage_high: float = 0.5
     rrf_k: int = 60
 
+    # Benchmark LLM keys (M2, SPEC §10). Optional: the deterministic fake
+    # provider ignores them and every test runs without network. Only the real
+    # OpenAI answerer / Anthropic judge adapters read these, in the human run.
+    bench_answerer_api_key: str | None = None
+    bench_judge_api_key: str | None = None
+
     @field_validator("allowed_ports", mode="before")
     @classmethod
     def _parse_allowed_ports(cls, value: object) -> object:

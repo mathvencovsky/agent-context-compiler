@@ -42,6 +42,60 @@ A API é consumível por **HTTP**, por um **SDK Python** e por um **servidor MCP
 
 ---
 
+## Posicionamento: NINA vs. extratores de Markdown (Firecrawl, Jina, etc.)
+
+Ferramentas como Firecrawl e Jina Reader resolvem **extração**: dada uma URL,
+devolvem Markdown limpo (e, no caso do Firecrawl, fazem crawling de sites
+inteiros). NINA faz extração também (`resolve`), mas o produto é a **segunda
+operação** — `assemble` — que esses extratores não têm: transformar uma pergunta
+e um orçamento de tokens nos fragmentos certos, com evidência rastreável.
+
+A diferença, em uma frase: um extrator entrega **a página limpa**; NINA entrega
+**a resposta montada, sob orçamento, com a prova**.
+
+### Onde NINA ganha vantagem
+
+| | Extrator de Markdown (Firecrawl / Jina) | **NINA** |
+|---|---|---|
+| **Seleção sob orçamento** | ❌ devolve a página inteira; você monta o RAG | ✅ `assemble` seleciona os fragmentos mais úteis para `max_tokens` |
+| **Evidência rastreável** | ❌ Markdown solto; rastreabilidade por sua conta | ✅ cada fragmento cita `block_id` + `quote` literal da IR |
+| **Determinismo** | ⚠️ varia; alguns usam LLM na limpeza | ✅ extração e seleção sem LLM — mesma URL, mesmo resultado |
+| **Proveniência completa** | ⚠️ URL de origem | ✅ `document_id` + `version_id` + `block_id` + `page` (PDF) |
+| **Versionamento + cache** | ⚠️ por chamada | ✅ versões por `content_hash`; reresolver inalterado não recria nada |
+| **Segurança SSRF auditada** | — (serviço hospedado) | ✅ guard único em HTTP e navegador, revisado por red-team |
+| **Integração nativa com agentes** | SDK / API | ✅ HTTP + SDK Python + **servidor MCP** |
+
+O ganho central é **eficiência de tokens com rastreabilidade**: entregar menos
+contexto, mais relevante e citável, em vez de despejar a página inteira no
+prompt do agente — o que reduz custo e alucinação de citação.
+
+### Onde um extrator maduro ainda leva vantagem
+
+Honestidade de escopo, para alinhar expectativas de piloto:
+
+- **Crawling e descoberta de URLs.** NINA é **sob demanda, sem crawler** (fora de
+  escopo do MVP). Firecrawl varre sites inteiros.
+- **Cobertura e maturidade.** Extratores comerciais lidam há mais tempo com
+  anti-bot, JS pesado e um universo maior de sites. NINA é um MVP.
+- **Disponibilidade.** São serviços hospedados que funcionam hoje; NINA está em
+  construção.
+
+### Vantagem comprovada vs. hipótese
+
+Tudo acima é o diferencial **pretendido** — e, por decisão de projeto, **não
+conta como vantagem até o benchmark provar**. O teste decisivo (marco M8) não é
+nem o Firecrawl: é o **`naive_rag`**, o RAG competente que um bom dev montaria em
+uma tarde. No benchmark, o Firecrawl entra em pé de igualdade de pipeline
+(Markdown do Firecrawl + o mesmo chunking/BM25 do `naive_rag`), de modo que a
+comparação isola a qualidade de **extração + seleção**, não o crawling.
+
+A pergunta que o M8 responde, com intervalos de confiança: *em que categoria, se
+em alguma, o NINA (`ours`) vence o `naive_rag` sem sobreposição de IC?* Enquanto
+essa resposta não existir, trate os itens acima como hipóteses a validar, não
+como fatos de marketing.
+
+---
+
 ## Arquitetura
 
 ```
@@ -95,7 +149,7 @@ verde no GitHub Actions.
 |---|---|---|
 | **M0** | Fundação: repositório, infraestrutura, CI | ✅ Concluído |
 | **M1** | Fetcher seguro (SSRF, limites, robots.txt) | ✅ Concluído |
-| **M2** | Corpus congelado, harness e baselines | ⏳ Bloqueado (insumo humano) |
+| **M2** | Corpus congelado, harness e baselines | 🟡 Fase A concluída (harness); Fase B pendente (execução humana) |
 | **M3** | IR e extração de HTML | ✅ Concluído |
 | **M4** | Renderização por navegador e extração de PDF | ✅ Concluído |
 | **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
@@ -112,8 +166,12 @@ revisão adversarial independente, sem findings HIGH/MEDIUM em aberto. O detalhe
 por marco está em [`PROGRESS.md`](PROGRESS.md); as decisões técnicas não óbvias,
 em [`DECISIONS.md`](DECISIONS.md).
 
-> **M2 depende de você.** O benchmark precisa de insumos humanos (lista de sites,
-> chaves de LLM, 100 tarefas validadas). Veja [o que fazer](#benchmark-o-que-depende-de-você).
+> **M2 — Fase B depende de você.** O harness (Fase A) está pronto e provado com
+> um provedor LLM fake. Faltam os passos humanos: baixar o corpus real
+> (`bench/snapshot.py`), rascunhar as tarefas (`bench/draft_tasks.py`) e
+> **validar 100 tarefas** (70 `dev` / 30 `test`) com `bench/review_tasks.py`.
+> Sites, chaves de LLM e preços já foram fornecidos. Veja
+> [o que fazer](#benchmark-o-que-depende-de-você).
 
 ---
 

@@ -1,0 +1,69 @@
+- id: task-abs-exact
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.python.org/3/library/functions.html#abs
+  question: What does the abs built-in return for a number?
+  answer_type: exact
+  expected:
+  - the absolute value of a number
+  expected_evidence:
+  - url: https://docs.python.org/3/library/functions.html#abs
+    quote: Return the absolute value of a number.
+  author: human
+  validated: true
+- id: task-flask-contains
+  category: guide
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/quickstart/
+  question: How do you run a minimal Flask application?
+  answer_type: contains_all
+  expected:
+  - FLASK_APP
+  - flask run
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/quickstart/
+    quote: set the FLASK_APP environment variable and use the flask run command
+  author: human
+  validated: true
+- id: task-pragma-judge
+  category: params_table
+  split: dev
+  urls:
+  - https://sqlite.org/pragma.html
+  question: What does PRAGMA foreign_keys control in SQLite?
+  answer_type: judge
+  expected:
+  - It enables enforcement of foreign key constraints for the connection.
+  expected_evidence:
+  - url: https://sqlite.org/pragma.html
+    quote: enables enforcement of foreign key constraints for the current database connection
+  author: human
+  validated: true
+- id: task-unanswerable
+  category: guide
+  split: dev
+  urls:
+  - https://docs.python.org/3/library/functions.html#abs
+  question: What is the maximum recursion depth configured in this document?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: human
+  validated: true
+- id: task-unvalidated
+  category: changelog
+  split: dev
+  urls:
+  - https://docs.python.org/3/library/functions.html#abs
+  question: In which Python version was the abs built-in added?
+  answer_type: exact
+  expected:
+  - Python version 1.0
+  expected_evidence:
+  - url: https://docs.python.org/3/library/functions.html#abs
+    quote: added in Python version 1.0
+  author: ai_draft
+  validated: false

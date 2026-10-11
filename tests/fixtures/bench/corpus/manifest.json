@@ -1,0 +1,47 @@
+{
+  "created_at": "2026-01-01T00:00:00+00:00",
+  "entries": [
+    {
+      "site": "Python Documentation",
+      "site_key": "python",
+      "rich_categories": ["api_reference", "guide"],
+      "url": "https://docs.python.org/3/library/functions.html#abs",
+      "final_url": "https://docs.python.org/3/library/functions.html#abs",
+      "status": "ok",
+      "reason": null,
+      "content_type": "text/html",
+      "content_hash": "75a59661aa43cd845645885420fc424af515bed95ca22c1aa678df7cffc6344d",
+      "fetched_at": "2026-01-01T00:00:00+00:00",
+      "raw_path": "python/abs.html",
+      "rendered_path": null
+    },
+    {
+      "site": "Flask",
+      "site_key": "flask",
+      "rich_categories": ["guide", "tutorial"],
+      "url": "https://flask.palletsprojects.com/en/stable/quickstart/",
+      "final_url": "https://flask.palletsprojects.com/en/stable/quickstart/",
+      "status": "ok",
+      "reason": null,
+      "content_type": "text/html",
+      "content_hash": "e25ed5e1b3357a4dfff0bbcc0c643a97ae46638c09ae068b46d6667b5b7773e7",
+      "fetched_at": "2026-01-01T00:00:00+00:00",
+      "raw_path": "flask/quickstart.html",
+      "rendered_path": null
+    },
+    {
+      "site": "SQLite",
+      "site_key": "sqlite",
+      "rich_categories": ["sql_reference", "configuration_reference"],
+      "url": "https://sqlite.org/pragma.html",
+      "final_url": "https://sqlite.org/pragma.html",
+      "status": "ok",
+      "reason": null,
+      "content_type": "text/html",
+      "content_hash": "311c4f1b5218a737d3d26826fba46ea5f048128e7ab2ca11bd706a70ebd207d9",
+      "fetched_at": "2026-01-01T00:00:00+00:00",
+      "raw_path": "sqlite/pragma.html",
+      "rendered_path": null
+    }
+  ]
+}

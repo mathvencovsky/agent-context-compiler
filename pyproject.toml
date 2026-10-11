@@ -33,8 +33,23 @@ dev = [
     "trustme>=1.2",
     "reportlab>=4",
 ]
-# bench: filled in M2 (benchmark harness). Declared placeholder for now.
-bench = []
+# bench: benchmark harness (M2). trafilatura>=2 is Apache-2.0 (versions <1.8
+# were GPLv3+ and are forbidden by CLAUDE.md); rank-bm25 is Apache-2.0 (pulls
+# numpy BSD); the openai/anthropic SDKs are Apache-2.0 and stay behind the
+# app.providers.llm interfaces (tests use only the deterministic fake).
+bench = [
+    "trafilatura>=2",
+    "rank-bm25",
+    "openai",
+    "anthropic",
+    "pyyaml",
+]
+
+[tool.uv]
+# Install the benchmark harness group on a plain `uv sync` too (not just `dev`),
+# so the M2 verification (`uv sync` then `import trafilatura, rank_bm25, openai,
+# anthropic`) resolves without an explicit `--group bench`.
+default-groups = ["dev", "bench"]
 
 [tool.ruff]
 target-version = "py312"

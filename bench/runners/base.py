@@ -1,0 +1,115 @@
+"""Runner interface, token truncation, and registry (SPEC §10.3).
+
+A :class:`Runner` turns one task's corpus URLs into a bounded context string the
+answerer sees. All strategies read ONLY from the frozen
+:class:`~bench.corpus_store.CorpusStore` (SPEC §10.1) — never the live web — and
+truncate the result deterministically to a token budget using
+``app.index.tokens.count_tokens`` (cl100k_base), so two runs over the same corpus
+produce byte-identical context (SPEC §10 determinism).
+
+The registry (:func:`get_runner` / :func:`available_runners`) is populated lazily
+from the baseline modules; ``firecrawl`` registers itself only when a key is
+present (SPEC §10.3). ``ours``/``ours_*`` is M7 and is deliberately absent.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
+
+from app.index.tokens import count_tokens
+from bench.corpus_store import CorpusStore
+from bench.tasks_schema import Task
+
+
+@dataclass(frozen=True)
+class ContextResult:
+    """The bounded context a runner built for a task.
+
+    ``text`` is the context handed to the answerer; ``context_tokens`` is its
+    cl100k_base token count (always ``<= budget_tokens`` the runner was given);
+    ``used_urls`` are the task URLs that actually contributed text, in order.
+    """
+
+    text: str
+    context_tokens: int
+    used_urls: list[str]
+
+
+@runtime_checkable
+class Runner(Protocol):
+    """A context-building strategy over the frozen corpus (SPEC §10.3)."""
+
+    #: Stable strategy name used in the CLI and the report (e.g. ``"raw_html"``).
+    name: str
+
+    def build_context(
+        self, task: Task, *, budget_tokens: int, store: CorpusStore
+    ) -> ContextResult:
+        """Build a context for ``task`` within ``budget_tokens`` from ``store``."""
+        ...
+
+
+def truncate_to_budget(text: str, budget_tokens: int) -> tuple[str, int]:
+    """Return ``text`` cut to at most ``budget_tokens`` tokens, with its count.
+
+    Truncation is deterministic: the cl100k_base token ids of ``text`` are cut to
+    the budget and decoded back, so the same input always yields the same output.
+    A non-positive budget yields ``("", 0)``.
+    """
+    if budget_tokens <= 0 or not text:
+        return "", 0
+    from app.index.tokens import _encoding  # local import keeps the seam private
+
+    encoding = _encoding()
+    token_ids = encoding.encode(text)
+    if len(token_ids) <= budget_tokens:
+        return text, len(token_ids)
+    kept = token_ids[:budget_tokens]
+    return encoding.decode(kept), len(kept)
+
+
+#: Registry of runner factories, filled on first lookup to avoid import cycles.
+_REGISTRY: dict[str, Runner] = {}
+
+
+def _ensure_registered() -> None:
+    """Populate the registry from the baseline modules (idempotent)."""
+    if _REGISTRY:
+        return
+    from bench.runners.firecrawl import make_firecrawl_runner
+    from bench.runners.naive_rag import NaiveRagRunner
+    from bench.runners.naive_text import NaiveTextRunner
+    from bench.runners.raw_html import RawHtmlRunner
+
+    for runner in (RawHtmlRunner(), NaiveTextRunner(), NaiveRagRunner()):
+        _REGISTRY[runner.name] = runner
+
+    # firecrawl auto-skips (returns None) when FIRECRAWL_API_KEY is absent
+    # (SPEC §10.3): it is simply not registered, so the CLI never offers it.
+    firecrawl = make_firecrawl_runner()
+    if firecrawl is not None:
+        _REGISTRY[firecrawl.name] = firecrawl
+
+
+def get_runner(name: str) -> Runner:
+    """Return the registered runner called ``name`` or raise a clear error."""
+    _ensure_registered()
+    try:
+        return _REGISTRY[name]
+    except KeyError as exc:
+        known = ", ".join(sorted(_REGISTRY)) or "<none>"
+        raise KeyError(
+            f"unknown runner {name!r}; available strategies: {known}"
+        ) from exc
+
+
+def available_runners() -> list[str]:
+    """Return the names of all currently registered runners, sorted."""
+    _ensure_registered()
+    return sorted(_REGISTRY)
+
+
+def _count(text: str) -> int:
+    """Thin wrapper over ``count_tokens`` for runners that need a raw count."""
+    return count_tokens(text)

@@ -18,6 +18,76 @@ independentes (APPROVED, sem findings HIGH/MEDIUM).
 
 ## Concluídos
 
+### M2 FASE A — Corpus, harness e baselines (provado com LLM FAKE, sem rede)
+
+Marco M2 é a RÉGUA DE MEDIÇÃO do produto (SPEC §10). A FASE A entrega TODO o
+código do harness e o prova com um provedor LLM fake determinístico, SEM rede e
+SEM gastar chaves. O snapshot real e o draft real (que acessam a web e gastam
+tokens) são EXECUÇÃO HUMANA pós-workflow — não rodam no CI nem nos testes.
+Entregue em três features:
+
+- **FEAT-001 — Fundação (deps + interface do provider LLM).** Grupo `bench` no
+  `pyproject.toml` (`trafilatura>=2`, `rank-bm25`, `openai`, `anthropic`,
+  `pyyaml`) + `uv.lock`; `[tool.uv].default-groups=["dev","bench"]`.
+  `app/providers/llm/`: `base.py` (Protocol `LLMProvider.complete(prompt,*,
+  temperature=0.0,response_format)` + `LLMResult`), `fake.py` determinístico
+  (saída derivada de `sha256(model|format|prompt)`, JSON válido no shape de
+  answerer/judge, zero rede), `openai.py`/`anthropic.py` reais (SDK lazy, leem
+  `BENCH_ANSWERER_API_KEY`/`BENCH_JUDGE_API_KEY`, erro claro sem chave).
+  Settings + `.env.example` ganharam as duas chaves `BENCH_*` vazias.
+- **FEAT-002 — Corpus e tarefas.** `bench/corpus_store.py` (modelo Pydantic do
+  `manifest.json` + `CorpusStore` read-only por URL), `bench/snapshot.py`
+  (reusa `app.fetch.client.fetch`/`render_url`, injetáveis p/ fake; pula URLs
+  robots-disallowed sem abortar), `bench/tasks_schema.py` (`Task` da SPEC §10.2
+  + `load/dump_tasks` round-trip estável), `bench/draft_tasks.py` (rascunha com
+  o answerer, `author:ai_draft`/`validated:false`, quote literal do snapshot,
+  mapeia rótulos ricos → 5 categorias canônicas) e `bench/review_tasks.py` (CLI
+  de revisão com I/O injetável). Nada acessa a rede nos testes.
+- **FEAT-003 — Harness de medição + prova dos 4 critérios de aceite.** Runners
+  baseline com interface comum (`bench/runners/base.py`:
+  `ContextResult`/`Runner`/`get_runner`, truncagem determinística por tokens
+  via `app.index.tokens`): `raw_html` (HTML bruto concatenado), `naive_text`
+  (`trafilatura.extract` texto), `naive_rag` (texto → chunks fixos de 400
+  tokens → BM25 `rank_bm25` top-k até o orçamento) e `firecrawl`
+  (auto-PULADO sem `FIRECRAWL_API_KEY`; não registrado). `ours`/`ours_*` NÃO
+  implementados (M7). `bench/answer.py` (respondedor temperatura 0, PROMPT
+  FIXO, contrato JSON `{answer,citations}`, `INSUFFICIENT` quando sem
+  evidência). `bench/grade.py` (`exact`/`contains_all` determinísticos
+  case-insensitive, `judge` via provider juiz com rubrica fixa; precisão de
+  citação por `difflib.SequenceMatcher.ratio()>=0.9` no doc citado E
+  sobreposição com a `expected_evidence`; INSUFFICIENT como acerto quando
+  `expected==['INSUFFICIENT']`). `bench/report.py` (agrega por estratégia e por
+  categoria: taxa de sucesso + IC95% por bootstrap `n_boot=1000` com semente
+  estável derivada de `strategy+category`, tokens médios de contexto, custo/
+  tarefa e custo/tarefa concluída de `bench/prices.yaml`, precisão de citação,
+  taxa de INSUFFICIENT; IGNORA `validated:false` e INFORMA quantas; latência
+  p50/p95 só no `results.csv`, fora do `report.md` p/ determinismo).
+  `bench/run.py` (CLI argparse, fia store+runners+answer+grade+report, provider
+  FAKE por padrão, `--real` só p/ humano). Fixtures de aceite em
+  `tests/fixtures/bench/` (3 HTML pequenos + `manifest.json` + `tasks.yaml`
+  validadas cobrindo exact/contains_all/judge/1 INSUFFICIENT/1 validated:false)
+  e testes e2e provando: (a) os 3 arquivos são gerados em
+  `bench/results/<ts>/`; (b) duas execuções com o fake dão `results.csv`/
+  `report.md` idênticos ignorando só o timestamp do diretório e a coluna
+  `latency_ms`; (c) o grader cobre os 5 casos; (d) o relatório ignora
+  `validated:false` e informa a contagem.
+
+Pendências e postura de teste (M2 FASE A):
+
+- O **snapshot real** (`bench/snapshot.py`) e o **draft real**
+  (`bench/draft_tasks.py` com provider real) são EXECUÇÃO HUMANA: acessam a web
+  e gastam chaves `BENCH_*`. NÃO são rodados pelo workflow nem pelo CI. Fluxo
+  humano: `uv sync` → preencher `.env` → rodar o snapshot → draftar tarefas →
+  revisar (`bench/review_tasks.py`) → rodar `python -m bench.run --real`.
+- `bench/corpus/` e `bench/results/` são gitignored (gerados). O corpus de
+  aceite vive em `tests/fixtures/bench/` (versionado, feito à mão, sem rede).
+- Como testar (sem rede): `uv run pytest tests/unit/bench -q` e o gate completo
+  (`ruff check .`, `ruff format --check .`, `mypy app`, `pytest -m "not
+  integration and not browser"`). Para gerar um relatório sobre a fixture sem a
+  web, aponte o CLI à fixture via `BENCH_CORPUS_DIR`/`BENCH_TASKS_PATH`/
+  `BENCH_RESULTS_ROOT` e rode `python -m bench.run --strategies raw_html,
+  naive_text,naive_rag --split dev`.
+
 ### M5 — Persistência e endpoint `resolve`
 
 Primeiro endpoint público COM cache (SPEC §5, §7, §8), sem LLM no caminho de
@@ -431,8 +501,11 @@ testes de TLS real (SNI confirmado + controle sem SNI).
   `readability_fallback` é por documento, não por bloco.
 - `EMBEDDING_DIM=1024` é provisório; revisar ao escolher o provedor de
   embeddings no M6 (pode exigir migração do esquema).
-- Grupo de dependências `bench` está vazio (placeholder); o harness entra no M2.
-- O alvo `make bench` chama `python -m bench.run`, que ainda é placeholder.
+- Grupo de dependências `bench` preenchido no M2 FASE A (`trafilatura>=2`,
+  `rank-bm25`, `openai`, `anthropic`, `pyyaml`) e instalado por padrão
+  (`[tool.uv].default-groups`).
+- O alvo `make bench` chama `python -m bench.run`, implementado no M2 FASE A
+  (provider FAKE por padrão; `--real` só na execução humana).
 - `make` não está instalado no host Windows de desenvolvimento; os alvos rodam
   no CI (Linux). Localmente, use os comandos `uv run ...` equivalentes.
 - O objeto `.env` é gitignored; copie de `.env.example` antes de subir a infra.
