@@ -1,0 +1,139 @@
+# Corpus do benchmark NINA — sites de documentação técnica pública.
+# Preenchido pelo humano (2026-10-11). Lido por bench/snapshot.py, que baixa as
+# URLs via o fetcher seguro do M1 (respeita robots.txt) e as congela em
+# bench/corpus/ com um manifest.json.
+#
+# IMPORTANTE sobre categorias:
+#   - O campo `categories` por site é DESCRITIVO (rótulos ricos escolhidos pelo
+#     humano) e serve de metadado/filtro.
+#   - As CATEGORIAS DE TAREFA do benchmark (SPEC §10.2) são um enum fechado:
+#     api_reference | guide | params_table | changelog | pdf.
+#     O rascunho de tarefas (bench/draft_tasks.py) mapeia cada tarefa para uma
+#     dessas 5; os rótulos ricos abaixo NÃO entram em tasks.yaml.
+#   - `render`: auto (padrão). Marcado como "always" nos SPAs (React, Angular)
+#     para o snapshot capturar também a versão renderizada; "never" é possível.
+#   - `content`: html | pdf — dica para o snapshot (PDFs vão direto ao pdfplumber).
+#
+# robots.txt: o snapshot usa o fetcher do M1, que respeita Disallow. URLs
+# bloqueadas são puladas no snapshot e reportadas para substituição.
+
+sites:
+  - site: Python Documentation
+    key: python
+    categories: [guide, api_reference, language_reference, changelog]
+    content: html
+    render: auto
+    urls:
+      - https://docs.python.org/3/tutorial/index.html
+      - https://docs.python.org/3/library/functions.html
+      - https://docs.python.org/3/library/asyncio-task.html
+      - https://docs.python.org/3/reference/expressions.html
+      - https://docs.python.org/3/whatsnew/index.html
+
+  - site: SQLite
+    key: sqlite
+    categories: [sql_reference, api_reference, configuration_reference, changelog]
+    content: html
+    render: auto
+    urls:
+      - https://sqlite.org/lang_select.html
+      - https://sqlite.org/lang_createtable.html
+      - https://sqlite.org/pragma.html
+      - https://sqlite.org/releaselog.html
+      - https://sqlite.org/c3ref/intro.html
+
+  - site: PostgreSQL
+    key: postgresql
+    categories: [guide, sql_reference, api_reference, configuration_reference, changelog]
+    content: html
+    render: auto
+    urls:
+      - https://www.postgresql.org/docs/18/tutorial.html
+      - https://www.postgresql.org/docs/18/sql-select.html
+      - https://www.postgresql.org/docs/18/functions.html
+      - https://www.postgresql.org/docs/18/runtime-config.html
+      - https://www.postgresql.org/docs/18/release-18.html
+
+  - site: Kubernetes
+    key: kubernetes
+    categories: [guide, api_reference, configuration_reference, troubleshooting, cli_reference]
+    content: html
+    render: auto
+    urls:
+      - https://kubernetes.io/docs/concepts/overview/
+      - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+      - https://kubernetes.io/docs/concepts/configuration/configmap/
+      - https://kubernetes.io/docs/tasks/debug/debug-application/
+      - https://kubernetes.io/docs/reference/kubectl/
+
+  - site: Flask
+    key: flask
+    categories: [guide, tutorial, api_reference, configuration_reference, changelog]
+    content: html
+    render: auto
+    urls:
+      - https://flask.palletsprojects.com/en/stable/quickstart/
+      - https://flask.palletsprojects.com/en/stable/tutorial/
+      - https://flask.palletsprojects.com/en/stable/api/
+      - https://flask.palletsprojects.com/en/stable/config/
+      - https://flask.palletsprojects.com/en/stable/changes/
+
+  - site: React
+    key: react
+    categories: [spa_js, guide, api_reference, changelog]
+    content: html
+    render: always   # SPA — captura também a versão renderizada (M4)
+    urls:
+      - https://react.dev/learn
+      - https://react.dev/reference/react
+      - https://react.dev/reference/react/useState
+      - https://react.dev/reference/react/useEffect
+      - https://react.dev/blog/2024/12/05/react-19
+
+  - site: Angular
+    key: angular
+    categories: [spa_js, guide, api_reference, release_notes]
+    content: html
+    render: always   # SPA — captura também a versão renderizada (M4)
+    urls:
+      - https://angular.dev/guide/components
+      - https://angular.dev/guide/templates
+      - https://angular.dev/guide/signals
+      - https://angular.dev/api/core/Component
+      - https://angular.dev/reference/releases
+
+  - site: MDN Web Docs
+    key: mdn
+    categories: [guide, http_reference, api_reference]
+    content: html
+    render: auto
+    urls:
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
+      - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+      - https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+
+  - site: RFC Editor
+    key: rfc
+    categories: [protocol_specification, standards, pdf]
+    content: mixed   # 2 páginas HTML + 3 PDFs
+    render: auto
+    urls:
+      - https://www.rfc-editor.org/rfc/rfc9110.html
+      - https://www.rfc-editor.org/rfc/rfc9111.html
+      - https://www.rfc-editor.org/rfc/rfc9110.pdf   # PDF 1: HTTP Semantics
+      - https://www.rfc-editor.org/rfc/rfc9111.pdf   # PDF 2: HTTP Caching
+      - https://www.rfc-editor.org/rfc/rfc9112.pdf   # PDF 3: HTTP/1.1
+
+  - site: Docker Documentation
+    key: docker
+    categories: [guide, storage, build_reference, cli_reference, changelog]
+    content: html
+    render: auto
+    urls:
+      - https://docs.docker.com/get-started/
+      - https://docs.docker.com/engine/storage/
+      - https://docs.docker.com/build/building/best-practices/
+      - https://docs.docker.com/reference/cli/docker/
+      - https://docs.docker.com/engine/release-notes/

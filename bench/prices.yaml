@@ -1,0 +1,43 @@
+# Preços dos modelos usados no benchmark (USD por 1M de tokens).
+# Preenchido pelo humano (2026-10-11). Fonte: páginas de pricing dos provedores.
+# Usado por bench/report.py para o custo estimado por tarefa e por tarefa concluída.
+#
+# Papéis no benchmark (ver bench/answer.py e bench/grade.py):
+#   - answerer (respondedor): OpenAI gpt-6.1-sol   (tier meio)
+#   - judge    (juiz):        Anthropic claude-sonnet-5-5  (tier meio, modelo diferente do respondedor)
+# Escolha do humano (2026-10-11): usar o tier meio de cada provedor.
+#
+# Os valores abaixo são preços de catálogo; atualize quando os provedores mudarem.
+
+selected:
+  answerer: gpt-6.1-sol
+  judge: claude-sonnet-5-5
+
+models:
+  # ---- OpenAI (respondedor) ----
+  gpt-6-luna:
+    provider: openai
+    input_usd_per_1m: 0.10
+    output_usd_per_1m: 0.50
+  gpt-6.1-sol:
+    provider: openai
+    input_usd_per_1m: 2.00
+    output_usd_per_1m: 10.00
+  gpt-6-astra:
+    provider: openai
+    input_usd_per_1m: 10.00
+    output_usd_per_1m: 50.00
+
+  # ---- Anthropic / Claude (juiz) ----
+  claude-haiku-5-5:
+    provider: anthropic
+    input_usd_per_1m: 0.10
+    output_usd_per_1m: 0.50
+  claude-sonnet-5-5:
+    provider: anthropic
+    input_usd_per_1m: 2.00
+    output_usd_per_1m: 10.00
+  claude-opus-5-5:
+    provider: anthropic
+    input_usd_per_1m: 4.00
+    output_usd_per_1m: 20.00
