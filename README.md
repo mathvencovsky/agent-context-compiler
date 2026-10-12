@@ -149,11 +149,11 @@ verde no GitHub Actions.
 |---|---|---|
 | **M0** | Fundação: repositório, infraestrutura, CI | ✅ Concluído |
 | **M1** | Fetcher seguro (SSRF, limites, robots.txt) | ✅ Concluído |
-| **M2** | Corpus congelado, harness e baselines | 🟡 Fase A concluída (harness); Fase B pendente (execução humana) |
+| **M2** | Corpus congelado, harness e baselines | ✅ Concluído |
 | **M3** | IR e extração de HTML | ✅ Concluído |
 | **M4** | Renderização por navegador e extração de PDF | ✅ Concluído |
 | **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
-| **M6** | Chunking e indexação | ◻️ Próximo (chave de embeddings) |
+| **M6** | Chunking e indexação | ◻️ Próximo |
 | **M7** | Busca, seleção e endpoint `assemble` | ◻️ Pendente (chave de reranker) |
 | **M8** | Benchmark completo e calibração | ◻️ Ponto de decisão |
 | **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
@@ -162,16 +162,16 @@ verde no GitHub Actions.
 **Pipeline de aquisição, extração e persistência (M1, M3, M4, M5) está completo
 e verificado:** HTTP seguro → HTML/PDF → IR → Markdown/JSON → persistência +
 cache → `resolve`/`get-document`. Os marcos de segurança (M1, M4) passaram por
-revisão adversarial independente, sem findings HIGH/MEDIUM em aberto. O detalhe
-por marco está em [`PROGRESS.md`](PROGRESS.md); as decisões técnicas não óbvias,
-em [`DECISIONS.md`](DECISIONS.md).
+revisão adversarial independente, sem findings HIGH/MEDIUM em aberto.
 
-> **M2 — Fase B depende de você.** O harness (Fase A) está pronto e provado com
-> um provedor LLM fake. Faltam os passos humanos: baixar o corpus real
-> (`bench/snapshot.py`), rascunhar as tarefas (`bench/draft_tasks.py`) e
-> **validar 100 tarefas** (70 `dev` / 30 `test`) com `bench/review_tasks.py`.
-> Sites, chaves de LLM e preços já foram fornecidos. Veja
-> [o que fazer](#benchmark-o-que-depende-de-você).
+**O benchmark (M2) já mede baselines com dados reais.** Corpus congelado de 50
+páginas (10 fontes, incluindo SPAs e PDFs), 137 tarefas validadas por humano nas
+cinco categorias com split dev/test estratificado, e uma primeira execução com os
+modelos reais (respondedor OpenAI, juiz Anthropic) estabeleceu a linha de base: o
+`naive_rag` — o RAG competente a ser batido — acerta ~73% no split `dev`, contra
+~26% do `raw_html` bruto. É o número que o pipeline `ours` precisará superar no M8.
+O detalhe por marco está em [`PROGRESS.md`](PROGRESS.md); as decisões técnicas não
+óbvias, em [`DECISIONS.md`](DECISIONS.md).
 
 ---
 
@@ -341,25 +341,33 @@ Todos os erros usam o mesmo envelope, com o HTTP da tabela §8:
 
 ## Benchmark: o que depende de você
 
-O harness de avaliação (M2) é o que prova a tese do produto. O código é
-construído automaticamente, mas estes insumos exigem julgamento humano, contas
-pagas e decisões de produto:
+O harness de avaliação (M2) é o que prova a tese do produto. Ele exigiu insumos
+humanos — julgamento, contas pagas e decisões de produto — que já foram
+fornecidos:
 
-1. **Sites (`bench/sites.yaml`)** — 10 a 15 sites de documentação pública com
-   estruturas variadas (referência de API com tabelas, guias longos, changelogs,
-   ≥2 SPAs, ≥3 PDFs), 5 a 15 URLs por site, com `robots.txt` e termos de uso
-   conferidos.
-2. **LLMs do benchmark** — um modelo respondedor e um modelo juiz (de
-   preferência diferentes), com as chaves no `.env`.
-3. **Preços (`bench/prices.yaml`)** — preço por milhão de tokens de cada modelo,
-   para o relatório calcular custo por tarefa concluída.
-4. **100 tarefas validadas** — rascunhadas pela IA e **revisadas por você** (70
-   `dev` para calibração, 30 `test` reservadas). É o passo mais importante do
+1. ✅ **Sites (`bench/sites.yaml`)** — 10 fontes de documentação pública com
+   estruturas variadas (referência de API com tabelas, guias, changelogs, 2 SPAs
+   e 3 PDFs), 5 URLs cada, congeladas sem bloqueios de `robots.txt`.
+2. ✅ **LLMs do benchmark** — respondedor OpenAI (`gpt-6.1-sol`) e juiz Anthropic
+   (`claude-sonnet-5-5`), modelos de fornecedores diferentes, com as chaves no
+   `.env`.
+3. ✅ **Preços (`bench/prices.yaml`)** — preço por milhão de tokens de cada
+   modelo, usado para o custo por tarefa concluída.
+4. ✅ **137 tarefas validadas** — rascunhadas a partir da IR limpa e revisadas
+   por humano; recategorizadas nas cinco categorias canônicas com split
+   estratificado (96 `dev` / 41 `test`). Este é o passo mais importante do
    projeto: tarefas erradas tornam o benchmark sem sentido.
-5. **(Opcional) chave do Firecrawl** — para o baseline comercial; sem ela, esse
-   runner é pulado.
+5. ◻️ **(Opcional) chave do Firecrawl** — para o baseline comercial; sem ela,
+   esse runner é pulado.
 
-Detalhes e checklist completo em [`docs/HUMANO.md`](docs/HUMANO.md).
+> **Reprodutibilidade (ver [`DECISIONS.md`](DECISIONS.md)):** a geração atual de
+> modelos OpenAI e Anthropic descontinuou o parâmetro de temperatura, então a
+> SPEC §10.3 ("temperatura 0") foi substituída por prompt fixo + `seed` fixo +
+> intervalos de confiança por bootstrap.
+
+Expandir o conjunto de tarefas no futuro: `bench/draft_tasks.py` rascunha novos
+candidatos a partir do corpus e `bench/review_tasks.py` os valida. Detalhes e
+checklist completo em [`docs/HUMANO.md`](docs/HUMANO.md).
 
 ---
 
