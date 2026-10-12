@@ -477,9 +477,9 @@ min_value = 0.0** (taxa de sucesso 0.8125 — no dev, a seleção vai melhor **s
 corte por valor mínimo). Os limiares de cobertura são o **p33/p66 do máximo
 ABSOLUTO de rerank por tarefa** no dev (96 tarefas) — a mesma grandeza que
 `assemble._coverage` observa: **coverage_low = 0.6137**, **coverage_high =
-0.7746**. Com eles, as 96 tarefas dev se dividem em 32/31/33
-(insufficient/partial/sufficient), ou seja, a cobertura não colapsa num único
-rótulo. Valores congelados em `app/config.py` / `.env.example`. A calibração foi
+0.7746**. Com eles (arredondados em config), as 96 tarefas dev se dividem via
+`assemble._coverage` em 32/31/33 (insufficient/partial/sufficient), ou seja, a
+cobertura não colapsa num único rótulo. Valores congelados em `app/config.py` / `.env.example`. A calibração foi
 feita **só no split `dev`**; o split `test` não foi tocado (regra de honestidade
 do M8). Detalhes e a tabela das 9 combinações em [`PROGRESS.md`](PROGRESS.md) e
 [`DECISIONS.md`](DECISIONS.md).

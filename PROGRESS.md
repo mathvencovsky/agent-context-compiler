@@ -112,9 +112,10 @@ ABSOLUTO por tarefa — a MESMA grandeza que `_coverage` observa — recalculada
 no dev via `bench.calibrate --coverage-only --real` (96 tarefas; cache de rerank
 reconstruído com scores ABSOLUTOS, embeddings do cache intacto → ZERO OpenAI):
 min 0.1413, max 0.9073 → **coverage_low = p33 = 0.6137**,
-**coverage_high = p66 = 0.7746**. Com esses limiares, as 96 tarefas se dividem em
-**32 insufficient / 31 partial / 33 sufficient** (via `_coverage`, limiares
-arredondados) — a cobertura NÃO colapsa.
+**coverage_high = p66 = 0.7746**. Com esses limiares CONGELADOS (arredondados em
+config), as 96 tarefas se dividem via `_coverage` em **32 insufficient / 31
+partial / 33 sufficient** (a tarefa com máximo 0.61369967 fica < 0.6137 →
+insufficient) — a cobertura NÃO colapsa.
 Artefato: `bench/results/coverage_20261012T193038_322186/` (`coverage.json` +
 `coverage_scores.csv` com os 96 máximos por tarefa; re-rodar `percentiles` sobre o
 CSV reproduz 0.6137/0.7746, sem Jina). A primeira passagem sofreu 2 respostas 429
@@ -190,8 +191,8 @@ só a lógica pura é testada.
    reproduzíveis a partir de
    `bench/results/coverage_20261012T193038_322186/coverage_scores.csv` (sem Jina).
    As 96 tarefas dev se dividem em 32/31/33 (insufficient/partial/sufficient, via
-   `_coverage` com os limiares arredondados). O `CachingRerankProvider` agora
-   persiste o score ABSOLUTO (documentado), evitando a recorrência do bug.
+   `_coverage` com os limiares arredondados de config). O `CachingRerankProvider`
+   agora persiste o score ABSOLUTO (documentado), evitando a recorrência do bug.
 
 ---
 
