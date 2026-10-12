@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     # min-value cut). coverage_low/high are the p33/p66 of the PER-TASK MAX
     # ABSOLUTE rerank-score distribution on dev (96 tasks) — the exact quantity
     # assemble._coverage classifies on, so threshold and observable are the same
-    # grandeza (31/31/34 insufficient/partial/sufficient over the 96 dev tasks).
+    # grandeza (31/32/33 insufficient/partial/sufficient over the 96 dev tasks).
     selection_lambda: float = 0.3
     min_value: float = 0.0
     coverage_low: float = 0.6137
