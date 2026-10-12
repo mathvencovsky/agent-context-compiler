@@ -20,6 +20,10 @@ dependencies = [
     "playwright>=1.40",
     "pdfplumber>=0.11",
     "tiktoken>=0.7,<1",
+    # pgvector: PostgreSQL License (permissive, allowed by CLAUDE.md). Runtime
+    # dep for the ORM Vector column added in FEAT-002; pinned here so the
+    # lockfile settles once (see DECISIONS.md 2026-10-12).
+    "pgvector>=0.3",
 ]
 
 [dependency-groups]
@@ -32,6 +36,8 @@ dev = [
     "boto3-stubs[s3]",
     "trustme>=1.2",
     "reportlab>=4",
+    # hypothesis: property-based testing for the chunker (M6). BSD-licensed.
+    "hypothesis>=6",
 ]
 # bench: benchmark harness (M2). trafilatura>=2 is Apache-2.0 (versions <1.8
 # were GPLv3+ and are forbidden by CLAUDE.md); rank-bm25 is Apache-2.0 (pulls

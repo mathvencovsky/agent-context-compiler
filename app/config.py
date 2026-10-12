@@ -63,8 +63,13 @@ class Settings(BaseSettings):
     # Browser render wait cap (SPEC 3.4 — domcontentloaded + networkidle, 15s).
     render_networkidle_timeout_ms: int = 15000
 
-    # Embeddings — provisional until M6.
-    embedding_dim: int = 1024
+    # Embeddings (M6, SPEC §5). text-embedding-3-small produces 1536-dim vectors
+    # (human decision, DECISIONS.md 2026-10-12). embeddings_api_key is the
+    # OpenAI key for the real adapter; it falls back to bench_answerer_api_key
+    # so no new key is required (see app/providers/embeddings/openai.py).
+    embedding_dim: int = 1536
+    embedding_model: str = "text-embedding-3-small"
+    embeddings_api_key: str | None = None
 
     # Retrieval / selection (SPEC 6).
     selection_lambda: float = 0.5

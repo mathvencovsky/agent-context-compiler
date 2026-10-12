@@ -1,22 +1,88 @@
 # PROGRESS
 
-Marco atual: M5 (Persistência e endpoint `resolve`) — implementado. Entregou os
-modelos SQLAlchemy 2 (`sources`/`document_versions`) + migração Alembic 0002, o
-`BlobStore` S3 (bruto + IR), o `DocumentRepo` com dedup por `content_hash`, a
-contagem de tokens via tiktoken (`cl100k_base`), os schemas Pydantic da SPEC §8,
-a máquina de estados de cache do `POST /v1/documents/resolve`, o
-`GET /v1/documents/{id}` que lê do storage sem refetch e o handler global de
-erros no envelope §8. Gate rápido verde (268 passed, 29 deselected) e suíte de
-integração verde (20 passed) com Postgres + SeaweedFS reais e HTTP sempre
-mockado via `httpx.MockTransport` (nenhum teste toca a internet). Próximo: M2 —
-Corpus congelado, harness e baselines (requer lista humana de sites e tarefas
-validadas), que corre em paralelo.
+Marco atual: M6 (Chunking e indexação) — implementado. Transforma a IR em chunks
+indexados para busca lexical e vetorial (SPEC §5, §7); o M6 SÓ indexa, não
+implementa busca/seleção (fica para M7). Entregou os embeddings atrás de
+interface (`app/providers/embeddings/{base,fake,openai}.py`, fake determinístico
+usado em TODOS os testes), o `Chunk` dataclass + `chunk_document` determinístico
+(`app/index/chunker.py`), o modelo ORM `Chunk` + migração Alembic `0003_chunks`
+(coluna `tsv` gerada pelo banco + índice GIN sobre `tsv` + índice HNSW
+`vector_cosine_ops` sobre `embedding vector(1536)`) e o indexer idempotente
+delete-then-insert (`app/index/indexer.py::index_version`). `EMBEDDING_DIM` subiu
+de 1024 (provisório) para 1536 (text-embedding-3-small), reusando a chave OpenAI
+(`embeddings_api_key` com fallback para `bench_answerer_api_key`). Testes: a
+suíte unitária (incl. a propriedade por `hypothesis` do chunker) no gate rápido e
+o teste de integração de idempotência `tests/integration/test_indexer.py`
+(Postgres real + `FakeEmbeddingProvider`, sem rede).
 
-M1 (Fetcher seguro), M3 (IR e extração de HTML) e M4 (navegador + PDF)
-permanecem concluídos; M1 e M4 foram aprovados nas revisões de segurança
-independentes (APPROVED, sem findings HIGH/MEDIUM).
+M1 (Fetcher seguro), M3 (IR e extração de HTML), M4 (navegador + PDF) e M5
+(Persistência e endpoint `resolve`) permanecem concluídos; M1 e M4 foram
+aprovados nas revisões de segurança independentes (APPROVED, sem findings
+HIGH/MEDIUM). M2 (Corpus congelado, harness e baselines) corre em paralelo e
+depende de execução humana para o snapshot/draft reais.
+
+### Como testar o M6 manualmente
+
+Gate rápido (sem serviços): `uv run ruff check . && uv run ruff format --check .
+&& uv run mypy app && uv run pytest -m "not browser and not integration"` — o
+teste de integração é corretamente excluído aqui.
+
+Integração (Postgres + pgvector via Docker): `make up && make migrate` aplica
+até a revisão `0003_chunks`; o round-trip `uv run alembic downgrade -1 && uv run
+alembic upgrade head` recria a tabela limpa; `uv run pytest
+tests/integration/test_indexer.py -m integration` prova a idempotência (mesmo nº
+de chunks em duas reindexações da mesma `version_id`), `block_ids` não-vazio e
+`tsv` preenchido pelo banco.
+
+### Dívidas / notas do M6
+
+- O M6 só indexa: a busca lexical (GIN/`tsv`) e vetorial (HNSW/`embedding`) é
+  consumida pelo M7 (`assemble`/retrieve). Os índices já existem para o M7 usar.
+- O adaptador real `OpenAIEmbeddingProvider` nunca é exercido em testes (zero
+  rede); só a execução humana com chave o usa, em lote com retry/backoff.
 
 ## Concluídos
+
+### M6 — Chunking e indexação
+
+Transformação determinística da IR (Document/Block) em chunks indexados para
+busca lexical e vetorial (SPEC §5, §7), sem LLM e sem rede no caminho de
+indexação. Entregue em duas features:
+
+- **FEAT-001 — Fundação + chunking (sem banco).** Dependência `pgvector`
+  (PostgreSQL License, permissiva) em `[project].dependencies` e `hypothesis`
+  (BSD) no grupo `dev`; `uv.lock` regenerado. `app/config.py`: `embedding_dim`
+  1024→1536, novos `embedding_model="text-embedding-3-small"` e
+  `embeddings_api_key` (fallback para `bench_answerer_api_key`), espelhados no
+  `.env.example`. `app/providers/embeddings/`: `base.py` (`@runtime_checkable
+  Protocol EmbeddingProvider` com `model`/`dim`/`embed`), `fake.py`
+  (`FakeEmbeddingProvider` determinístico de `sha256` normalizado L2, zero rede,
+  usado em TODOS os testes) e `openai.py` (`OpenAIEmbeddingProvider` real, SDK
+  lazy, batch + retry/backoff, `MissingAPIKey` sem chave — nunca usado em
+  testes). `app/index/chunker.py`: `@dataclass(frozen=True) Chunk` + o
+  `chunk_document` determinístico (seções por `heading_path`, janela 200–500 /
+  máx. 800 tokens medidos sobre o `text` com prefixo, corte de `table`/`code`
+  isolado >800 por linhas/linhas-em-branco repetindo headers, prosa >800 como
+  chunk único, `block_ids` não-vazio). Testes unitários incl. a propriedade por
+  `hypothesis` (nenhum chunk >800; table/code <800 nunca dividido).
+- **FEAT-002 — Persistência + indexação (banco).** `app/store/models.py`:
+  modelo `Chunk` (`chunks`) com `id` autoincremento, `version_id`
+  FK→`document_versions.id` (indexado), `block_ids`/`heading_path` text[],
+  `text`/`md`/`tokens`/`ord`, `embedding` `Vector(1536)` e a coluna `tsv`
+  GERADA pelo banco mapeada read-only (`Computed(..., persisted=True)`). Migração
+  `0003_chunks` (down_revision `0002_sources_document_versions`): cria a tabela,
+  a coluna `tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple', text))
+  STORED`, a coluna `embedding vector(1536)` (extensão `vector` já de `0001`), o
+  índice GIN sobre `tsv` e o índice HNSW `vector_cosine_ops` sobre `embedding`;
+  `downgrade()` dropa índices e tabela. `app/index/indexer.py::index_version`
+  (idempotente delete-then-insert por `version_id`, embeddings em lote, `tsv`
+  nunca escrito pelo app, caso de zero chunks tratado). Teste de integração
+  `tests/integration/test_indexer.py` (Postgres real + `FakeEmbeddingProvider`):
+  nº de chunks igual em duas reindexações, `block_ids` não-vazio, `tsv`
+  preenchido pelo banco. O `_truncate` do harness limpa `chunks` antes de
+  `document_versions`. Ambiguidades da SPEC §5 e a estratégia delete-then-insert
+  registradas em DECISIONS.md (2026-10-12).
+
 
 ### M2 FASE A — Corpus, harness e baselines (provado com LLM FAKE, sem rede)
 

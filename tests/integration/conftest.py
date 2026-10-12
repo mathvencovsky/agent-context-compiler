@@ -143,6 +143,8 @@ def session_factory(engine: Engine) -> sessionmaker[Session]:
 
 def _truncate(engine: Engine) -> None:
     with engine.begin() as conn:
+        # chunks reference document_versions, so clear them first (M6).
+        conn.execute(text("DELETE FROM chunks"))
         # Break the circular sources <-> document_versions FK before deleting.
         conn.execute(text("UPDATE sources SET current_version_id = NULL"))
         conn.execute(text("DELETE FROM document_versions"))

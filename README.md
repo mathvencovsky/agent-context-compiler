@@ -153,16 +153,19 @@ verde no GitHub Actions.
 | **M3** | IR e extração de HTML | ✅ Concluído |
 | **M4** | Renderização por navegador e extração de PDF | ✅ Concluído |
 | **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
-| **M6** | Chunking e indexação | ◻️ Próximo |
-| **M7** | Busca, seleção e endpoint `assemble` | ◻️ Pendente (chave de reranker) |
+| **M6** | Chunking e indexação | ✅ Concluído |
+| **M7** | Busca, seleção e endpoint `assemble` | ◻️ Próximo (chave de reranker) |
 | **M8** | Benchmark completo e calibração | ◻️ Ponto de decisão |
 | **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
 | **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
-**Pipeline de aquisição, extração e persistência (M1, M3, M4, M5) está completo
-e verificado:** HTTP seguro → HTML/PDF → IR → Markdown/JSON → persistência +
-cache → `resolve`/`get-document`. Os marcos de segurança (M1, M4) passaram por
-revisão adversarial independente, sem findings HIGH/MEDIUM em aberto.
+**Pipeline de aquisição, extração, persistência e indexação (M1, M3, M4, M5, M6)
+está completo e verificado:** HTTP seguro → HTML/PDF → IR → Markdown/JSON →
+persistência + cache → `resolve`/`get-document` → chunks indexados (tsvector
+lexical + embeddings vetoriais `text-embedding-3-small` no pgvector). Falta a
+busca sobre esse índice — o endpoint `assemble` (M7). Os marcos de segurança
+(M1, M4) passaram por revisão adversarial independente, sem findings HIGH/MEDIUM
+em aberto.
 
 **O benchmark (M2) já mede baselines com dados reais.** Corpus congelado de 50
 páginas (10 fontes, incluindo SPAs e PDFs), 137 tarefas validadas por humano nas
