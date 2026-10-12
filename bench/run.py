@@ -40,7 +40,9 @@ from bench.tasks_schema import Task, load_tasks
 #: Repository paths (bench/ lives at the repo's bench directory).
 _BENCH_DIR = Path(__file__).resolve().parent
 DEFAULT_CORPUS_DIR = _BENCH_DIR / "corpus"
-DEFAULT_TASKS_PATH = _BENCH_DIR / "tasks.yaml"
+# SPEC §2: tasks live at bench/tasks/tasks.yaml (same path review_tasks and
+# run_draft use); the previous bench/tasks.yaml here was a path mismatch.
+DEFAULT_TASKS_PATH = _BENCH_DIR / "tasks" / "tasks.yaml"
 DEFAULT_PRICES_PATH = _BENCH_DIR / "prices.yaml"
 DEFAULT_RESULTS_ROOT = _BENCH_DIR / "results"
 

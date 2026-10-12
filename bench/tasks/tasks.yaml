@@ -1,0 +1,2051 @@
+- id: draft-0000
+  category: guide
+  split: test
+  urls:
+  - https://docs.python.org/3/tutorial/index.html
+  question: According to the tip, what language are the tutorial’s intended programmers
+    new to?
+  answer_type: judge
+  expected:
+  - Python
+  expected_evidence:
+  - url: https://docs.python.org/3/tutorial/index.html
+    quote: This tutorial is designed for programmers that are new to the Python language,
+      not beginners who are new to programming.
+  author: ai_draft
+  validated: true
+- id: draft-0001
+  category: guide
+  split: dev
+  urls:
+  - https://docs.python.org/3/tutorial/index.html
+  question: What exact URL is given for the Python website where the interpreter and
+    standard library are available?
+  answer_type: judge
+  expected:
+  - https://www.python.org/
+  expected_evidence:
+  - url: https://docs.python.org/3/tutorial/index.html
+    quote: from the Python website, https://www.python.org/,
+  author: ai_draft
+  validated: true
+- id: draft-0002
+  category: guide
+  split: dev
+  urls:
+  - https://docs.python.org/3/tutorial/index.html
+  question: What tool does the tutorial suggest having handy for hands-on experience?
+  answer_type: judge
+  expected:
+  - Python interpreter
+  expected_evidence:
+  - url: https://docs.python.org/3/tutorial/index.html
+    quote: It helps to have a Python interpreter handy for hands-on experience, but
+      all examples are self-contained, so the tutorial can be read off-line as well.
+  author: ai_draft
+  validated: true
+- id: draft-0003
+  category: api_reference
+  split: test
+  urls:
+  - https://docs.python.org/3/library/functions.html
+  question: In what order are the built-in functions and types listed?
+  answer_type: judge
+  expected:
+  - alphabetical order
+  expected_evidence:
+  - url: https://docs.python.org/3/library/functions.html
+    quote: They are listed here in alphabetical order.
+  author: ai_draft
+  validated: true
+- id: draft-0004
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.python.org/3/library/functions.html
+  question: In which Python version was the built-in frozendict class added?
+  answer_type: judge
+  expected:
+  - '3.15'
+  expected_evidence:
+  - url: https://docs.python.org/3/library/functions.html
+    quote: Added in version 3.15.
+  author: ai_draft
+  validated: true
+- id: draft-0005
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.python.org/3/library/functions.html
+  question: What is the exact docstring passed as the fourth argument to property()
+    in class C?
+  answer_type: judge
+  expected:
+  - I'm the 'x' property.
+  expected_evidence:
+  - url: https://docs.python.org/3/library/functions.html
+    quote: x = property(getx, setx, delx, "I'm the 'x' property.")
+  author: ai_draft
+  validated: true
+- id: draft-0006
+  category: api_reference
+  split: test
+  urls:
+  - https://docs.python.org/3/library/asyncio-task.html
+  question: Which API family does the excerpt describe as providing high-level APIs
+    for working with coroutines and Tasks?
+  answer_type: judge
+  expected:
+  - asyncio
+  expected_evidence:
+  - url: https://docs.python.org/3/library/asyncio-task.html
+    quote: This section outlines high-level asyncio APIs to work with coroutines and
+      Tasks.
+  author: ai_draft
+  validated: true
+- id: draft-0007
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.python.org/3/library/asyncio-task.html
+  question: In which Python version did TaskGroup.create_task() start passing all
+    kwargs to loop.create_task()?
+  answer_type: judge
+  expected:
+  - '3.14'
+  expected_evidence:
+  - url: https://docs.python.org/3/library/asyncio-task.html
+    quote: 'Changed in version 3.14: Passes on all kwargs to loop.create_task()'
+  author: ai_draft
+  validated: true
+- id: draft-0008
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.python.org/3/library/asyncio-task.html
+  question: In which Python version was asyncio.timeout_at(when) added?
+  answer_type: judge
+  expected:
+  - '3.11'
+  expected_evidence:
+  - url: https://docs.python.org/3/library/asyncio-task.html
+    quote: Added in version 3.11.
+  author: ai_draft
+  validated: true
+- id: draft-0009
+  category: api_reference
+  split: test
+  urls:
+  - https://docs.python.org/3/reference/expressions.html
+  question: In Python, what is the result of evaluating -2**2, and how does operator
+    precedence determine it?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0010
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.python.org/3/reference/expressions.html
+  question: Which two expressions are prohibited in the implicitly nested scope of
+    a comprehension?
+  answer_type: judge
+  expected:
+  - yield and yield from
+  expected_evidence:
+  - url: https://docs.python.org/3/reference/expressions.html
+    quote: yield and yield from expressions are prohibited in the implicitly nested
+      scope.
+  author: ai_draft
+  validated: true
+- id: draft-0011
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.python.org/3/reference/expressions.html
+  question: Which C argument-parsing function is used by CPython functions whose positional
+    parameters cannot be supplied by keyword?
+  answer_type: judge
+  expected:
+  - PyArg_ParseTuple()
+  expected_evidence:
+  - url: https://docs.python.org/3/reference/expressions.html
+    quote: In CPython, this is the case for functions implemented in C that use PyArg_ParseTuple()
+      to parse their arguments.
+  author: ai_draft
+  validated: true
+- id: draft-0012
+  category: changelog
+  split: test
+  urls:
+  - https://docs.python.org/3/whatsnew/index.html
+  question: What is the exact name of the essay series described in the excerpt?
+  answer_type: judge
+  expected:
+  - What’s New in Python
+  expected_evidence:
+  - url: https://docs.python.org/3/whatsnew/index.html
+    quote: The “What’s New in Python” series of essays takes tours through the most
+      important changes between major Python versions.
+  author: ai_draft
+  validated: true
+- id: draft-0013
+  category: changelog
+  split: dev
+  urls:
+  - https://docs.python.org/3/whatsnew/index.html
+  question: Which directory tree contains the nontrivial changes used to build the
+    HTML “Changelog”?
+  answer_type: judge
+  expected:
+  - Misc/NEWS.d
+  expected_evidence:
+  - url: https://docs.python.org/3/whatsnew/index.html
+    quote: built from the contents of the Misc/NEWS.d directory tree
+  author: ai_draft
+  validated: true
+- id: draft-0014
+  category: api_reference
+  split: dev
+  urls:
+  - https://sqlite.org/lang_select.html
+  question: What is the exact name of the statement used to query the database?
+  answer_type: judge
+  expected:
+  - SELECT
+  expected_evidence:
+  - url: https://sqlite.org/lang_select.html
+    quote: The SELECT statement is used to query the database.
+  author: ai_draft
+  validated: true
+- id: draft-0015
+  category: api_reference
+  split: test
+  urls:
+  - https://sqlite.org/lang_select.html
+  question: Which exact qualified wildcard expression is substituted alongside * when
+    determining the number of columns returned by a simple SELECT statement?
+  answer_type: judge
+  expected:
+  - alias.*
+  expected_evidence:
+  - url: https://sqlite.org/lang_select.html
+    quote: The number of columns in the rows returned by a simple SELECT statement
+      is equal to the number of expressions in the result expression list after substitution
+      of * and alias.* expressions.
+  author: ai_draft
+  validated: true
+- id: draft-0016
+  category: api_reference
+  split: dev
+  urls:
+  - https://sqlite.org/lang_select.html
+  question: Which SELECT does SQLite search first when an ORDER BY expression in a
+    compound SELECT is not an integer alias?
+  answer_type: judge
+  expected:
+  - The left-most SELECT in the compound.
+  expected_evidence:
+  - url: https://sqlite.org/lang_select.html
+    quote: If an ORDER BY expression is not an integer alias, then SQLite searches
+      the left-most SELECT in the compound for a result column that matches either
+      the second or third rules above.
+  author: ai_draft
+  validated: true
+- id: draft-0017
+  category: api_reference
+  split: dev
+  urls:
+  - https://sqlite.org/lang_createtable.html
+  question: What is the exact command name used to create a new table in an SQLite
+    database?
+  answer_type: judge
+  expected:
+  - CREATE TABLE
+  expected_evidence:
+  - url: https://sqlite.org/lang_createtable.html
+    quote: The "CREATE TABLE" command is used to create a new table in an SQLite database.
+  author: ai_draft
+  validated: true
+- id: draft-0018
+  category: api_reference
+  split: test
+  urls:
+  - https://sqlite.org/lang_createtable.html
+  question: Which SQL statement is named as inserting a row when explicit values are
+    not provided for all table columns?
+  answer_type: judge
+  expected:
+  - INSERT
+  expected_evidence:
+  - url: https://sqlite.org/lang_createtable.html
+    quote: Each time a row is inserted into the table by an INSERT statement that
+      does not provide explicit values for all table columns
+  author: ai_draft
+  validated: true
+- id: draft-0019
+  category: api_reference
+  split: dev
+  urls:
+  - https://sqlite.org/lang_createtable.html
+  question: In what order does SQLite check NOT NULL, CHECK, UNIQUE, and FOREIGN KEY
+    constraints during an INSERT?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0020
+  category: params_table
+  split: test
+  urls:
+  - https://sqlite.org/pragma.html
+  question: Which SQLite command is listed immediately after SELECT as an example
+    of a command using the same interface as PRAGMA?
+  answer_type: judge
+  expected:
+  - INSERT
+  expected_evidence:
+  - url: https://sqlite.org/pragma.html
+    quote: other SQLite commands (e.g. SELECT, INSERT)
+  author: ai_draft
+  validated: true
+- id: draft-0021
+  category: params_table
+  split: dev
+  urls:
+  - https://sqlite.org/pragma.html
+  question: What parameter type is shown for the value assigned by PRAGMA full_column_names?
+  answer_type: judge
+  expected:
+  - boolean
+  expected_evidence:
+  - url: https://sqlite.org/pragma.html
+    quote: PRAGMA full_column_names = boolean;
+  author: ai_draft
+  validated: true
+- id: draft-0022
+  category: params_table
+  split: dev
+  urls:
+  - https://sqlite.org/pragma.html
+  question: Which compile-time option can change the default page size assigned to
+    new databases?
+  answer_type: judge
+  expected:
+  - SQLITE_DEFAULT_PAGE_SIZE
+  expected_evidence:
+  - url: https://sqlite.org/pragma.html
+    quote: The SQLITE_DEFAULT_PAGE_SIZE compile-time option can be used to change
+      the default page size assigned to new databases.
+  author: ai_draft
+  validated: true
+- id: draft-0023
+  category: api_reference
+  split: dev
+  urls:
+  - https://sqlite.org/c3ref/intro.html
+  question: What exact kind of introduction does the excerpt tell readers to see instead?
+  answer_type: judge
+  expected:
+  - a tutorial introduction
+  expected_evidence:
+  - url: https://sqlite.org/c3ref/intro.html
+    quote: 'For a tutorial introduction, see instead:'
+  author: ai_draft
+  validated: true
+- id: draft-0024
+  category: api_reference
+  split: dev
+  urls:
+  - https://sqlite.org/c3ref/intro.html
+  question: Into how many categories can the SQLite interface elements be grouped?
+  answer_type: judge
+  expected:
+  - three
+  expected_evidence:
+  - url: https://sqlite.org/c3ref/intro.html
+    quote: 'The SQLite interface elements can be grouped into three categories:'
+  author: ai_draft
+  validated: true
+- id: draft-0025
+  category: api_reference
+  split: test
+  urls:
+  - https://sqlite.org/c3ref/intro.html
+  question: 'Which header file contains the #defines representing SQLite''s numeric
+    constants?'
+  answer_type: judge
+  expected:
+  - sqlite3.h
+  expected_evidence:
+  - url: https://sqlite.org/c3ref/intro.html
+    quote: 'This is a list of numeric constants used by SQLite and represented by
+      #defines in the sqlite3.h header file.'
+  author: ai_draft
+  validated: true
+- id: draft-0026
+  category: guide
+  split: test
+  urls:
+  - https://www.postgresql.org/docs/18/tutorial.html
+  question: What is the exact name of the tutorial introduced in the opening sentence?
+  answer_type: judge
+  expected:
+  - PostgreSQL Tutorial
+  expected_evidence:
+  - url: https://www.postgresql.org/docs/18/tutorial.html
+    quote: Welcome to the PostgreSQL Tutorial.
+  author: ai_draft
+  validated: true
+- id: draft-0027
+  category: guide
+  split: dev
+  urls:
+  - https://www.postgresql.org/docs/18/tutorial.html
+  question: Which part should those who provision and manage their own PostgreSQL
+    installation also read?
+  answer_type: judge
+  expected:
+  - Part III
+  expected_evidence:
+  - url: https://www.postgresql.org/docs/18/tutorial.html
+    quote: Those who provision and manage their own PostgreSQL installation should
+      also read Part III.
+  author: ai_draft
+  validated: true
+- id: draft-0028
+  category: api_reference
+  split: dev
+  urls:
+  - https://www.postgresql.org/docs/18/sql-select.html
+  question: Which clause provides the output that forms the temporary table when a
+    data-modifying statement is used in WITH?
+  answer_type: judge
+  expected:
+  - RETURNING
+  expected_evidence:
+  - url: https://www.postgresql.org/docs/18/sql-select.html
+    quote: It is the output of RETURNING, not the underlying table that the statement
+      modifies, that forms the temporary table that is read by the primary query.
+  author: ai_draft
+  validated: true
+- id: draft-0029
+  category: api_reference
+  split: dev
+  urls:
+  - https://www.postgresql.org/docs/18/sql-select.html
+  question: In PostgreSQL, what does SELECT * output when the FROM clause contains
+    multiple tables?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0030
+  category: api_reference
+  split: test
+  urls:
+  - https://www.postgresql.org/docs/18/sql-select.html
+  question: In the FETCH clause, what exact two-word option can be used instead of
+    ONLY?
+  answer_type: judge
+  expected:
+  - WITH TIES
+  expected_evidence:
+  - url: https://www.postgresql.org/docs/18/sql-select.html
+    quote: FETCH { FIRST | NEXT } [ count ] { ROW | ROWS } { ONLY | WITH TIES }
+  author: ai_draft
+  validated: true
+- id: draft-0031
+  category: api_reference
+  split: dev
+  urls:
+  - https://www.postgresql.org/docs/18/functions.html
+  question: According to the excerpt, the notation describes the argument and result
+    data types of which two kinds of constructs?
+  answer_type: judge
+  expected:
+  - a function or operator
+  expected_evidence:
+  - url: https://www.postgresql.org/docs/18/functions.html
+    quote: the argument and result data types of a function or operator
+  author: ai_draft
+  validated: true
+- id: draft-0032
+  category: api_reference
+  split: dev
+  urls:
+  - https://www.postgresql.org/docs/18/functions.html
+  question: According to the excerpt, which operators are exceptions to the statement
+    that most functions and operators in this chapter are not specified by the SQL
+    standard?
+  answer_type: judge
+  expected:
+  - the most trivial arithmetic and comparison operators
+  expected_evidence:
+  - url: https://www.postgresql.org/docs/18/functions.html
+    quote: with the exception of the most trivial arithmetic and comparison operators
+      and some explicitly marked functions
+  author: ai_draft
+  validated: true
+- id: draft-0033
+  category: params_table
+  split: test
+  urls:
+  - https://www.postgresql.org/docs/18/runtime-config.html
+  question: What exact term does the excerpt use for the settings that affect the
+    behavior of the database system?
+  answer_type: judge
+  expected:
+  - configuration parameters
+  expected_evidence:
+  - url: https://www.postgresql.org/docs/18/runtime-config.html
+    quote: There are many configuration parameters that affect the behavior of the
+      database system.
+  author: ai_draft
+  validated: true
+- id: draft-0034
+  category: guide
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/concepts/overview/
+  question: In what year did Google open source the Kubernetes project?
+  answer_type: judge
+  expected:
+  - '2014'
+  expected_evidence:
+  - url: https://kubernetes.io/docs/concepts/overview/
+    quote: Google open sourced the Kubernetes project in 2014.
+  author: ai_draft
+  validated: true
+- id: draft-0035
+  category: guide
+  split: test
+  urls:
+  - https://kubernetes.io/docs/concepts/overview/
+  question: What exact type of servers did organizations run applications on early
+    on?
+  answer_type: judge
+  expected:
+  - physical servers
+  expected_evidence:
+  - url: https://kubernetes.io/docs/concepts/overview/
+    quote: Early on, organizations ran applications on physical servers.
+  author: ai_draft
+  validated: true
+- id: draft-0036
+  category: guide
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/concepts/overview/
+  question: What exact term does the excerpt use for the technology that has become
+    popular because it provides extra benefits?
+  answer_type: judge
+  expected:
+  - Containers
+  expected_evidence:
+  - url: https://kubernetes.io/docs/concepts/overview/
+    quote: 'Containers have become popular because they provide extra benefits, such
+      as:'
+  author: ai_draft
+  validated: true
+- id: draft-0037
+  category: guide
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+  question: What is the exact name of the resource that provides declarative updates
+    for Pods and ReplicaSets?
+  answer_type: judge
+  expected:
+  - Deployment
+  expected_evidence:
+  - url: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+    quote: A Deployment provides declarative updates for Pods and ReplicaSets.
+  author: ai_draft
+  validated: true
+- id: draft-0038
+  category: guide
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+  question: What is the exact name of the new ReplicaSet started by the image update?
+  answer_type: judge
+  expected:
+  - nginx-deployment-1989198191
+  expected_evidence:
+  - url: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+    quote: The image update starts a new rollout with ReplicaSet nginx-deployment-1989198191,
+      but it's blocked due to the maxUnavailable requirement that you mentioned above.
+  author: ai_draft
+  validated: true
+- id: draft-0039
+  category: guide
+  split: test
+  urls:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+  question: What reason does Kubernetes report for a Deployment's Progressing condition
+    when it fails to make progress within .spec.progressDeadlineSeconds?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0040
+  category: params_table
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/concepts/configuration/configmap/
+  question: What is the exact name of the API object used to store non-confidential
+    data in key-value pairs?
+  answer_type: judge
+  expected:
+  - ConfigMap
+  expected_evidence:
+  - url: https://kubernetes.io/docs/concepts/configuration/configmap/
+    quote: A ConfigMap is an API object used to store non-confidential data in key-value
+      pairs.
+  author: ai_draft
+  validated: true
+- id: draft-0041
+  category: params_table
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/concepts/configuration/configmap/
+  question: What API can an application use directly to subscribe to updates whenever
+    a ConfigMap changes?
+  answer_type: judge
+  expected:
+  - Kubernetes API
+  expected_evidence:
+  - url: https://kubernetes.io/docs/concepts/configuration/configmap/
+    quote: However, because you're using the Kubernetes API directly, your application
+      can subscribe to get updates whenever the ConfigMap changes, and react when
+      that happens.
+  author: ai_draft
+  validated: true
+- id: draft-0042
+  category: params_table
+  split: test
+  urls:
+  - https://kubernetes.io/docs/concepts/configuration/configmap/
+  question: Which field in the Pod specification should you use to reference each
+    Configmap key as an environment variable?
+  answer_type: judge
+  expected:
+  - env[].valueFrom.configMapKeyRef
+  expected_evidence:
+  - url: https://kubernetes.io/docs/concepts/configuration/configmap/
+    quote: For each container in your Pod specification, add an environment variable
+      for each Configmap key that you want to use to the env[].valueFrom.configMapKeyRef
+      field.
+  author: ai_draft
+  validated: true
+- id: draft-0043
+  category: guide
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/tasks/debug/debug-application/
+  question: What exact Kubernetes resource name appears immediately after Services
+    in the excerpt’s parenthetical list?
+  answer_type: judge
+  expected:
+  - StatefulSets
+  expected_evidence:
+  - url: https://kubernetes.io/docs/tasks/debug/debug-application/
+    quote: (like Pods, Services, or StatefulSets)
+  author: ai_draft
+  validated: true
+- id: draft-0044
+  category: guide
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/tasks/debug/debug-application/
+  question: On which platform should you ask a specific, answerable question about
+    how to use Kubernetes?
+  answer_type: judge
+  expected:
+  - Stack Overflow
+  expected_evidence:
+  - url: https://kubernetes.io/docs/tasks/debug/debug-application/
+    quote: If you have a specific, answerable question about how to use Kubernetes,
+      ask it on Stack Overflow.
+  author: ai_draft
+  validated: true
+- id: draft-0045
+  category: api_reference
+  split: test
+  urls:
+  - https://kubernetes.io/docs/reference/kubectl/
+  question: What API does the command line tool use to communicate with a Kubernetes
+    cluster's control plane?
+  answer_type: judge
+  expected:
+  - Kubernetes API
+  expected_evidence:
+  - url: https://kubernetes.io/docs/reference/kubectl/
+    quote: using the Kubernetes API.
+  author: ai_draft
+  validated: true
+- id: draft-0046
+  category: api_reference
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/reference/kubectl/
+  question: Which long-form flag can you add to a supported kubectl command to output
+    details in a specific format?
+  answer_type: judge
+  expected:
+  - --output
+  expected_evidence:
+  - url: https://kubernetes.io/docs/reference/kubectl/
+    quote: you can add either the -o or --output flags to a supported kubectl command.
+  author: ai_draft
+  validated: true
+- id: draft-0047
+  category: api_reference
+  split: dev
+  urls:
+  - https://kubernetes.io/docs/reference/kubectl/
+  question: Which kubectl command executes a command against a container in a pod?
+  answer_type: judge
+  expected:
+  - kubectl exec
+  expected_evidence:
+  - url: https://kubernetes.io/docs/reference/kubectl/
+    quote: kubectl exec - Execute a command against a container in a pod.
+  author: ai_draft
+  validated: true
+- id: draft-0048
+  category: guide
+  split: test
+  urls:
+  - https://flask.palletsprojects.com/en/stable/quickstart/
+  question: What is the exact name of the guide the excerpt says to follow to set
+    up a project and install Flask first?
+  answer_type: judge
+  expected:
+  - Installation
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/quickstart/
+    quote: Follow Installation to set up a project and install Flask first.
+  author: ai_draft
+  validated: true
+- id: draft-0049
+  category: guide
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/quickstart/
+  question: Which HTTP methods does Flask automatically add to a route registered
+    for GET?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0050
+  category: guide
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/quickstart/
+  question: What exact key is used to retrieve the uploaded file from request.files?
+  answer_type: judge
+  expected:
+  - the_file
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/quickstart/
+    quote: file = request.files['the_file']
+  author: ai_draft
+  validated: true
+- id: draft-0051
+  category: guide
+  split: test
+  urls:
+  - https://flask.palletsprojects.com/en/stable/tutorial/
+  question: What is the exact name of the Tutorial section about making the project
+    installable?
+  answer_type: judge
+  expected:
+  - Make the Project Installable
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/tutorial/
+    quote: Make the Project Installable
+  author: ai_draft
+  validated: true
+- id: draft-0052
+  category: guide
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/tutorial/
+  question: Which programming language does the excerpt assume you’re already familiar
+    with?
+  answer_type: judge
+  expected:
+  - Python
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/tutorial/
+    quote: It’s assumed that you’re already familiar with Python.
+  author: ai_draft
+  validated: true
+- id: draft-0053
+  category: guide
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/tutorial/
+  question: What is the exact name of the framework that doesn’t require any particular
+    project or code layout?
+  answer_type: judge
+  expected:
+  - Flask
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/tutorial/
+    quote: Flask is flexible. It doesn’t require you to use any particular project
+      or code layout.
+  author: ai_draft
+  validated: true
+- id: draft-0054
+  category: api_reference
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/api/
+  question: Which framework is named in the statement that this part of the documentation
+    covers all its interfaces?
+  answer_type: judge
+  expected:
+  - Flask
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/api/
+    quote: This part of the documentation covers all the interfaces of Flask.
+  author: ai_draft
+  validated: true
+- id: draft-0055
+  category: api_reference
+  split: test
+  urls:
+  - https://flask.palletsprojects.com/en/stable/api/
+  question: What is the return type of Blueprint.teardown_app_request(f)?
+  answer_type: judge
+  expected:
+  - T_teardown
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/api/
+    quote: 'Return type: T_teardown'
+  author: ai_draft
+  validated: true
+- id: draft-0056
+  category: api_reference
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/api/
+  question: Which method can manually control the application context needed to access
+    flask.current_app?
+  answer_type: judge
+  expected:
+  - app_context()
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/api/
+    quote: It can be controlled manually with app_context().
+  author: ai_draft
+  validated: true
+- id: draft-0057
+  category: params_table
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/config/
+  question: Which key is explicitly mentioned as a configuration setting applications
+    might set?
+  answer_type: judge
+  expected:
+  - secret key
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/config/
+    quote: setting the secret key
+  author: ai_draft
+  validated: true
+- id: draft-0058
+  category: params_table
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/config/
+  question: What is the default value of MAX_FORM_PARTS?
+  answer_type: judge
+  expected:
+  - '1_000'
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/config/
+    quote: 'Default: 1_000'
+  author: ai_draft
+  validated: true
+- id: draft-0059
+  category: params_table
+  split: test
+  urls:
+  - https://flask.palletsprojects.com/en/stable/config/
+  question: What separator does from_prefixed_env() use in environment variable names
+    to set values in nested configuration dictionaries?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0060
+  category: changelog
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/changes/
+  question: In Flask Version 3.1.3, what is the session marked as for operations that
+    only access keys but not values?
+  answer_type: judge
+  expected:
+  - accessed
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/changes/
+    quote: The session is marked as accessed for operations that only access the keys
+      but not the values, such as in and len.
+  author: ai_draft
+  validated: true
+- id: draft-0061
+  category: changelog
+  split: test
+  urls:
+  - https://flask.palletsprojects.com/en/stable/changes/
+  question: Which path does instance_path use for namespace packages in Flask 2.1.3?
+  answer_type: judge
+  expected:
+  - the path closest to the imported submodule
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/changes/
+    quote: instance_path for namespace packages uses the path closest to the imported
+      submodule.
+  author: ai_draft
+  validated: true
+- id: draft-0062
+  category: changelog
+  split: dev
+  urls:
+  - https://flask.palletsprojects.com/en/stable/changes/
+  question: Which config key is used, if present, as default values for app.run?
+  answer_type: judge
+  expected:
+  - SERVER_NAME
+  expected_evidence:
+  - url: https://flask.palletsprojects.com/en/stable/changes/
+    quote: Use the SERVER_NAME config if it is present as default values for app.run.
+  author: ai_draft
+  validated: true
+- id: draft-0063
+  category: guide
+  split: dev
+  urls:
+  - https://react.dev/learn
+  question: What percentage of the React concepts used on a daily basis does this
+    page introduce?
+  answer_type: judge
+  expected:
+  - 80%
+  expected_evidence:
+  - url: https://react.dev/learn
+    quote: This page will give you an introduction to 80% of the React concepts that
+      you will use on a daily basis.
+  author: ai_draft
+  validated: true
+- id: draft-0064
+  category: guide
+  split: test
+  urls:
+  - https://react.dev/learn
+  question: What attribute can you use when your styles depend on JavaScript variables?
+  answer_type: judge
+  expected:
+  - style
+  expected_evidence:
+  - url: https://react.dev/learn
+    quote: You can use the style attribute when your styles depend on JavaScript variables.
+  author: ai_draft
+  validated: true
+- id: draft-0065
+  category: guide
+  split: dev
+  urls:
+  - https://react.dev/learn
+  question: What value will count have when React calls your component function again?
+  answer_type: judge
+  expected:
+  - '1'
+  expected_evidence:
+  - url: https://react.dev/learn
+    quote: This time, count will be 1.
+  author: ai_draft
+  validated: true
+- id: draft-0066
+  category: api_reference
+  split: dev
+  urls:
+  - https://react.dev/reference/react
+  question: What is the exact name of the section recommended for an introduction
+    to React?
+  answer_type: judge
+  expected:
+  - Learn
+  expected_evidence:
+  - url: https://react.dev/reference/react
+    quote: For an introduction to React, please visit the Learn section.
+  author: ai_draft
+  validated: true
+- id: draft-0067
+  category: api_reference
+  split: test
+  urls:
+  - https://react.dev/reference/react
+  question: What exact environment does the excerpt say web applications run in?
+  answer_type: judge
+  expected:
+  - browser DOM environment
+  expected_evidence:
+  - url: https://react.dev/reference/react
+    quote: which run in the browser DOM environment
+  author: ai_draft
+  validated: true
+- id: draft-0068
+  category: api_reference
+  split: dev
+  urls:
+  - https://react.dev/reference/react
+  question: What is the exact name of the React Compiler section described as a guide
+    for shipping pre-compiled library code?
+  answer_type: judge
+  expected:
+  - Compiling Libraries
+  expected_evidence:
+  - url: https://react.dev/reference/react
+    quote: Compiling Libraries - Guide for shipping pre-compiled library code.
+  author: ai_draft
+  validated: true
+- id: draft-0069
+  category: api_reference
+  split: dev
+  urls:
+  - https://react.dev/reference/react/useState
+  question: What are the two values returned by useState?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0070
+  category: api_reference
+  split: dev
+  urls:
+  - https://react.dev/reference/react/useState
+  question: What pending state does a => a + 1 receive when it returns 44 as the next
+    state?
+  answer_type: judge
+  expected:
+  - '43'
+  expected_evidence:
+  - url: https://react.dev/reference/react/useState
+    quote: a => a + 1 will receive 43 as the pending state and return 44 as the next
+      state.
+  author: ai_draft
+  validated: true
+- id: draft-0071
+  category: api_reference
+  split: test
+  urls:
+  - https://react.dev/reference/react/useState
+  question: Which Hook can help if you’re worried about recomputing a value too often?
+  answer_type: judge
+  expected:
+  - useMemo
+  expected_evidence:
+  - url: https://react.dev/reference/react/useState
+    quote: If you’re worried about recomputing too often, the useMemo Hook can help.
+  author: ai_draft
+  validated: true
+- id: draft-0072
+  category: api_reference
+  split: dev
+  urls:
+  - https://react.dev/reference/react/useEffect
+  question: What is the exact name of the React Hook described in the excerpt?
+  answer_type: judge
+  expected:
+  - useEffect
+  expected_evidence:
+  - url: https://react.dev/reference/react/useEffect
+    quote: useEffect is a React Hook that lets you synchronize a component with an
+      external system.
+  author: ai_draft
+  validated: true
+- id: draft-0073
+  category: api_reference
+  split: dev
+  urls:
+  - https://react.dev/reference/react/useEffect
+  question: What exact name does the excerpt give to the calls written inside Effects
+    to fetch data?
+  answer_type: judge
+  expected:
+  - fetch calls
+  expected_evidence:
+  - url: https://react.dev/reference/react/useEffect
+    quote: Writing fetch calls inside Effects is a popular way to fetch data, especially
+      in fully client-side apps.
+  author: ai_draft
+  validated: true
+- id: draft-0074
+  category: api_reference
+  split: test
+  urls:
+  - https://react.dev/reference/react/useEffect
+  question: After defining createOptions inside the Effect, what is the exact name
+    of the string the Effect depends on?
+  answer_type: judge
+  expected:
+  - roomId
+  expected_evidence:
+  - url: https://react.dev/reference/react/useEffect
+    quote: Now that you define the createOptions function inside the Effect, the Effect
+      itself only depends on the roomId string.
+  author: ai_draft
+  validated: true
+- id: draft-0075
+  category: changelog
+  split: dev
+  urls:
+  - https://react.dev/blog/2024/12/05/react-19
+  question: With which React release was this post originally shared in April?
+  answer_type: judge
+  expected:
+  - React 19 RC
+  expected_evidence:
+  - url: https://react.dev/blog/2024/12/05/react-19
+    quote: 'Additions since this post was originally shared with the React 19 RC in
+      April:'
+  author: ai_draft
+  validated: true
+- id: draft-0076
+  category: changelog
+  split: dev
+  urls:
+  - https://react.dev/blog/2024/12/05/react-19
+  question: What exact API name does the excerpt say can also be used to read context?
+  answer_type: judge
+  expected:
+  - use
+  expected_evidence:
+  - url: https://react.dev/blog/2024/12/05/react-19
+    quote: You can also read context with use
+  author: ai_draft
+  validated: true
+- id: draft-0077
+  category: changelog
+  split: test
+  urls:
+  - https://react.dev/blog/2024/12/05/react-19
+  question: In which React version is native support for rendering document metadata
+    tags in components being added?
+  answer_type: judge
+  expected:
+  - React 19
+  expected_evidence:
+  - url: https://react.dev/blog/2024/12/05/react-19
+    quote: 'In React 19, we’re adding support for rendering document metadata tags
+      in components natively:'
+  author: ai_draft
+  validated: true
+- id: draft-0078
+  category: guide
+  split: dev
+  urls:
+  - https://angular.dev/guide/components
+  question: What is the exact name of the guide this Angular guide assumes you've
+    already read?
+  answer_type: judge
+  expected:
+  - Essentials Guide
+  expected_evidence:
+  - url: https://angular.dev/guide/components
+    quote: This guide assumes you've already read the Essentials Guide.
+  author: ai_draft
+  validated: true
+- id: draft-0079
+  category: guide
+  split: test
+  urls:
+  - https://angular.dev/guide/components
+  question: Which TypeScript decorator is used to mark a class as an Angular component?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0080
+  category: guide
+  split: dev
+  urls:
+  - https://angular.dev/guide/components
+  question: In Angular versions before 19.0.0, what is the default value of the standalone
+    option?
+  answer_type: judge
+  expected:
+  - 'false'
+  expected_evidence:
+  - url: https://angular.dev/guide/components
+    quote: In Angular versions before 19.0.0, the standalone option defaults to false.
+  author: ai_draft
+  validated: true
+- id: draft-0081
+  category: guide
+  split: dev
+  urls:
+  - https://angular.dev/guide/templates
+  question: What is the exact name of the resource the tip recommends checking out
+    before diving into the comprehensive guide?
+  answer_type: judge
+  expected:
+  - Angular's Essentials
+  expected_evidence:
+  - url: https://angular.dev/guide/templates
+    quote: 'TIP: Check out Angular''s Essentials before diving into this comprehensive
+      guide.'
+  author: ai_draft
+  validated: true
+- id: draft-0082
+  category: guide
+  split: test
+  urls:
+  - https://angular.dev/guide/templates
+  question: Which syntax are templates based on?
+  answer_type: judge
+  expected:
+  - HTML syntax
+  expected_evidence:
+  - url: https://angular.dev/guide/templates
+    quote: Templates are based on HTML syntax
+  author: ai_draft
+  validated: true
+- id: draft-0083
+  category: guide
+  split: dev
+  urls:
+  - https://angular.dev/guide/templates
+  question: What named HTML entity code can be used to include a literal @ character
+    in an Angular template?
+  answer_type: judge
+  expected:
+  - '&commat;'
+  expected_evidence:
+  - url: https://angular.dev/guide/templates
+    quote: You can include a literal @ character by escaping it as an HTML entity
+      code (&commat; or &#64;).
+  author: ai_draft
+  validated: true
+- id: draft-0084
+  category: guide
+  split: dev
+  urls:
+  - https://angular.dev/guide/signals
+  question: What is the exact name of the resource the tip recommends checking out
+    before diving into the comprehensive guide?
+  answer_type: judge
+  expected:
+  - Angular's Essentials
+  expected_evidence:
+  - url: https://angular.dev/guide/signals
+    quote: 'TIP: Check out Angular''s Essentials before diving into this comprehensive
+      guide.'
+  author: ai_draft
+  validated: true
+- id: draft-0085
+  category: guide
+  split: dev
+  urls:
+  - https://angular.dev/guide/signals
+  question: What type of signal cannot have values assigned to it directly?
+  answer_type: judge
+  expected:
+  - computed signal
+  expected_evidence:
+  - url: https://angular.dev/guide/signals
+    quote: You cannot directly assign values to a computed signal.
+  author: ai_draft
+  validated: true
+- id: draft-0086
+  category: guide
+  split: test
+  urls:
+  - https://angular.dev/guide/signals
+  question: What is the exact name of the function described as useful when an effect
+    invokes external code that shouldn't be treated as a dependency?
+  answer_type: judge
+  expected:
+  - untracked
+  expected_evidence:
+  - url: https://angular.dev/guide/signals
+    quote: 'untracked is also useful when an effect needs to invoke some external
+      code which shouldn''t be treated as a dependency:'
+  author: ai_draft
+  validated: true
+- id: draft-0087
+  category: api_reference
+  split: dev
+  urls:
+  - https://angular.dev/api/core/Component
+  question: What exact type does the decorator mark a class as?
+  answer_type: judge
+  expected:
+  - Angular component
+  expected_evidence:
+  - url: https://angular.dev/api/core/Component
+    quote: Decorator that marks a class as an Angular component
+  author: ai_draft
+  validated: true
+- id: draft-0088
+  category: api_reference
+  split: dev
+  urls:
+  - https://angular.dev/api/core/Component
+  question: What type of selectors does Angular allow directives to apply on, provided
+    they do not cross element boundaries?
+  answer_type: judge
+  expected:
+  - CSS selectors
+  expected_evidence:
+  - url: https://angular.dev/api/core/Component
+    quote: Angular only allows directives to apply on CSS selectors that do not cross
+      element boundaries.
+  author: ai_draft
+  validated: true
+- id: draft-0089
+  category: api_reference
+  split: test
+  urls:
+  - https://angular.dev/api/core/Component
+  question: Which properties of the @Component decorator specify a component's template
+    and styles?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0090
+  category: changelog
+  split: dev
+  urls:
+  - https://angular.dev/reference/releases
+  question: What is the exact name of the framework from which the excerpt says you
+    need stability?
+  answer_type: judge
+  expected:
+  - Angular
+  expected_evidence:
+  - url: https://angular.dev/reference/releases
+    quote: We recognize that you need stability from the Angular framework.
+  author: ai_draft
+  validated: true
+- id: draft-0091
+  category: changelog
+  split: dev
+  urls:
+  - https://angular.dev/reference/releases
+  question: What technology is explicitly named in the phrase about coordinating updates
+    with its continuing evolution?
+  answer_type: judge
+  expected:
+  - Angular
+  expected_evidence:
+  - url: https://angular.dev/reference/releases
+    quote: the continuing evolution of Angular.
+  author: ai_draft
+  validated: true
+- id: draft-0092
+  category: changelog
+  split: test
+  urls:
+  - https://angular.dev/reference/releases
+  question: What annotation is applied to all deprecated APIs in the corresponding
+    documentation?
+  answer_type: judge
+  expected:
+  - '@deprecated'
+  expected_evidence:
+  - url: https://angular.dev/reference/releases
+    quote: all deprecated APIs are annotated with @deprecated in the corresponding
+      documentation
+  author: ai_draft
+  validated: true
+- id: draft-0093
+  category: api_reference
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+  question: What alternative name does the excerpt give to HTTP request methods?
+  answer_type: judge
+  expected:
+  - HTTP verbs
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+    quote: Although they can also be nouns, these request methods are sometimes referred
+      to as HTTP verbs.
+  author: ai_draft
+  validated: true
+- id: draft-0094
+  category: api_reference
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+  question: What is the exact name of the HTTP request method categorization property
+    listed immediately after cacheability?
+  answer_type: judge
+  expected:
+  - idempotency
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+    quote: safety, cacheability, and idempotency.
+  author: ai_draft
+  validated: true
+- id: draft-0095
+  category: api_reference
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+  question: Which header must match for POST and PATCH responses to be cacheable when
+    they explicitly include freshness information?
+  answer_type: judge
+  expected:
+  - Content-Location
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+    quote: POST and PATCH are cacheable when responses explicitly include freshness
+      information and a matching Content-Location header.
+  author: ai_draft
+  validated: true
+- id: draft-0096
+  category: params_table
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+  question: How many classes are HTTP responses grouped into?
+  answer_type: judge
+  expected:
+  - five
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+    quote: 'Responses are grouped in five classes:'
+  author: ai_draft
+  validated: true
+- id: draft-0097
+  category: params_table
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+  question: What exact term does the note use for a response that is not listed here?
+  answer_type: judge
+  expected:
+  - non-standard response
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+    quote: If you receive a response that is not listed here, it is a non-standard
+      response, possibly custom to the server's software.
+  author: ai_draft
+  validated: true
+- id: draft-0098
+  category: params_table
+  split: test
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+  question: Which HTTP method includes representation headers in the response without
+    any message body?
+  answer_type: judge
+  expected:
+  - HEAD
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+    quote: 'HEAD: Representation headers are included in the response without any
+      message body.'
+  author: ai_draft
+  validated: true
+- id: draft-0099
+  category: params_table
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
+  question: What is the purpose of the Cache-Control HTTP header, and which directives
+    can it contain?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0100
+  category: params_table
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
+  question: Which header is added by both forward and reverse proxies and can appear
+    in both request and response headers?
+  answer_type: judge
+  expected:
+  - Via
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
+    quote: Via Added by proxies, both forward and reverse proxies, and can appear
+      in the request headers and the response headers.
+  author: ai_draft
+  validated: true
+- id: draft-0101
+  category: params_table
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
+  question: Which header do servers use along with Accept-CH to specify that accepted
+    client hints are also critical client hints?
+  answer_type: judge
+  expected:
+  - Critical-CH
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
+    quote: Servers use Critical-CH along with Accept-CH to specify that accepted client
+      hints are also critical client hints.
+  author: ai_draft
+  validated: true
+- id: draft-0102
+  category: api_reference
+  split: test
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+  question: Since what month and year has the Promise feature been available across
+    browsers?
+  answer_type: judge
+  expected:
+  - July 2015
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+    quote: It’s been available across browsers since July 2015.
+  author: ai_draft
+  validated: true
+- id: draft-0103
+  category: api_reference
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+  question: For faster execution, within how many handlers should all synchronous
+    actions preferably be done?
+  answer_type: judge
+  expected:
+  - one handler
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+    quote: For faster execution, all synchronous actions should preferably be done
+      within one handler
+  author: ai_draft
+  validated: true
+- id: draft-0104
+  category: api_reference
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+  question: What is the exact name of the API that provides a JavaScript interface
+    for making HTTP requests and processing the responses?
+  answer_type: judge
+  expected:
+  - Fetch API
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+    quote: The Fetch API provides a JavaScript interface for making HTTP requests
+      and processing the responses.
+  author: ai_draft
+  validated: true
+- id: draft-0105
+  category: api_reference
+  split: test
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+  question: What exact API name is used to encode data before appending it to a GET
+    request URL as a query string?
+  answer_type: judge
+  expected:
+  - URLSearchParams
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+    quote: 'You can do this by using URLSearchParams to encode the data, and then
+      appending it to the URL:'
+  author: ai_draft
+  validated: true
+- id: draft-0106
+  category: api_reference
+  split: dev
+  urls:
+  - https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+  question: What redirect option value results in an opaqueredirect response type
+    when the server returns a redirect status?
+  answer_type: judge
+  expected:
+  - manual
+  expected_evidence:
+  - url: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+    quote: 'opaqueredirect: the request set the redirect option to manual, and the
+      server returned a redirect status.'
+  author: ai_draft
+  validated: true
+- id: draft-0107
+  category: api_reference
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9110.html
+  question: Which individual is listed between Marc Andreessen and Robert Cailliau
+    among those recognized for contributions to early HTTP and its core specifications?
+  answer_type: judge
+  expected:
+  - Tim Berners-Lee
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9110.html
+    quote: Marc Andreessen, Tim Berners-Lee, Robert Cailliau
+  author: ai_draft
+  validated: true
+- id: draft-0108
+  category: api_reference
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9110.html
+  question: Which specification is listed immediately after [RFC2617] among the past
+    specifications of HTTP?
+  answer_type: judge
+  expected:
+  - '[RFC2818]'
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9110.html
+    quote: '[RFC2617], [RFC2818], [RFC7230]'
+  author: ai_draft
+  validated: true
+- id: draft-0109
+  category: api_reference
+  split: test
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9110.html
+  question: What RFC number identifies this specification?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0110
+  category: api_reference
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9111.html
+  question: What parenthetical term identifies the other caches from which an intermediary
+    cache commonly receives conditional requests?
+  answer_type: judge
+  expected:
+  - outbound
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9111.html
+    quote: Each client in the request chain may have its own cache, so it is common
+      for a cache at an intermediary to receive conditional requests from other (outbound)
+      caches.
+  author: ai_draft
+  validated: true
+- id: draft-0111
+  category: api_reference
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9111.html
+  question: Which conditional header field takes precedence over If-Modified-Since
+    when a cache evaluates conditional requests?
+  answer_type: judge
+  expected:
+  - If-None-Match
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9111.html
+    quote: If-None-Match takes precedence over If-Modified-Since.
+  author: ai_draft
+  validated: true
+- id: draft-0112
+  category: api_reference
+  split: test
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9111.html
+  question: Which stored response header field SHOULD a cache use to evaluate an If-Modified-Since
+    conditional when the Last-Modified header field is absent?
+  answer_type: judge
+  expected:
+  - Date
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9111.html
+    quote: a cache SHOULD use the stored response's Date field value
+  author: ai_draft
+  validated: true
+- id: draft-0113
+  category: pdf
+  split: test
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9110.pdf
+  question: Which RFC number is listed last in the Obsoletes field?
+  answer_type: judge
+  expected:
+  - '7694'
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9110.pdf
+    quote: Obsoletes:2818, 7230, 7231, 7232, 7233, 7235, 7538, 7615, 7694
+  author: ai_draft
+  validated: true
+- id: draft-0114
+  category: pdf
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9110.pdf
+  question: What HTTP status code is mentioned for the response to GET?
+  answer_type: judge
+  expected:
+  - '200'
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9110.pdf
+    quote: a 200 (OK) response to GET
+  author: ai_draft
+  validated: true
+- id: draft-0115
+  category: pdf
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9110.pdf
+  question: What is the ABNF value assigned to acceptable-ranges?
+  answer_type: judge
+  expected:
+  - 1#range-unit
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9110.pdf
+    quote: acceptable-ranges = 1#range-unit
+  author: ai_draft
+  validated: true
+- id: draft-0116
+  category: pdf
+  split: test
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9111.pdf
+  question: What exact protocol name is abbreviated as HTTP?
+  answer_type: judge
+  expected:
+  - Hypertext Transfer Protocol
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9111.pdf
+    quote: The Hypertext Transfer Protocol (HTTP) is a stateless application-level
+      protocol for distributed,
+  author: ai_draft
+  validated: true
+- id: draft-0117
+  category: pdf
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9111.pdf
+  question: What case-sensitivity is specified for all date formats?
+  answer_type: judge
+  expected:
+  - case-sensitive
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9111.pdf
+    quote: all date formats are speciﬁed to be case-sensitive
+  author: ai_draft
+  validated: true
+- id: draft-0118
+  category: pdf
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9111.pdf
+  question: Which requirement keywords prohibit the cache from intentionally storing
+    the information in the excerpt's definition of "store"?
+  answer_type: judge
+  expected:
+  - MUST NOT
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9111.pdf
+    quote: the cache MUST NOT intentionally store the information
+  author: ai_draft
+  validated: true
+- id: draft-0119
+  category: pdf
+  split: test
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9112.pdf
+  question: Which earlier RFC does the HTTP/1.1 specification obsolete, according
+    to its abstract?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0120
+  category: pdf
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9112.pdf
+  question: What exact requirement keyword appears immediately after "A sender" in
+    the excerpt?
+  answer_type: judge
+  expected:
+  - MUST
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9112.pdf
+    quote: A sender MUST
+  author: ai_draft
+  validated: true
+- id: draft-0121
+  category: pdf
+  split: dev
+  urls:
+  - https://www.rfc-editor.org/rfc/rfc9112.pdf
+  question: Which requirement keyword is used for a server sustaining persistent connections
+    when possible?
+  answer_type: judge
+  expected:
+  - SHOULD
+  expected_evidence:
+  - url: https://www.rfc-editor.org/rfc/rfc9112.pdf
+    quote: A server SHOULD sustain persistent connections, when possible,
+  author: ai_draft
+  validated: true
+- id: draft-0122
+  category: guide
+  split: dev
+  urls:
+  - https://docs.docker.com/get-started/
+  question: What exact term does the excerpt use for what you should choose after
+    installing what you need?
+  answer_type: judge
+  expected:
+  - a tutorial
+  expected_evidence:
+  - url: https://docs.docker.com/get-started/
+    quote: Install what you need, then choose a tutorial that matches what you want
+      to do.
+  author: ai_draft
+  validated: true
+- id: draft-0123
+  category: guide
+  split: dev
+  urls:
+  - https://docs.docker.com/get-started/
+  question: What is the exact name of the command to install to run coding agents
+    in isolated environments?
+  answer_type: judge
+  expected:
+  - sbx
+  expected_evidence:
+  - url: https://docs.docker.com/get-started/
+    quote: Install the sbx command to run coding agents in isolated environments.
+  author: ai_draft
+  validated: true
+- id: draft-0124
+  category: guide
+  split: test
+  urls:
+  - https://docs.docker.com/get-started/
+  question: What is the exact name of the disposable environment into which you can
+    move your existing full-autonomy coding-agent workflow?
+  answer_type: judge
+  expected:
+  - Docker Sandbox
+  expected_evidence:
+  - url: https://docs.docker.com/get-started/
+    quote: Move your existing full-autonomy coding-agent workflow into a disposable
+      Docker Sandbox.
+  author: ai_draft
+  validated: true
+- id: draft-0125
+  category: guide
+  split: dev
+  urls:
+  - https://docs.docker.com/engine/storage/
+  question: What is the exact name of the mount type listed after bind mounts for
+    storing application data outside containers?
+  answer_type: judge
+  expected:
+  - tmpfs mounts
+  expected_evidence:
+  - url: https://docs.docker.com/engine/storage/
+    quote: using volumes, bind mounts, and tmpfs mounts.
+  author: ai_draft
+  validated: true
+- id: draft-0126
+  category: guide
+  split: dev
+  urls:
+  - https://docs.docker.com/engine/storage/
+  question: What is the exact name of the container layer outside of which Docker
+    storage mounts store data?
+  answer_type: judge
+  expected:
+  - writable layer
+  expected_evidence:
+  - url: https://docs.docker.com/engine/storage/
+    quote: 'Docker supports the following types of storage mounts for storing data
+      outside of the writable layer of the container:'
+  author: ai_draft
+  validated: true
+- id: draft-0127
+  category: guide
+  split: test
+  urls:
+  - https://docs.docker.com/engine/storage/
+  question: What exact mount type is recommended when you need to access files from
+    both the container and the host?
+  answer_type: judge
+  expected:
+  - bind mounts
+  expected_evidence:
+  - url: https://docs.docker.com/engine/storage/
+    quote: Use bind mounts when you need to be able to access files from both the
+      container and the host.
+  author: ai_draft
+  validated: true
+- id: draft-0128
+  category: guide
+  split: dev
+  urls:
+  - https://docs.docker.com/build/building/best-practices/
+  question: What is the exact name of the file whose instructions should be split
+    into distinct stages?
+  answer_type: judge
+  expected:
+  - Dockerfile
+  expected_evidence:
+  - url: https://docs.docker.com/build/building/best-practices/
+    quote: Split your Dockerfile instructions into distinct stages to make sure that
+      the resulting output only contains the files that are needed to run the application.
+  author: ai_draft
+  validated: true
+- id: draft-0129
+  category: guide
+  split: dev
+  urls:
+  - https://docs.docker.com/build/building/best-practices/
+  question: How should a value containing spaces be quoted in a Dockerfile LABEL instruction?
+  answer_type: judge
+  expected:
+  - INSUFFICIENT
+  expected_evidence: []
+  author: ai_draft
+  validated: true
+- id: draft-0130
+  category: guide
+  split: dev
+  urls:
+  - https://docs.docker.com/build/building/best-practices/
+  question: What exact value is assigned to PG_VERSION in the ENV instruction?
+  answer_type: judge
+  expected:
+  - 9.3.4
+  expected_evidence:
+  - url: https://docs.docker.com/build/building/best-practices/
+    quote: ENV PG_VERSION=9.3.4
+  author: ai_draft
+  validated: true
+- id: draft-0131
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.docker.com/reference/cli/docker/
+  question: What is the exact name of the Unix group a system administrator can create
+    to let users run Docker commands without sudo?
+  answer_type: judge
+  expected:
+  - docker
+  expected_evidence:
+  - url: https://docs.docker.com/reference/cli/docker/
+    quote: your system administrator can create a Unix group called docker and add
+      users to it.
+  author: ai_draft
+  validated: true
+- id: draft-0132
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.docker.com/reference/cli/docker/
+  question: Which flag takes precedence over an environment variable when both are
+    set?
+  answer_type: judge
+  expected:
+  - --config
+  expected_evidence:
+  - url: https://docs.docker.com/reference/cli/docker/
+    quote: If an environment variable and the --config flag are set, the flag takes
+      precedent over the environment variable.
+  author: ai_draft
+  validated: true
+- id: draft-0133
+  category: api_reference
+  split: dev
+  urls:
+  - https://docs.docker.com/reference/cli/docker/
+  question: Which flag lets a user override the detach key sequence on a per-container
+    basis?
+  answer_type: judge
+  expected:
+  - --detach-keys
+  expected_evidence:
+  - url: https://docs.docker.com/reference/cli/docker/
+    quote: To do this, the user specifies the --detach-keys flag with the docker attach,
+      docker exec, docker run or docker start command.
+  author: ai_draft
+  validated: true
+- id: draft-0134
+  category: changelog
+  split: dev
+  urls:
+  - https://docs.docker.com/engine/release-notes/
+  question: Which Docker Engine version does this page describe?
+  answer_type: judge
+  expected:
+  - '29'
+  expected_evidence:
+  - url: https://docs.docker.com/engine/release-notes/
+    quote: This page describes the latest changes, additions, known issues, and fixes
+      for Docker Engine version 29.
+  author: ai_draft
+  validated: true
+- id: draft-0135
+  category: changelog
+  split: dev
+  urls:
+  - https://docs.docker.com/engine/release-notes/
+  question: In Docker Engine 29.6.0 packaging updates, which version is runc updated
+    to in static binaries?
+  answer_type: judge
+  expected:
+  - v1.3.6
+  expected_evidence:
+  - url: https://docs.docker.com/engine/release-notes/
+    quote: Update runc (in static binaries) to v1.3.6.
+  author: ai_draft
+  validated: true
+- id: draft-0136
+  category: changelog
+  split: dev
+  urls:
+  - https://docs.docker.com/engine/release-notes/
+  question: In the Docker Engine 29.3.1 packaging updates, what version was containerd
+    updated to for static binaries?
+  answer_type: judge
+  expected:
+  - v2.2.2
+  expected_evidence:
+  - url: https://docs.docker.com/engine/release-notes/
+    quote: Update containerd (static binaries) to v2.2.2.
+  author: ai_draft
+  validated: true
