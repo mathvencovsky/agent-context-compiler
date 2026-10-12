@@ -38,6 +38,7 @@ __snapshots__/*.ambr.tmp
 # Benchmark artifacts (large / generated)
 bench/corpus/
 bench/results/
+bench/.cache/
 
 # IDE / OS
 .vscode/

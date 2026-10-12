@@ -1,9 +1,10 @@
 """Chunker tests (SPEC §5): size bounds, no-split rule, provenance, prefix.
 
 All tests are pure and network-free. The hypothesis property test generates
-varied Documents (large and small tables/code plus prose) and proves the two
-hard invariants: no chunk exceeds 800 tokens, and any table/code block under 800
-tokens is never split (it appears whole inside exactly one chunk).
+varied Documents (large and small tables/code plus small AND large prose) and
+proves the two hard invariants: no chunk exceeds 800 tokens (INCLUDING oversized
+prose, DECISIONS.md 2026-10-13), and any table/code block under 800 tokens is
+never split (it appears whole inside exactly one chunk).
 """
 
 from __future__ import annotations
@@ -156,6 +157,41 @@ def test_large_code_is_split_by_blank_lines() -> None:
         assert chunk.block_ids == [block.block_id]
 
 
+def test_large_prose_is_split_under_max() -> None:
+    # A single oversized prose paragraph (the Flask-API shape) must be split so
+    # no chunk exceeds the hard max, with provenance pointing at the source block.
+    sentences = [
+        f"Sentence {i} describes a specific behavior of the component in detail."
+        for i in range(500)
+    ]
+    block = _block(
+        "paragraph",
+        order=0,
+        heading_path=["Reference"],
+        text=" ".join(sentences),
+    )
+    doc = _doc([block])
+    chunks = chunk_document(doc)
+
+    assert len(chunks) > 1, "an oversized prose block must be split"
+    for chunk in chunks:
+        assert chunk.tokens <= _MAX_TOKENS
+        assert chunk.block_ids == [block.block_id]
+        assert chunk.heading_path == ["Reference"]
+
+
+def test_prose_split_is_deterministic() -> None:
+    block = _block(
+        "paragraph",
+        order=0,
+        heading_path=["Reference"],
+        text=" ".join(f"Sentence {i} with some words." for i in range(400)),
+    )
+    first = chunk_document(_doc([block]))
+    second = chunk_document(_doc([block]))
+    assert [c.text for c in first] == [c.text for c in second]
+
+
 def test_ord_is_sequential() -> None:
     blocks = [
         _block("paragraph", order=i, heading_path=[f"H{i}"], text=f"Para {i}. " * 40)
@@ -220,12 +256,29 @@ def _prose_block(order: int, heading: str) -> Block:
     )
 
 
+def _large_prose_block(order: int, heading: str) -> Block:
+    # A single prose paragraph well over 800 tokens (a few thousand), the shape
+    # that broke the real embeddings API: many sentences, no blank lines.
+    sentences = [
+        f"Sentence number {i} explains a distinct detail about the subject "
+        f"with enough words to carry weight."
+        for i in range(400)
+    ]
+    return _block(
+        "paragraph",
+        order=order,
+        heading_path=[heading],
+        text=" ".join(sentences),
+    )
+
+
 _BLOCK_BUILDERS = [
     _small_table_block,
     _small_code_block,
     _large_table_block,
     _large_code_block,
     _prose_block,
+    _large_prose_block,
 ]
 
 

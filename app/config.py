@@ -77,11 +77,16 @@ class Settings(BaseSettings):
     reranker_api_key: str | None = None
     reranker_model: str = "jina-reranker-v2-base-multilingual"
 
-    # Retrieval / selection (SPEC 6).
-    selection_lambda: float = 0.5
-    min_value: float = 0.05
-    coverage_low: float = 0.2
-    coverage_high: float = 0.5
+    # Retrieval / selection (SPEC 6). CALIBRATED and FROZEN in M8 Stage 1 on the
+    # dev split ONLY (96 tasks, budget 4000, real providers); the test split was
+    # NOT touched (DECISIONS.md 2026-10-13). selection_lambda/min_value are the
+    # grid winner (λ=0.3, min_value=0.0 — in dev, selection does best with NO
+    # min-value cut). coverage_low/high are the p33/p66 of the observed top-30
+    # rerank-score distribution on dev (Option A).
+    selection_lambda: float = 0.3
+    min_value: float = 0.0
+    coverage_low: float = 0.0535
+    coverage_high: float = 0.2312
     rrf_k: int = 60
 
     # Benchmark LLM keys (M2, SPEC §10). Optional: the deterministic fake

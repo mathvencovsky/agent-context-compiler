@@ -155,7 +155,7 @@ verde no GitHub Actions.
 | **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
 | **M6** | Chunking e indexação | ✅ Concluído |
 | **M7** | Busca, seleção e endpoint `assemble` | ✅ Concluído |
-| **M8** | Benchmark completo e calibração | ◻️ Ponto de decisão |
+| **M8** | Benchmark completo e calibração | ◧ Etapa 1 (calibração dev) concluída; Etapa 2 (test) pendente |
 | **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
 | **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
@@ -384,8 +384,9 @@ curl -s -X POST http://localhost:8000/v1/context/assemble \
 `document_id`, `version_id`, `source_url`, `heading_path`, `md`, `tokens`,
 `scores{lexical_rank,vector_rank,rrf,rerank}` e `evidence[]{block_id,page,quote}`),
 `sources[]` (status por URL), `token_usage{output_tokens,budget_tokens,tokenizer}`,
-`coverage` (`insufficient`/`partial`/`sufficient` — heurística do maior rerank,
-calibrada no M8), `warnings[]` e `trust: "untrusted_source"`.
+`coverage` (`insufficient`/`partial`/`sufficient` — heurística do maior rerank;
+limiares calibrados no M8: `coverage_low=0.0535`, `coverage_high=0.2312`),
+`warnings[]` e `trust: "untrusted_source"`.
 
 **Semântica de falha (SPEC §8):** se **uma** URL falha, a resposta continua
 **200** com o erro em `sources[].status` + `warnings` (nunca um 200 vazio e
@@ -401,7 +402,7 @@ flag de ablação com valor não-default sob `ENV=production` → **400**
 | `lexical_search(session, *, query, version_ids, limit=50)` | `app/retrieve/lexical.py` | Top-50 por `ts_rank_cd` sobre o `tsvector` gerado (`'simple'`), restrito às versões, posições 1-based, desempate por `(version_id, ord)`. |
 | `vector_search(session, *, query_embedding, version_ids, limit=50)` | `app/retrieve/vector.py` | Top-50 por distância de cosseno pgvector (índice HNSW), restrito às versões, mesmo desempate. |
 | `rerank_candidates(query, fused, *, provider, use_rerank, documents, top_n=30)` | `app/retrieve/rerank.py` | Rerank dos 30 melhores: score do provedor clampado a `[0,1]`, ou — com rerank desligado — o RRF normalizado (min-max; único/empate → `1.0`). |
-| `select(candidates, *, budget_tokens, lambda_, min_value)` + `Candidate` | `app/retrieve/select.py` | Seleção gulosa sob orçamento: a cada passo maximiza `(V_i − λ·max_sim)/√t_i` (`λ=0.5`, `min_value=0.05`), penaliza quase-duplicatas, ordena a saída por `(document_id, ord)`. Inclui `cosine` numericamente seguro. |
+| `select(candidates, *, budget_tokens, lambda_, min_value)` + `Candidate` | `app/retrieve/select.py` | Seleção gulosa sob orçamento: a cada passo maximiza `(V_i − λ·max_sim)/√t_i` (calibrado no M8: `λ=0.3`, `min_value=0.0`), penaliza quase-duplicatas, ordena a saída por `(document_id, ord)`. Inclui `cosine` numericamente seguro. |
 | `assemble_context(req, *, session_factory, blobs, robots, resolver, transport, embeddings, reranker, settings, now)` | `app/retrieve/assemble.py` | Orquestra os passos 1–7 da SPEC §6: resolve+indexa cada URL (falha independente), busca léxica+vetorial, RRF, rerank, seleção (ou ablação `truncate`), e monta `Fragment`s com proveniência completa e `evidence.quote` **literal** da IR (≤300 chars). Sem LLM. |
 | `assemble(req, ...)` (handler HTTP) | `app/api/assemble.py` | Handler `def` síncrono de `POST /v1/context/assemble`: seams `Depends` injetáveis (resolve + `provide_embeddings`/`provide_reranker`), rejeita ablação em produção (`AblationNotAllowed`/400), mapeia `AssembleResult` → `AssembleResponse`, 200 na falha parcial e `AllSourcesFailed`/422 quando todas as URLs falham. |
 
@@ -421,6 +422,63 @@ Os schemas `AssembleRequest` / `AssembleResponse` (SPEC §8) estão em
 `app/api/schemas.py`. O endpoint é consumível por HTTP hoje; o SDK Python e o
 servidor MCP entram no M9. A rota aparece no OpenAPI vivo em
 `http://localhost:8000/openapi.json`.
+
+---
+
+## Calibração dos parâmetros de seleção (M8 Etapa 1)
+
+A Etapa 1 do M8 é o **ponto de decisão** do projeto: calibrar os parâmetros de
+seleção (`selection_lambda`, `min_value`, `coverage_low`, `coverage_high`) numa
+grade, medindo cada combinação **apenas no split `dev`** com os provedores
+reais, e **congelar** os vencedores em `app/config.py`. A **regra de honestidade**
+é inegociável e reforçada em código: o calibrador filtra `split == "dev"`; o
+split `test` (41 tarefas) nunca é tocado na calibração.
+
+Os parâmetros de seleção são **injetáveis**: `OursRunner` aceita `lambda_` /
+`min_value` (default = os valores de hoje) e `embeddings` / `reranker` (default =
+os fakes determinísticos, então todo teste continua offline). A calibração injeta
+os provedores REAIS (OpenAI embeddings + Jina reranker); nenhum teste os usa.
+
+### Utilitário de calibração (`bench/calibrate.py` — execução humana)
+
+Utilitário humano que gasta chaves; **não** é coletado pelo pytest. Só a LÓGICA
+PURA é unit-testada (`tests/unit/bench/test_calibrate.py`), sem rede.
+
+| Função | O que faz |
+|---|---|
+| `pick_best(results)` | Escolhe a combinação vencedora: taxa de sucesso (desc), desempate por menor custo/tarefa concluída, depois menor média de tokens de contexto, depois `(lambda_, min_value)` crescente — vencedor único e determinístico. |
+| `percentiles(scores, pcts)` | Percentis por posição (nearest-rank, mesma convenção de `report._percentile`), ex.: `p33`/`p66`. |
+| `coverage_from_scores(scores)` | Deriva `(coverage_low, coverage_high) = (p33, p66)` da distribuição do máximo-rerank observado no `dev` (D7) — heurística honesta sobre o único observável, sem rótulos. |
+| `run_calibration(...)` | Carrega SÓ `split == "dev"`, mede as 9 combinações (λ ∈ {0.3,0.5,0.7} × min_value ∈ {0.0,0.05,0.1}) no orçamento 4000 com os provedores reais, escolhe o vencedor, deriva a cobertura e escreve o artefato `bench/results/calibration_<ts>/`. |
+
+Invocação (após subir a infra e com as chaves no `.env` real):
+
+```bash
+uv run python -m bench.calibrate --real
+```
+
+### Economia de cota (cache persistente)
+
+`lambda_`/`min_value` afetam só a seleção gulosa final; a busca, o RRF e o rerank
+são invariantes a eles. Por isso o calibrador roda a parte cara (busca + rerank
+do top-30) **uma vez por tarefa** e aplica só a seleção pura por combinação,
+cortando as chamadas de rerank/embeddings de 9×96 para ~1×96. Um cache
+persistente content-addressed (`bench/provider_cache.py`, `bench/.cache/`,
+gitignored) guarda rerank e embeddings em disco: uma re-execução não re-chama a
+Jina para pares `(query, documents)` já vistos, e a **Etapa 2** (split `test`,
+vários orçamentos) reusa o mesmo cache (o rerank de uma tarefa é invariante ao
+orçamento), gastando zero cota de Jina para pares já computados.
+
+### Resultado congelado (M8 Etapa 1)
+
+A calibração real no `dev` (96 tarefas, orçamento 4000) elegeu **λ = 0.3,
+min_value = 0.0** (taxa de sucesso 0.8125 — no dev, a seleção vai melhor **sem**
+corte por valor mínimo). Os limiares de cobertura vêm dos percentis p33/p66 da
+distribuição completa dos scores de rerank do top-30 observados no dev:
+**coverage_low = 0.0535**, **coverage_high = 0.2312**. Valores congelados em
+`app/config.py` / `.env.example`. A calibração foi feita **só no split `dev`**; o
+split `test` não foi tocado (regra de honestidade do M8). Detalhes e a tabela das
+9 combinações em [`PROGRESS.md`](PROGRESS.md) e [`DECISIONS.md`](DECISIONS.md).
 
 ---
 

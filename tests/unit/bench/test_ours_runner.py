@@ -151,3 +151,81 @@ def test_fixed_chunks_differs_from_structural(
         if a.text != b.text:
             differed = True
     assert differed, "ours_fixed_chunks behaved identically to structural chunking"
+
+
+class _StubReranker:
+    """Deterministic offline reranker that forces one chunk to the top.
+
+    Scores the first document ``1.0`` and all others ``0.0`` so that injecting
+    this instance into ``OursRunner`` provably drives selection to a single,
+    high-value fragment — nothing here touches the network (CLAUDE.md).
+    """
+
+    model = "stub-reranker"
+    calls = 0
+
+    def rerank(self, query: str, documents: list[str]) -> list[float]:
+        type(self).calls += 1
+        return [1.0 if i == 0 else 0.0 for i, _ in enumerate(documents)]
+
+
+def test_injected_reranker_is_used(store: CorpusStore, tasks: list[Task]) -> None:
+    """A reranker passed to ``OursRunner`` is actually invoked (not the fake).
+
+    Proves the injection seam: with a hand-written stub whose scores clear the
+    ``min_value`` gate, the greedy path selects context AND the stub records
+    being called — all offline (no network, no real provider).
+    """
+    stub = _StubReranker()
+    _StubReranker.calls = 0
+    runner = OursRunner(reranker=stub, min_value=0.0)
+    built_any = False
+    for task in _answerable_tasks(tasks):
+        result = runner.build_context(task, budget_tokens=_BUDGET, store=store)
+        assert 0 <= result.context_tokens <= _BUDGET
+        if result.text:
+            built_any = True
+    assert _StubReranker.calls > 0, "injected reranker was never called"
+    assert built_any, "injected reranker + min_value=0 produced no context"
+
+
+@pytest.mark.parametrize("lambda_", [0.3, 0.5, 0.7])
+@pytest.mark.parametrize("min_value", [0.0, 0.05, 0.1])
+def test_cached_candidates_match_full_pipeline(
+    lambda_: float, min_value: float, store: CorpusStore, tasks: list[Task]
+) -> None:
+    """Selection over CACHED candidates equals recomputing the whole pipeline.
+
+    The M8 calibrator computes the selection-invariant pipeline (steps 1-5) once
+    per task and reuses it across the grid. This proves that
+    ``prepare_candidates`` + ``assemble_from_candidates`` is byte-identical to
+    ``build_context`` for every grid ``(lambda_, min_value)`` — so the cache
+    never changes the calibration result. Fully offline (fake providers).
+    """
+    runner = OursRunner(lambda_=lambda_, min_value=min_value)
+    for task in _answerable_tasks(tasks):
+        full = runner.build_context(task, budget_tokens=_BUDGET, store=store)
+        prepared = runner.prepare_candidates(task, store=store)
+        cached = runner.assemble_from_candidates(prepared, budget_tokens=_BUDGET)
+        assert cached == full
+
+
+def test_prepared_candidates_are_lambda_invariant(
+    store: CorpusStore, tasks: list[Task]
+) -> None:
+    """``prepare_candidates`` ignores lambda_/min_value (the cache's premise).
+
+    Steps 1-5 (search + rerank) must not depend on the selection knobs, so the
+    calibrator can prepare once and sweep the grid. Two runners differing only
+    in lambda_/min_value must produce identical prepared candidates (same keys,
+    values, tokens and max rerank).
+    """
+    a = OursRunner(lambda_=0.3, min_value=0.0)
+    b = OursRunner(lambda_=0.7, min_value=0.1)
+    for task in _answerable_tasks(tasks):
+        pa = a.prepare_candidates(task, store=store)
+        pb = b.prepare_candidates(task, store=store)
+        assert pa.max_rerank == pb.max_rerank
+        assert [(c.document_id, c.ord, c.value, c.tokens) for c in pa.candidates] == [
+            (c.document_id, c.ord, c.value, c.tokens) for c in pb.candidates
+        ]

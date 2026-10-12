@@ -1,6 +1,137 @@
 # PROGRESS
 
-Marco atual: M7 (Busca, seleção e endpoint `assemble`) — CONCLUÍDO. Fecha o
+Marco atual: M8 ETAPA 1 (calibração dos parâmetros de seleção) — MECANISMO
+IMPLEMENTADO e PARÂMETROS CONGELADOS; split `test` PENDENTE (Etapa 2, execução
+humana). A Etapa 1 é o PONTO DE DECISÃO do projeto: (a) tornou os parâmetros de
+seleção injetáveis; (b) implementou o mecanismo de calibração em grade; (c) RODOU
+a calibração APENAS no split `dev` (96 tarefas) com os provedores REAIS; (d)
+escolheu e CONGELOU os parâmetros. A REGRA DE HONESTIDADE é inegociável e
+reforçada em código: o calibrador filtra `split == "dev"`; o split `test` (41
+tarefas) NÃO foi tocado de forma alguma. A Etapa 2 (split `test` completo +
+relatório + sumário de uma página) roda DEPOIS, separadamente, pelo humano.
+
+O que foi entregue na Etapa 1:
+
+- **Parâmetros injetáveis.** `OursRunner` (`bench/runners/ours.py`) ganhou
+  campos opcionais `lambda_`/`min_value` (default = constantes do módulo,
+  comportamento idêntico ao de hoje) e `embeddings`/`reranker` (default `None` →
+  os fakes determinísticos são construídos por chamada, então todo teste
+  continua offline). A seleção em `app/retrieve/select.py` e `assemble.py` já
+  recebia/encaminhava os parâmetros; a mudança foi mínima e aditiva. Novo método
+  `OursRunner.max_rerank_score(task, store=...)` roda os passos 1–5 do pipeline e
+  devolve o MAIOR score de rerank do top-30 (o observável que a cobertura usa).
+- **Mecanismo de calibração (`bench/calibrate.py`, utilitário de execução
+  humana, NÃO coletado pelo pytest).** `GRID` = λ ∈ {0.3,0.5,0.7} × min_value ∈
+  {0.0,0.05,0.1} (9 combinações), `CALIBRATION_BUDGET = 4000`. A LÓGICA PURA é
+  unit-testada com dados sintéticos (sem rede): `pick_best` (taxa de sucesso
+  desc; desempate por menor custo/tarefa concluída, depois menor média de tokens
+  de contexto, depois `(lambda_, min_value)` crescente — vencedor único e
+  determinístico), `percentiles`/`coverage_from_scores` (p33/p66). `run_calibration`
+  carrega SÓ `split == "dev"` (regra de honestidade em código), constrói os
+  provedores REAIS, mede cada combinação (reusando o caminho answer+grade+price
+  do `bench.run`), escolhe o vencedor, deriva a cobertura dos percentis do
+  máximo-rerank observado no `dev` (D7) e escreve o artefato
+  `bench/results/calibration_<ts>/` (`combinations.csv`, `winner.json`,
+  `summary.md`). O reranker Jina ganhou retry/backoff em 429/5xx.
+- **Cache de cota (em memória + PERSISTENTE em disco).** `lambda_`/`min_value`
+  afetam SÓ a seleção gulosa final; busca+RRF+rerank são invariantes a eles.
+  Então o calibrador roda a parte cara UMA vez por tarefa (`prepare_candidates`)
+  e aplica só a seleção pura (`assemble_from_candidates`) por combinação — rerank
+  e embeddings caem de 9×96 para 1×96. Um teste prova que a seleção com
+  candidatos cacheados é byte-idêntica ao pipeline completo nas 9 combinações.
+  Além do cache em memória, `bench/provider_cache.py` (`bench/.cache/`,
+  gitignored) persiste rerank/embeddings content-addressed por `(model+query+docs)`
+  / `(model+text)`: sobrevive a re-execução e é REUSÁVEL na Etapa 2 (o rerank de
+  uma tarefa é invariante a orçamento/ablação), então o split `test` NÃO
+  re-chamará a Jina para pares já vistos. O rerank só é chamado para o top-30 do
+  RRF.
+- **Correção de bug de conformidade com a SPEC §5 (ver DECISIONS.md 2026-10-13).**
+  A calibração real expôs um `definition_list` de 11.779 tokens (Flask) que
+  violava o limite de 800 tokens da SPEC §5 e estourava o limite de 8192 tokens
+  da API de embeddings. O chunker passou a DIVIDIR prosa/list/definition_list
+  grandes (antes só tabela/código eram divididos). Varredura do corpus após a
+  correção: 3132 chunks, nenhum acima de 800 nem de 8192. O property test ganhou
+  um gerador de prosa grande.
+
+### M8 ETAPA 1 — calibração (execução humana)
+
+A calibração real é um passo HUMANO (gasta chaves) — o agente/CI não a executa em
+teste. Pré-requisitos (Windows/PowerShell, separador `;`):
+
+```
+docker compose up -d --wait postgres seaweedfs ; docker compose up s3-init ; uv run alembic upgrade head
+```
+
+(head `0003_chunks`). O `.env` real precisa das chaves `BENCH_ANSWERER_API_KEY`
+(OpenAI), `BENCH_JUDGE_API_KEY` (Anthropic), `RERANKER_API_KEY` (Jina) e
+`EMBEDDING_DIM=1536`. **NÃO** rode `cp .env.example .env` por cima do `.env`
+real — isso apagaria as chaves. Invocação:
+
+```
+uv run python -m bench.calibrate --real
+```
+
+Toca APENAS `split == "dev"` (96 tarefas), NUNCA o `test` (41 tarefas), orçamento
+4000, 9 combinações. Gasta chaves (OpenAI respondedor + embeddings, Anthropic
+juiz, Jina reranker). A saída (o artefato sob `bench/results/calibration_<ts>/`)
+alimenta o congelamento dos parâmetros.
+
+### M8 ETAPA 1 — resultado da calibração real (dev, orçamento 4000)
+
+Calibração REAL concluída no split `dev` (96 tarefas), orçamento 4000, provedores
+reais (respondedor OpenAI `gpt-6.1-sol`, juiz Anthropic `claude-sonnet-5-5`,
+reranker Jina, embeddings OpenAI `text-embedding-3-small`). Artefato:
+`bench/results/calibration_20261012T171216_425732`. Grade: λ ∈ {0.3,0.5,0.7} ×
+min_value ∈ {0.0,0.05,0.1} = 9 combinações.
+
+| lambda | min_value | success | cost/completed (USD) | ctx_tokens |
+|---|---|---|---|---|
+| 0.30 | 0.00 | **0.8125** | 0.004593 | 1352.2 | ← VENCEDOR |
+| 0.30 | 0.05 | 0.6875 | 0.001914 | 156.0 | |
+| 0.30 | 0.10 | 0.2500 | 0.002867 | 15.5 | |
+| 0.50 | 0.00 | 0.8021 | 0.003506 | 887.5 | |
+| 0.50 | 0.05 | 0.6354 | 0.001867 | 125.8 | |
+| 0.50 | 0.10 | 0.2396 | 0.002917 | 14.5 | |
+| 0.70 | 0.00 | 0.7812 | 0.002864 | 606.1 | |
+| 0.70 | 0.05 | 0.5833 | 0.001891 | 108.1 | |
+| 0.70 | 0.10 | 0.2292 | 0.003048 | 14.5 | |
+
+**Vencedor (taxa de sucesso): λ = 0.3, min_value = 0.0 (0.8125).** Resultado
+honesto do dev: a seleção se sai MELHOR SEM corte por valor mínimo — qualquer
+`min_value` > 0 reduz o sucesso (0.05 → ~0.63-0.69; 0.10 → ~0.23-0.25).
+
+**Cobertura (coverage_low/high).** A derivação original (p33/p66 do MÁXIMO de
+rerank por tarefa) degenerou para 1.0/1.0 porque a Jina normaliza min-max por
+chamada (o melhor candidato vira sempre 1.0). Por isso os limiares vêm da
+distribuição COMPLETA dos scores do top-30 (2134 scores nas 96 tarefas),
+calculada do cache persistente sem gastar Jina: **coverage_low = p33 = 0.0535**,
+**coverage_high = p66 = 0.2312**.
+
+**Parâmetros CONGELADOS** em `app/config.py` e `.env.example`:
+`selection_lambda=0.3`, `min_value=0.0`, `coverage_low=0.0535`,
+`coverage_high=0.2312` (`rrf_k=60` mantido, não calibrado).
+
+**Custo da calibração:** respondedor OpenAI ~437.135 tokens in + ~51.781 out ≈
+**1,39 USD** (`bench/prices.yaml`). Rerank/embeddings ficaram ~1×96 chamadas
+graças ao cache persistente (muito abaixo dos 10M tokens do plano free da Jina).
+
+**HONESTIDADE:** a calibração foi feita EXCLUSIVAMENTE no split `dev`. O split
+`test` (41 tarefas) NÃO foi tocado — o calibrador filtra `split == "dev"` em
+código. A ETAPA 2 (split `test` completo) roda depois, pelo humano, reusa o cache
+persistente (zero novas chamadas de Jina para pares já vistos) e exigirá créditos
+OpenAI (o respondedor roda muito e não é cacheável).
+
+### Como testar o M8 Etapa 1 manualmente
+
+Gate rápido (sem serviços, sem rede): `uv run ruff check . ; uv run ruff format
+--check . ; uv run mypy app ; uv run pytest -m "not integration and not browser"`
+— inclui os testes de LÓGICA de calibração (`tests/unit/bench/test_calibrate.py`),
+o teste de injeção de reranker em `test_ours_runner.py` e o property test de
+chunker estendido para prosa grande. A calibração real é o comando humano acima.
+
+---
+
+Marco anterior: M7 (Busca, seleção e endpoint `assemble`) — CONCLUÍDO. Fecha o
 caminho público do produto: `POST /v1/context/assemble` (SPEC §6/§8) resolve 1–20
 URLs (reusa o resolve do M5 + cache 24h), indexa a versão atual (M6), roda o
 núcleo de retrieve/select e devolve um pacote de contexto pronto para agente —

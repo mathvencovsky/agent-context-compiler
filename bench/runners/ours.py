@@ -37,8 +37,9 @@ network and two runs over the same corpus produce byte-identical context
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from app.extract.html import extract_html
 from app.extract.ir import (
@@ -59,6 +60,10 @@ from app.retrieve.select import Candidate, cosine, select
 from bench.corpus_store import CorpusStore
 from bench.runners.base import ContextResult, truncate_to_budget
 from bench.tasks_schema import Task
+
+if TYPE_CHECKING:
+    from app.providers.embeddings.base import EmbeddingProvider
+    from app.providers.rerank.base import RerankProvider
 
 #: SPEC §6: lexical/vector lists are each capped at the top-50 before fusion.
 _SEARCH_TOP_K = 50
@@ -95,6 +100,23 @@ class _IndexedChunk:
     ord: int
     chunk: Chunk
     embedding: list[float]
+
+
+@dataclass(frozen=True)
+class PreparedCandidates:
+    """The selection-invariant result of the pipeline steps (1)-(5).
+
+    Holds the reranked :class:`Candidate` list plus the minimal maps needed to
+    emit the context (``md_by_key``, ``url_by_document``) and the max rerank
+    score (for coverage derivation). Depends only on the task + search/rerank —
+    NOT on ``lambda_``/``min_value`` — so it can be computed once per task and
+    reused across the calibration grid.
+    """
+
+    candidates: list[Candidate]
+    md_by_key: dict[_Key, str]
+    url_by_document: dict[str, str]
+    max_rerank: float | None
 
 
 def _source_for(url: str, content_type: str) -> tuple[SourceInfo, str, str]:
@@ -191,6 +213,13 @@ class OursRunner:
 
     The ablation flags configure the single named variants; the default instance
     is the full pipeline registered under ``ours``.
+
+    ``lambda_`` and ``min_value`` are the SPEC §6 selection knobs; they default
+    to the module constants (identical to today's behavior) and are injected by
+    the M8 calibrator to sweep the grid. ``embeddings`` and ``reranker`` default
+    to ``None``, in which case the deterministic fakes are constructed per call
+    (so every test stays offline); the calibrator injects the REAL
+    ``OpenAIEmbeddingProvider`` / ``JinaRerankProvider`` for the dev run.
     """
 
     name: str = "ours"
@@ -199,16 +228,42 @@ class OursRunner:
     use_rerank: bool = True
     structural_chunking: bool = True
     selection: str = "greedy"
+    lambda_: float = _SELECTION_LAMBDA
+    min_value: float = _MIN_VALUE
+    embeddings: EmbeddingProvider | None = field(default=None)
+    reranker: RerankProvider | None = field(default=None)
 
-    def build_context(
-        self, task: Task, *, budget_tokens: int, store: CorpusStore
-    ) -> ContextResult:
-        """Build an agent-ready context for ``task`` within ``budget_tokens``."""
+    def _embeddings(self) -> EmbeddingProvider:
+        """Return the injected embeddings provider, or the deterministic fake."""
+        if self.embeddings is not None:
+            return self.embeddings
+        return FakeEmbeddingProvider()
+
+    def _reranker(self) -> RerankProvider:
+        """Return the injected reranker provider, or the deterministic fake."""
+        if self.reranker is not None:
+            return self.reranker
+        return FakeRerankProvider()
+
+    def prepare_candidates(
+        self, task: Task, *, store: CorpusStore
+    ) -> PreparedCandidates:
+        """Run the EXPENSIVE, selection-invariant part of the pipeline (1)-(5).
+
+        Extract/chunk/embed, lexical+vector search, RRF fusion and rerank the
+        top-30 — everything that does NOT depend on ``lambda_``/``min_value``.
+        The result (ordered :class:`Candidate` list + the md/url maps needed to
+        emit + the max rerank score) is deterministic for a given task, so the
+        M8 calibrator can compute it ONCE per task and reuse it across the 9 grid
+        combinations instead of re-calling the real reranker/embeddings 9×.
+        """
         indexed, url_by_document = self._index_task(task, store)
         if not indexed:
-            return ContextResult(text="", context_tokens=0, used_urls=[])
+            return PreparedCandidates(
+                candidates=[], md_by_key={}, url_by_document={}, max_rerank=None
+            )
 
-        embeddings = FakeEmbeddingProvider()
+        embeddings = self._embeddings()
         chunk_by_key = {item.key: item for item in indexed}
 
         # (3) in-memory lexical + vector search (ablation-aware).
@@ -224,14 +279,16 @@ class OursRunner:
         # (4) RRF fusion over the two rankings.
         fused = rrf_fuse([lexical_ranked, vector_ranked], k=_RRF_K)
         if not fused:
-            return ContextResult(text="", context_tokens=0, used_urls=[])
+            return PreparedCandidates(
+                candidates=[], md_by_key={}, url_by_document={}, max_rerank=None
+            )
 
-        # (5) rerank the top-30 (deterministic fake) -> selection value.
+        # (5) rerank the top-30 (injected provider or fake) -> selection value.
         documents = {key: chunk_by_key[key].chunk.text for key, _ in fused}
         reranked = rerank_candidates(
             task.question,
             fused,
-            provider=FakeRerankProvider(),
+            provider=self._reranker(),
             use_rerank=self.use_rerank,
             documents=documents,
         )
@@ -247,16 +304,42 @@ class OursRunner:
             )
             for key, value, _ in reranked
         ]
+        md_by_key = {key: chunk_by_key[key].chunk.md for key, _, _ in reranked}
+        rerank_scores = [score for _, _, score in reranked if score is not None]
+        max_rerank = max(rerank_scores) if rerank_scores else None
+
+        return PreparedCandidates(
+            candidates=candidates,
+            md_by_key=md_by_key,
+            url_by_document=url_by_document,
+            max_rerank=max_rerank,
+        )
+
+    def assemble_from_candidates(
+        self, prepared: PreparedCandidates, *, budget_tokens: int
+    ) -> ContextResult:
+        """Apply ONLY the (pure) selection + emit (steps 6-7) to ``prepared``.
+
+        No network and no provider call: ``select`` is pure and local, so this
+        is the per-combination work the calibrator repeats for each
+        ``(lambda_, min_value)`` over the cached candidates. The output is
+        byte-identical to running the whole pipeline with the same params
+        (``select`` sees the same candidates either way).
+        """
+        if not prepared.candidates:
+            return ContextResult(text="", context_tokens=0, used_urls=[])
 
         # (6) selection: greedy under budget, or truncate-by-value ablation.
         if self.selection == "truncate":
-            selected = _truncate_select(candidates, budget_tokens=budget_tokens)
+            selected = _truncate_select(
+                prepared.candidates, budget_tokens=budget_tokens
+            )
         else:
             selected = select(
-                candidates,
+                prepared.candidates,
                 budget_tokens=budget_tokens,
-                lambda_=_SELECTION_LAMBDA,
-                min_value=_MIN_VALUE,
+                lambda_=self.lambda_,
+                min_value=self.min_value,
             )
 
         # (7) emit the selected chunks' Markdown in document order.
@@ -264,15 +347,35 @@ class OursRunner:
         parts: list[str] = []
         for candidate in selected:
             key: _Key = (candidate.document_id, candidate.ord)
-            item = chunk_by_key[key]
-            url = url_by_document.get(item.document_id)
+            url = prepared.url_by_document.get(candidate.document_id)
             if url is not None and url not in used_urls:
                 used_urls.append(url)
-            parts.append(item.chunk.md)
+            parts.append(prepared.md_by_key[key])
 
         joined = "\n\n".join(parts)
         truncated, tokens = truncate_to_budget(joined, budget_tokens)
         return ContextResult(text=truncated, context_tokens=tokens, used_urls=used_urls)
+
+    def build_context(
+        self, task: Task, *, budget_tokens: int, store: CorpusStore
+    ) -> ContextResult:
+        """Build an agent-ready context for ``task`` within ``budget_tokens``."""
+        prepared = self.prepare_candidates(task, store=store)
+        return self.assemble_from_candidates(prepared, budget_tokens=budget_tokens)
+
+    def max_rerank_score(self, task: Task, *, store: CorpusStore) -> float | None:
+        """Return the MAX rerank score over ``task``'s fused top-30, or ``None``.
+
+        Runs steps (1)-(5) of the pipeline (extract/chunk/embed/fuse/rerank) and
+        returns the largest rerank score the configured reranker assigned to any
+        candidate — the exact single observable ``assemble._coverage`` thresholds
+        on. Used by the M8 calibrator (D7) to derive ``coverage_low``/
+        ``coverage_high`` from the observed dev distribution. ``None`` when the
+        task yields no candidates or when rerank is off (no score to report).
+        """
+        if not self.use_rerank:
+            return None
+        return self.prepare_candidates(task, store=store).max_rerank
 
     def _index_task(
         self, task: Task, store: CorpusStore
@@ -282,7 +385,7 @@ class OursRunner:
         Returns the indexed chunks and a ``document_id -> url`` map (used to
         report ``used_urls``).
         """
-        embeddings = FakeEmbeddingProvider()
+        embeddings = self._embeddings()
         url_by_document: dict[str, str] = {}
         indexed: list[_IndexedChunk] = []
 
