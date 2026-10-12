@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute, request_response
 from sqlalchemy import create_engine, text
 
+from app.api.assemble import router as assemble_router
 from app.api.documents import router as documents_router
 from app.api.errors import fetch_error_handler, generic_exception_handler
 from app.config import Settings, get_settings
@@ -87,6 +88,8 @@ def create_app() -> FastAPI:
     # resolve router carries no prefix, so extending is equivalent and keeps the
     # routes — and their OpenAPI schema — fully materialized).
     app.router.routes.extend(documents_router.routes)
+    # The M7 assemble router mounts the same way (same reasoning as above).
+    app.router.routes.extend(assemble_router.routes)
     # Extending the routes directly (above) keeps them enumerable in
     # ``app.routes``, but — unlike ``include_router`` — it leaves each route's
     # ``dependency_overrides_provider`` unset. The provider is captured when the
@@ -96,7 +99,7 @@ def create_app() -> FastAPI:
     # injectable ``Depends`` seams can actually be overridden (the integration
     # tests rely on this). No runtime behavior change when nothing is
     # overridden. See DECISIONS.md 2026-10-11.
-    for route in documents_router.routes:
+    for route in (*documents_router.routes, *assemble_router.routes):
         if isinstance(route, APIRoute):
             route.dependency_overrides_provider = app
             route.app = request_response(route.get_route_handler())

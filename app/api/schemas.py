@@ -22,6 +22,7 @@ from app.extract.ir import Block, Metadata, SourceInfo, Warning
 
 ResolveFormat = Literal["markdown", "blocks"]
 RenderDecision = Literal["auto", "never", "always"]
+SelectionStrategy = Literal["greedy", "truncate"]
 
 
 class ResolveRequest(BaseModel):
@@ -105,6 +106,107 @@ class ResolveResponse(BaseModel):
             ]
         }
     }
+
+
+class AssembleRequest(BaseModel):
+    """Body of ``POST /v1/context/assemble`` (SPEC §8).
+
+    ``urls`` holds 1-20 URLs and ``max_tokens`` is the output budget B (256-32000;
+    SPEC §8). The ablation flags (``use_lexical`` / ``use_vector`` / ``use_rerank``
+    / ``selection``) are accepted only when ``ENV != "production"`` (SPEC §6); the
+    handler enforces that gate. They default to the full pipeline.
+    """
+
+    query: str = Field(examples=["Which header authenticates API requests?"])
+    urls: list[str] = Field(min_length=1, max_length=20)
+    max_tokens: int = Field(default=4000, ge=256, le=32000)
+    include_evidence: bool = True
+    # Ablation flags (SPEC §6; non-production only, enforced by the handler).
+    use_lexical: bool = True
+    use_vector: bool = True
+    use_rerank: bool = True
+    selection: SelectionStrategy = "greedy"
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "query": "Which header is required to authenticate API requests?",
+                    "urls": [
+                        "https://docs.example.com/auth",
+                        "https://docs.example.com/errors",
+                    ],
+                    "max_tokens": 4000,
+                    "include_evidence": True,
+                }
+            ]
+        }
+    }
+
+
+class EvidenceItem(BaseModel):
+    """One literal evidence quote backing a fragment (SPEC §8)."""
+
+    block_id: str
+    page: int | None = None
+    quote: str
+
+
+class FragmentScoresModel(BaseModel):
+    """Per-fragment retrieval scores (SPEC §8)."""
+
+    lexical_rank: int | None = None
+    vector_rank: int | None = None
+    rrf: float
+    rerank: float | None = None
+
+
+class FragmentModel(BaseModel):
+    """One selected chunk with provenance + evidence (SPEC §8)."""
+
+    chunk_id: str
+    document_id: str
+    version_id: str
+    source_url: str
+    heading_path: list[str]
+    md: str
+    tokens: int
+    scores: FragmentScoresModel
+    evidence: list[EvidenceItem]
+
+
+class SourceStatusModel(BaseModel):
+    """Per-URL outcome in ``sources[]`` (SPEC §8)."""
+
+    url: str
+    document_id: str | None = None
+    version_id: str | None = None
+    fetched_at: str | None = None
+    status: str
+
+
+class TokenUsage(BaseModel):
+    """Token accounting for the assembled context (SPEC §8)."""
+
+    output_tokens: int
+    budget_tokens: int
+    tokenizer: str = "cl100k_base (approximate)"
+
+
+class AssembleResponse(BaseModel):
+    """Response envelope of ``POST /v1/context/assemble`` (SPEC §8).
+
+    ``coverage`` is a documented HEURISTIC over the max rerank score (SPEC §6
+    step 7), calibrated in M8 — not a correctness guarantee.
+    """
+
+    query: str
+    fragments: list[FragmentModel]
+    sources: list[SourceStatusModel]
+    token_usage: TokenUsage
+    coverage: Literal["insufficient", "partial", "sufficient"]
+    warnings: list[dict[str, object]]
+    trust: Literal["untrusted_source"] = "untrusted_source"
 
 
 class ErrorDetail(BaseModel):

@@ -28,6 +28,34 @@ class NotFound(FetchError):
     http_status = 404
 
 
+class AllSourcesFailed(FetchError):
+    """Every URL in an assemble request failed to resolve (SPEC §8).
+
+    ``POST /v1/context/assemble`` keeps a partial failure at 200 (the surviving
+    sources still produce a context), but when NONE of the URLs resolve there is
+    no content to return. SPEC §8's table has no code for "every source failed",
+    so a dedicated ``all_sources_failed`` -> 422 is recorded in DECISIONS.md
+    (2026-10-13) rather than silently reusing ``extraction_empty`` (whose
+    meaning is a single document that extracted to nothing). It subclasses
+    :class:`FetchError` so it serializes through the same handler.
+    """
+
+    code = "all_sources_failed"
+    http_status = 422
+
+
+class AblationNotAllowed(FetchError):
+    """An assemble ablation flag was sent while ``ENV == "production"`` (SPEC §6).
+
+    The ablation flags (``use_lexical`` / ``use_vector`` / ``use_rerank`` /
+    ``selection``) exist for benchmarking and are accepted only outside
+    production; sending a non-default value in production is a bad request.
+    """
+
+    code = "ablation_not_allowed"
+    http_status = 400
+
+
 def fetch_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Serialize a :class:`FetchError` into the SPEC §8 envelope.
 

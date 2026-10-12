@@ -9,7 +9,8 @@ produce byte-identical context (SPEC §10 determinism).
 
 The registry (:func:`get_runner` / :func:`available_runners`) is populated lazily
 from the baseline modules; ``firecrawl`` registers itself only when a key is
-present (SPEC §10.3). ``ours``/``ours_*`` is M7 and is deliberately absent.
+present (SPEC §10.3). ``ours``/``ours_*`` (M7) run NINA's real pipeline over the
+frozen snapshot and are registered here too.
 """
 
 from __future__ import annotations
@@ -80,10 +81,15 @@ def _ensure_registered() -> None:
     from bench.runners.firecrawl import make_firecrawl_runner
     from bench.runners.naive_rag import NaiveRagRunner
     from bench.runners.naive_text import NaiveTextRunner
+    from bench.runners.ours import make_ours_runners
     from bench.runners.raw_html import RawHtmlRunner
 
     for runner in (RawHtmlRunner(), NaiveTextRunner(), NaiveRagRunner()):
         _REGISTRY[runner.name] = runner
+
+    # M7: the full NINA pipeline (``ours``) plus its five ablation variants.
+    for ours_runner in make_ours_runners():
+        _REGISTRY[ours_runner.name] = ours_runner
 
     # firecrawl auto-skips (returns None) when FIRECRAWL_API_KEY is absent
     # (SPEC §10.3): it is simply not registered, so the CLI never offers it.

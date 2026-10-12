@@ -1,25 +1,78 @@
 # PROGRESS
 
-Marco atual: M6 (Chunking e indexação) — implementado. Transforma a IR em chunks
-indexados para busca lexical e vetorial (SPEC §5, §7); o M6 SÓ indexa, não
-implementa busca/seleção (fica para M7). Entregou os embeddings atrás de
-interface (`app/providers/embeddings/{base,fake,openai}.py`, fake determinístico
-usado em TODOS os testes), o `Chunk` dataclass + `chunk_document` determinístico
-(`app/index/chunker.py`), o modelo ORM `Chunk` + migração Alembic `0003_chunks`
-(coluna `tsv` gerada pelo banco + índice GIN sobre `tsv` + índice HNSW
-`vector_cosine_ops` sobre `embedding vector(1536)`) e o indexer idempotente
-delete-then-insert (`app/index/indexer.py::index_version`). `EMBEDDING_DIM` subiu
-de 1024 (provisório) para 1536 (text-embedding-3-small), reusando a chave OpenAI
-(`embeddings_api_key` com fallback para `bench_answerer_api_key`). Testes: a
-suíte unitária (incl. a propriedade por `hypothesis` do chunker) no gate rápido e
-o teste de integração de idempotência `tests/integration/test_indexer.py`
-(Postgres real + `FakeEmbeddingProvider`, sem rede).
+Marco atual: M7 (Busca, seleção e endpoint `assemble`) — CONCLUÍDO. Fecha o
+caminho público do produto: `POST /v1/context/assemble` (SPEC §6/§8) resolve 1–20
+URLs (reusa o resolve do M5 + cache 24h), indexa a versão atual (M6), roda o
+núcleo de retrieve/select e devolve um pacote de contexto pronto para agente —
+fragmentos com proveniência completa, evidência literal, status por fonte,
+contagem de tokens e uma heurística de cobertura. Sem LLM em nenhum ponto do
+caminho de extração/seleção (CLAUDE.md); nenhum provider real é tocado em teste
+(embeddings via `FakeEmbeddingProvider`, rerank via `FakeRerankProvider`).
+Entregue em três features:
 
-M1 (Fetcher seguro), M3 (IR e extração de HTML), M4 (navegador + PDF) e M5
-(Persistência e endpoint `resolve`) permanecem concluídos; M1 e M4 foram
-aprovados nas revisões de segurança independentes (APPROVED, sem findings
-HIGH/MEDIUM). M2 (Corpus congelado, harness e baselines) corre em paralelo e
-depende de execução humana para o snapshot/draft reais.
+- **FEAT-001 — Reranker (Jina).** `reranker_api_key`/`reranker_model` em
+  `app/config.py` (espelhados no `.env.example`; `.env` real intocado), a
+  Protocol `RerankProvider` (`app/providers/rerank/base.py`), o
+  `FakeRerankProvider` determinístico (Jaccard de tokens, usado em TODOS os
+  testes) e o `JinaRerankProvider` real (httpx próprio, Bearer, normalização
+  min-max para [0,1], `MissingAPIKey` sem chave — nunca em testes).
+- **FEAT-002 — Núcleo de retrieve/select (SPEC §6).** `app/retrieve/`: `rrf.py`
+  (fusão RRF pura e genérica, k=60, desempate por chave), `select.py` (seleção
+  gulosa sob orçamento `(V_i - λ·max_sim)/sqrt(t_i)`, `cosine` seguro),
+  `rerank.py` (top-30, valor = rerank clampado ou RRF normalizado quando o
+  rerank está off), `lexical.py` (`ts_rank_cd` sobre `tsv` 'simple', top-50,
+  restrito às versões), `vector.py` (cosseno/HNSW do pgvector, top-50) e
+  `assemble.py` (orquestrador: resolve+indexa por URL independentemente, funde,
+  reranqueia, seleciona, monta fragmentos com evidência literal). Math pura
+  unit-testada; busca DB testada em integração.
+- **FEAT-003 — Superfície pública + benchmark + docs.** O handler
+  `app/api/assemble.py` (sync `def`, seams `Depends` incl. embeddings+reranker,
+  flags de ablação só fora de produção, falha parcial = 200, todas falham =
+  422), o mount em `app/main.py`, os erros `AllSourcesFailed`(422)/
+  `AblationNotAllowed`(400) em `app/api/errors.py`, o runner `ours` + as
+  ablações (`bench/runners/ours.py`, registradas em `bench/runners/base.py`) e
+  os testes (`tests/integration/test_assemble_api.py`,
+  `tests/unit/bench/test_ours_runner.py`).
+
+M1 (Fetcher seguro), M3 (IR e extração de HTML), M4 (navegador + PDF), M5
+(Persistência e endpoint `resolve`) e M6 (Chunking e indexação) permanecem
+concluídos; M1 e M4 foram aprovados nas revisões de segurança independentes
+(APPROVED, sem findings HIGH/MEDIUM). M2 (Corpus congelado, harness e baselines)
+corre em paralelo e depende de execução humana para o snapshot/draft reais.
+
+### Como testar o M7 manualmente
+
+Gate rápido (sem serviços): `uv run ruff check . ; uv run ruff format --check . ;
+uv run mypy app ; uv run pytest -m "not browser and not integration"` — inclui os
+testes do runner `ours` e o `tests/integration/test_openapi.py` (não marcado
+`integration`), que agora mostra a rota `/v1/context/assemble`.
+
+Integração (Postgres + pgvector + SeaweedFS via Docker): `docker compose up -d
+--wait postgres seaweedfs ; docker compose up s3-init ; uv run alembic upgrade
+head ; uv run pytest -m integration -q` — `tests/integration/test_assemble_api.py`
+prova o 200 feliz (fragmentos com proveniência+scores), a falha parcial em 200
+(fonte morta em `sources[]`+`warnings`), o 422 all-fail e a rejeição de ablação
+com `ENV=production`.
+
+Benchmark e2e offline (FAKE providers): aponte
+`BENCH_CORPUS_DIR`/`BENCH_TASKS_PATH`/`BENCH_RESULTS_ROOT` para
+`tests/fixtures/bench` e rode `uv run python -m bench.run --strategies
+naive_rag,ours --split dev` — gera `results.csv`/`report.md`/`config.json`, sem
+rede.
+
+### Dívidas / notas do M7
+
+- A `coverage` (`insufficient`/`partial`/`sufficient`) é uma HEURÍSTICA sobre o
+  maior score de rerank (limiares `coverage_low=0.2`/`coverage_high=0.5`), a ser
+  calibrada no M8 — não é garantia de correção.
+- Com os providers FAKE sobre a fixture pequena, os scores do reranker Jaccard
+  ficam quase sempre abaixo de `min_value=0.05`, então o caminho guloso (`ours`)
+  tende a selecionar pouco ou nada; a ablação `ours_truncate` (sem o corte por
+  `min_value`) é a que prova a montagem de contexto fim a fim offline. Isso é
+  esperado do fake, não do pipeline — a execução real com Jina produz scores
+  informativos.
+- Os providers reais (`JinaRerankProvider`, `OpenAIEmbeddingProvider`) nunca são
+  exercidos em teste (zero rede); só a execução humana com chave os usa.
 
 ### Como testar o M6 manualmente
 
@@ -42,6 +95,74 @@ de chunks em duas reindexações da mesma `version_id`), `block_ids` não-vazio 
   rede); só a execução humana com chave o usa, em lote com retry/backoff.
 
 ## Concluídos
+
+### M7 — Busca, seleção e endpoint `assemble`
+
+Caminho público do produto (SPEC §6/§8): fusão de busca lexical + vetorial,
+seleção gulosa sob orçamento com penalização de diversidade, reranker Jina, e o
+endpoint `POST /v1/context/assemble` que entrega contexto pronto para agente com
+proveniência e evidência literal. Determinístico e sem LLM. M7 NÃO adiciona
+migração (consome a tabela `chunks` + índices GIN/HNSW do 0003 do M6). Entregue
+em três features:
+
+- **FEAT-001 — Reranker (Jina).** `app/config.py` ganhou `reranker_api_key` e
+  `reranker_model="jina-reranker-v2-base-multilingual"` (espelhados em
+  `.env.example` como `RERANKER_API_KEY=` vazio e `RERANKER_MODEL=`; o `.env`
+  real NUNCA foi tocado). `app/providers/rerank/base.py`: `@runtime_checkable
+  Protocol RerankProvider` (`model: str`; `rerank(query, documents) ->
+  list[float]`, um score em [0,1] por documento NA ORDEM DE ENTRADA).
+  `fake.py`: `FakeRerankProvider` determinístico por sobreposição Jaccard de
+  tokens (disjunto → 0.0, idêntico → 1.0), zero rede, usado em TODOS os testes.
+  `jina.py`: `JinaRerankProvider` real (httpx importado tardiamente, `POST
+  https://api.jina.ai/v1/rerank`, Bearer, corpo `{model,query,documents,
+  top_n}`, reordena para a entrada por `index`, min-max para [0,1], `MissingAPIKey`
+  reusada de `app/providers/llm/openai.py` sem chave) — nunca exercido em teste.
+- **FEAT-002 — Núcleo de retrieve/select.** `app/retrieve/rrf.py::rrf_fuse`
+  (soma `1/(k+rank)` 1-based, ordena por score desc e chave asc; k=`rrf_k`=60).
+  `app/retrieve/select.py`: `@dataclass(frozen=True) Candidate` + `select`
+  (passo guloso maximizando `(V_i - λ·max_sim)/sqrt(t_i)`, pula o que não cabe,
+  para quando nada cabe ou o melhor valor ajustado < `min_value`; saída ordenada
+  por `(document_id, ord)`) + `cosine` seguro para norma zero.
+  `app/retrieve/rerank.py::rerank_candidates` (top-30; valor = rerank clampado
+  [0,1] com score cru preservado, ou RRF min-max normalizado quando
+  `use_rerank=False`). `app/retrieve/lexical.py::lexical_search`
+  (`ts_rank_cd(tsv, websearch_to_tsquery('simple', query))` desc, filtrado por
+  `tsv @@ query` E `version_id IN (...)`, top-50, desempate `(version_id, ord)`).
+  `app/retrieve/vector.py::vector_search` (`embedding.cosine_distance(qvec)` asc,
+  HNSW, mesma restrição + desempate, top-50). `app/retrieve/assemble.py::
+  assemble_context` (resolve+indexa cada URL independentemente, coleta as
+  versões atuais, busca lexical+vetorial ablation-aware, funde por chave
+  `(document_id, ord)`, reranqueia o top-30, seleciona sob `max_tokens` — gulosa
+  ou `truncate` por valor — e monta `Fragment`s com proveniência completa, scores
+  e `Evidence` literal <=300 chars; `coverage` pela heurística do maior rerank).
+  Testes: `tests/unit/retrieve/` (RRF à mão, orçamento/duplicatas da seleção,
+  propriedade `hypothesis` de orçamento, quote literal) e
+  `tests/integration/test_retrieve.py` (busca DB real + `FakeEmbeddingProvider`).
+- **FEAT-003 — Superfície pública + benchmark + docs.** `app/api/schemas.py`
+  ganhou o contrato §8 do assemble (`AssembleRequest` com `urls` 1–20,
+  `max_tokens` 256–32000, flags de ablação; `AssembleResponse` com
+  `FragmentModel`/`FragmentScoresModel`/`EvidenceItem`/`SourceStatusModel`/
+  `TokenUsage`, `coverage`, `warnings`, `trust`). `app/api/assemble.py`: handler
+  `def` SÍNCRONO (threadpool), seams `Depends` iguais aos do documents MAIS
+  `provide_embeddings` (OpenAI real por padrão, fake em teste) e
+  `provide_reranker` (Jina real por padrão, fake em teste); rejeita ablação com
+  `ENV=production` (`AblationNotAllowed` 400), falha de UMA URL permanece 200
+  (status em `sources[]` + `warnings`), TODAS falham → `AllSourcesFailed` (422);
+  mapeia `AssembleResult` → `AssembleResponse`. `app/api/errors.py` ganhou
+  `AllSourcesFailed`(code `all_sources_failed`, 422) e `AblationNotAllowed`(code
+  `ablation_not_allowed`, 400). `app/main.py` monta o router de assemble igual ao
+  de documents (estende `app.router.routes` e seta
+  `dependency_overrides_provider`+reconstrói o handler em cada `APIRoute`).
+  `bench/runners/ours.py`: `OursRunner` roda o pipeline em memória sobre o
+  snapshot congelado (sem Postgres) e as ablações `ours_no_vector`/
+  `ours_no_lexical`/`ours_no_rerank`/`ours_fixed_chunks`/`ours_truncate`, todas
+  registradas em `bench/runners/base.py`. Testes:
+  `tests/integration/test_assemble_api.py` (200 feliz com proveniência+scores,
+  falha parcial 200, all-fail 422, ablação rejeitada em produção) e
+  `tests/unit/bench/test_ours_runner.py` (cada runner dentro do orçamento,
+  determinístico, offline). Decisões do M7 (httpx de provider confiável, forma
+  do Jina, desempate RRF, heurísticas de valor/cobertura, reuso de embeddings no
+  `max_sim`, código `all_sources_failed`) em DECISIONS.md (2026-10-13).
 
 ### M6 — Chunking e indexação
 

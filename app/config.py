@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embeddings_api_key: str | None = None
 
+    # Reranker (M7, SPEC §6). reranker_api_key is the Jina key for the real
+    # adapter (app/providers/rerank/jina.py); tests use FakeRerankProvider and
+    # never read it. reranker_model defaults to Jina's multilingual v2 reranker.
+    reranker_api_key: str | None = None
+    reranker_model: str = "jina-reranker-v2-base-multilingual"
+
     # Retrieval / selection (SPEC 6).
     selection_lambda: float = 0.5
     min_value: float = 0.05

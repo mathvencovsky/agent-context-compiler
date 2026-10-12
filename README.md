@@ -154,18 +154,19 @@ verde no GitHub Actions.
 | **M4** | Renderização por navegador e extração de PDF | ✅ Concluído |
 | **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
 | **M6** | Chunking e indexação | ✅ Concluído |
-| **M7** | Busca, seleção e endpoint `assemble` | ◻️ Próximo (chave de reranker) |
+| **M7** | Busca, seleção e endpoint `assemble` | ✅ Concluído |
 | **M8** | Benchmark completo e calibração | ◻️ Ponto de decisão |
 | **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
 | **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
-**Pipeline de aquisição, extração, persistência e indexação (M1, M3, M4, M5, M6)
-está completo e verificado:** HTTP seguro → HTML/PDF → IR → Markdown/JSON →
-persistência + cache → `resolve`/`get-document` → chunks indexados (tsvector
-lexical + embeddings vetoriais `text-embedding-3-small` no pgvector). Falta a
-busca sobre esse índice — o endpoint `assemble` (M7). Os marcos de segurança
-(M1, M4) passaram por revisão adversarial independente, sem findings HIGH/MEDIUM
-em aberto.
+**Pipeline completo de ponta a ponta (M1, M3, M4, M5, M6, M7) está implementado
+e verificado:** HTTP seguro → HTML/PDF → IR → Markdown/JSON → persistência +
+cache → `resolve`/`get-document` → chunks indexados (tsvector lexical +
+embeddings vetoriais `text-embedding-3-small` no pgvector) → busca híbrida (RRF)
++ rerank (Jina) + seleção sob orçamento → `POST /v1/context/assemble`. As duas
+operações do produto (`resolve` e `assemble`) já respondem por HTTP. Os marcos de
+segurança (M1, M4) passaram por revisão adversarial independente, sem findings
+HIGH/MEDIUM em aberto. Falta a calibração do benchmark completo (M8).
 
 **O benchmark (M2) já mede baselines com dados reais.** Corpus congelado de 50
 páginas (10 fontes, incluindo SPAs e PDFs), 137 tarefas validadas por humano nas
@@ -339,6 +340,87 @@ Todos os erros usam o mesmo envelope, com o HTTP da tabela §8:
 | `fetch_failed` | 502 | falha de transporte (DNS, conexão, redirects demais) |
 | `timeout` | 504 | timeout de conexão ou total |
 | `not_found` | 404 | GET de documento/versão inexistente |
+| `all_sources_failed` | 422 | `assemble`: todas as URLs falharam ao resolver |
+| `ablation_not_allowed` | 400 | `assemble`: flag de ablação enviada com `ENV=production` |
+
+---
+
+## API: `assemble` + núcleo de busca e seleção (M7)
+
+O segundo endpoint público — e o produto de fato — transforma uma pergunta, um
+conjunto de URLs e um orçamento de tokens nos fragmentos mais úteis, cada um com
+evidência citável. O **núcleo matemático** da recuperação híbrida vive em
+`app/retrieve/`: toda a matemática (RRF e seleção) é determinística, sem LLM e
+sem rede; a busca em banco é coberta por teste de integração com o
+`FakeEmbeddingProvider` e o rerank pelo `FakeRerankProvider` (nenhum provider
+real é tocado em teste).
+
+### `POST /v1/context/assemble`
+
+Resolve 1–20 URLs (reusando o cache do `resolve`), indexa a versão corrente de
+cada uma, roda busca léxica + vetorial, funde por RRF, reranqueia e seleciona sob
+`max_tokens`, devolvendo os fragmentos com proveniência e evidência literal.
+
+**Corpo da requisição**
+
+| Campo | Tipo | Default | Descrição |
+|---|---|---|---|
+| `query` | `string` | — (obrigatório) | a pergunta a responder |
+| `urls` | `string[]` | — (1 a 20) | URLs públicas a montar o contexto |
+| `max_tokens` | `int` | `4000` | orçamento de tokens de saída (256–32000) |
+| `include_evidence` | `boolean` | `true` | inclui a `evidence` literal nos fragmentos |
+| `use_lexical` / `use_vector` / `use_rerank` | `boolean` | `true` | flags de ablação (SPEC §6) — **aceitas só fora de produção** |
+| `selection` | `"greedy" \| "truncate"` | `"greedy"` | estratégia de seleção (ablação) |
+
+```bash
+curl -s -X POST http://localhost:8000/v1/context/assemble \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Qual header autentica as requisições?",
+       "urls":["https://docs.example.com/auth"],
+       "max_tokens":4000}'
+```
+
+**Corpo da resposta (200)** — `fragments[]` (cada um com `chunk_id`,
+`document_id`, `version_id`, `source_url`, `heading_path`, `md`, `tokens`,
+`scores{lexical_rank,vector_rank,rrf,rerank}` e `evidence[]{block_id,page,quote}`),
+`sources[]` (status por URL), `token_usage{output_tokens,budget_tokens,tokenizer}`,
+`coverage` (`insufficient`/`partial`/`sufficient` — heurística do maior rerank,
+calibrada no M8), `warnings[]` e `trust: "untrusted_source"`.
+
+**Semântica de falha (SPEC §8):** se **uma** URL falha, a resposta continua
+**200** com o erro em `sources[].status` + `warnings` (nunca um 200 vazio e
+silencioso); se **todas** falham, a resposta é **422** `all_sources_failed`. Uma
+flag de ablação com valor não-default sob `ENV=production` → **400**
+`ablation_not_allowed`.
+
+### Núcleo (funções)
+
+| Função | Módulo | O que faz |
+|---|---|---|
+| `rrf_fuse(ranked_lists, *, k)` | `app/retrieve/rrf.py` | Fusão por reciprocal rank: `score(d) = Σ 1/(k + rank_j(d))`, `k=60` (SPEC §6), genérica na chave, com desempate determinístico pela chave. |
+| `lexical_search(session, *, query, version_ids, limit=50)` | `app/retrieve/lexical.py` | Top-50 por `ts_rank_cd` sobre o `tsvector` gerado (`'simple'`), restrito às versões, posições 1-based, desempate por `(version_id, ord)`. |
+| `vector_search(session, *, query_embedding, version_ids, limit=50)` | `app/retrieve/vector.py` | Top-50 por distância de cosseno pgvector (índice HNSW), restrito às versões, mesmo desempate. |
+| `rerank_candidates(query, fused, *, provider, use_rerank, documents, top_n=30)` | `app/retrieve/rerank.py` | Rerank dos 30 melhores: score do provedor clampado a `[0,1]`, ou — com rerank desligado — o RRF normalizado (min-max; único/empate → `1.0`). |
+| `select(candidates, *, budget_tokens, lambda_, min_value)` + `Candidate` | `app/retrieve/select.py` | Seleção gulosa sob orçamento: a cada passo maximiza `(V_i − λ·max_sim)/√t_i` (`λ=0.5`, `min_value=0.05`), penaliza quase-duplicatas, ordena a saída por `(document_id, ord)`. Inclui `cosine` numericamente seguro. |
+| `assemble_context(req, *, session_factory, blobs, robots, resolver, transport, embeddings, reranker, settings, now)` | `app/retrieve/assemble.py` | Orquestra os passos 1–7 da SPEC §6: resolve+indexa cada URL (falha independente), busca léxica+vetorial, RRF, rerank, seleção (ou ablação `truncate`), e monta `Fragment`s com proveniência completa e `evidence.quote` **literal** da IR (≤300 chars). Sem LLM. |
+| `assemble(req, ...)` (handler HTTP) | `app/api/assemble.py` | Handler `def` síncrono de `POST /v1/context/assemble`: seams `Depends` injetáveis (resolve + `provide_embeddings`/`provide_reranker`), rejeita ablação em produção (`AblationNotAllowed`/400), mapeia `AssembleResult` → `AssembleResponse`, 200 na falha parcial e `AllSourcesFailed`/422 quando todas as URLs falham. |
+
+### Provedor de rerank (`app/providers/rerank/`)
+
+O rerank fica atrás de uma interface, com um fake determinístico usado em TODOS
+os testes e o adaptador real nunca exercido em teste (igual ao padrão de
+embeddings/LLM).
+
+| Símbolo | Módulo | O que faz |
+|---|---|---|
+| `RerankProvider` (Protocol) | `base.py` | `model: str`; `rerank(query, documents) -> list[float]` com um score em `[0,1]` por documento **na ordem de entrada**. |
+| `FakeRerankProvider` | `fake.py` | Score determinístico por sobreposição Jaccard de tokens (disjunto → `0.0`, idêntico → `1.0`), zero rede. Usado em todos os testes. |
+| `JinaRerankProvider` | `jina.py` | Adaptador real da API Jina (`POST /v1/rerank`, Bearer, httpx próprio, min-max para `[0,1]`, `MissingAPIKey` sem chave). Nunca usado em testes. |
+
+Os schemas `AssembleRequest` / `AssembleResponse` (SPEC §8) estão em
+`app/api/schemas.py`. O endpoint é consumível por HTTP hoje; o SDK Python e o
+servidor MCP entram no M9. A rota aparece no OpenAPI vivo em
+`http://localhost:8000/openapi.json`.
 
 ---
 
