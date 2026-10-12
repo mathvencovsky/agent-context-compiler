@@ -100,20 +100,40 @@ min_value ∈ {0.0,0.05,0.1} = 9 combinações.
 honesto do dev: a seleção se sai MELHOR SEM corte por valor mínimo — qualquer
 `min_value` > 0 reduz o sucesso (0.05 → ~0.63-0.69; 0.10 → ~0.23-0.25).
 
-**Cobertura (coverage_low/high).** A derivação original (p33/p66 do MÁXIMO de
-rerank por tarefa) degenerou para 1.0/1.0 porque a Jina normaliza min-max por
-chamada (o melhor candidato vira sempre 1.0). Por isso os limiares vêm da
-distribuição COMPLETA dos scores do top-30 (2134 scores nas 96 tarefas),
-calculada do cache persistente sem gastar Jina: **coverage_low = p33 = 0.0535**,
-**coverage_high = p66 = 0.2312**.
+**Cobertura (coverage_low/high) — corrigida (DECISIONS.md 2026-10-13 "fix").**
+A causa raiz era que o `JinaRerankProvider` normalizava min-max POR CHAMADA
+(desde o M7), então o máximo de rerank por tarefa era sempre 1.0 e `_coverage`
+(que olha esse máximo) retornava "sufficient" quase sempre — campo enganoso.
+Corrigido: o reranker passa a devolver o `relevance_score` ABSOLUTO (comparável
+entre tarefas); a normalização min-max usada pela SELEÇÃO foi movida para
+`rerank_candidates` (só para o `value`, seleção inalterada), e `scores.rerank`
+reporta o absoluto. Os limiares vêm agora do p33/p66 da distribuição do MÁXIMO
+ABSOLUTO por tarefa — a MESMA grandeza que `_coverage` observa — recalculada SÓ
+no dev via `bench.calibrate --coverage-only --real` (96 tarefas; cache de rerank
+reconstruído com scores ABSOLUTOS, embeddings do cache intacto → ZERO OpenAI):
+min 0.1413, max 0.9073 → **coverage_low = p33 = 0.6137**,
+**coverage_high = p66 = 0.7746**. Com esses limiares, as 96 tarefas se dividem em
+**31 insufficient / 31 partial / 34 sufficient** — a cobertura NÃO colapsa.
+Artefato: `bench/results/coverage_20261012T193038_322186/` (`coverage.json` +
+`coverage_scores.csv` com os 96 máximos por tarefa; re-rodar `percentiles` sobre o
+CSV reproduz 0.6137/0.7746, sem Jina). A primeira passagem sofreu 2 respostas 429
+(rate limit) em draft-0063/draft-0087; a re-execução serviu as 94 já cacheadas e
+completou as 2 restantes (~96 chamadas reais de Jina no total).
 
-**Parâmetros CONGELADOS** em `app/config.py` e `.env.example`:
-`selection_lambda=0.3`, `min_value=0.0`, `coverage_low=0.0535`,
-`coverage_high=0.2312` (`rrf_k=60` mantido, não calibrado).
+**Parâmetros CONGELADOS** em `app/config.py`, `.env.example` e `.env` real:
+`selection_lambda=0.3`, `min_value=0.0`, `coverage_low=0.6137`,
+`coverage_high=0.7746` (`rrf_k=60` mantido, não calibrado). As CHAVES do `.env`
+real foram preservadas.
 
 **Custo da calibração:** respondedor OpenAI ~437.135 tokens in + ~51.781 out ≈
 **1,39 USD** (`bench/prices.yaml`). Rerank/embeddings ficaram ~1×96 chamadas
 graças ao cache persistente (muito abaixo dos 10M tokens do plano free da Jina).
+
+**Gate (após o fix da cobertura):** `ruff check` limpo, `ruff format --check`
+limpo, `mypy app` limpo, `pytest -m "not integration and not browser"` → **440
+passed, 36 deselected, 37 snapshots passed** (os 36 deselecionados são
+`integration`/`browser`). O gate do commit da calibração (`a34d52c`) também
+passou verde (orquestrador + CI).
 
 **HONESTIDADE:** a calibração foi feita EXCLUSIVAMENTE no split `dev`. O split
 `test` (41 tarefas) NÃO foi tocado — o calibrador filtra `split == "dev"` em
@@ -128,6 +148,49 @@ Gate rápido (sem serviços, sem rede): `uv run ruff check . ; uv run ruff forma
 — inclui os testes de LÓGICA de calibração (`tests/unit/bench/test_calibrate.py`),
 o teste de injeção de reranker em `test_ours_runner.py` e o property test de
 chunker estendido para prosa grande. A calibração real é o comando humano acima.
+
+### M8 ETAPA 1 — resultado do gate (iteração de revisão 2, 2026-10-13)
+
+Gate executado no estado atual da árvore (mudanças da Etapa 1 aplicadas; nada
+commitado por esta iteração), Windows/PowerShell:
+
+```
+uv run ruff check .            -> All checks passed!
+uv run ruff format --check .   -> 167 files already formatted
+uv run mypy app                -> Success: no issues found in 56 source files
+uv run pytest -m "not integration and not browser"
+                               -> 440 passed, 36 deselected, 37 snapshots passed
+```
+
+Os 440 são os 437 testes pré-existentes de retrieve/bench mais os acréscimos da
+Etapa 1 (lógica de calibração, injeção/equivalência do `ours`, rerank absoluto e
+cobertura). Nenhum teste foi desativado, pulado ou afrouxado. O driver de
+calibração (`run_calibration`/`recompute_coverage`) não é coletado pelo pytest —
+só a lógica pura é testada.
+
+### M8 ETAPA 1 — correção da cobertura (revisão) e estado
+
+1. **Commit da calibração.** A Etapa 1 foi commitada e publicada como `a34d52c`
+   (cumprindo a regra de honestidade do M8: parâmetros congelados e commitados
+   ANTES do split test). A correção da cobertura desta revisão (score absoluto +
+   limiares pelo máximo-por-tarefa) está sobre `a34d52c` como um novo conjunto de
+   mudanças — pode ser commitada com `M8 (stage 1 fix): ...`.
+2. **Proveniência dos limiares — RESOLVIDA.** O bug: `assemble._coverage` olha o
+   MÁXIMO de rerank por tarefa, mas o `JinaRerankProvider` normalizava min-max por
+   chamada, então esse máximo era sempre 1.0 e os limiares (derivados antes da
+   distribuição pooled do top-30) comparavam uma grandeza diferente. Corrigido: o
+   reranker devolve o score ABSOLUTO; a normalização para a SELEÇÃO foi movida
+   para `rerank_candidates` (seleção inalterada). O cache de rerank antigo
+   guardava scores normalizados e foi perdido no diagnóstico, então foi
+   reconstruído chamando a Jina real no dev com o provider de score ABSOLUTO
+   (embeddings do cache intacto → ZERO OpenAI), e `bench.calibrate
+   --coverage-only --real` recalculou os limiares do p33/p66 do máximo ABSOLUTO
+   por tarefa — a MESMA grandeza de `_coverage`: **0.6137 / 0.7746** (96 tarefas),
+   reproduzíveis a partir de
+   `bench/results/coverage_20261012T193038_322186/coverage_scores.csv` (sem Jina).
+   As 96 tarefas dev se dividem em 31/31/34 (insufficient/partial/sufficient). O
+   `CachingRerankProvider` agora persiste o score ABSOLUTO (documentado), evitando
+   a recorrência do bug.
 
 ---
 
@@ -194,8 +257,10 @@ rede.
 ### Dívidas / notas do M7
 
 - A `coverage` (`insufficient`/`partial`/`sufficient`) é uma HEURÍSTICA sobre o
-  maior score de rerank (limiares `coverage_low=0.2`/`coverage_high=0.5`), a ser
-  calibrada no M8 — não é garantia de correção.
+  maior score de rerank — não é garantia de correção. Os limiares eram
+  provisórios no M7 (`0.2`/`0.5`); foram CALIBRADOS e congelados no M8 Etapa 1
+  (`coverage_low=0.6137`/`coverage_high=0.7746`, do p33/p66 do máximo absoluto
+  por tarefa no dev — ver a seção do M8 acima).
 - Com os providers FAKE sobre a fixture pequena, os scores do reranker Jaccard
   ficam quase sempre abaixo de `min_value=0.05`, então o caminho guloso (`ours`)
   tende a selecionar pouco ou nada; a ablação `ours_truncate` (sem o corte por

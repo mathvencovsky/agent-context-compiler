@@ -81,12 +81,14 @@ class Settings(BaseSettings):
     # dev split ONLY (96 tasks, budget 4000, real providers); the test split was
     # NOT touched (DECISIONS.md 2026-10-13). selection_lambda/min_value are the
     # grid winner (λ=0.3, min_value=0.0 — in dev, selection does best with NO
-    # min-value cut). coverage_low/high are the p33/p66 of the observed top-30
-    # rerank-score distribution on dev (Option A).
+    # min-value cut). coverage_low/high are the p33/p66 of the PER-TASK MAX
+    # ABSOLUTE rerank-score distribution on dev (96 tasks) — the exact quantity
+    # assemble._coverage classifies on, so threshold and observable are the same
+    # grandeza (31/31/34 insufficient/partial/sufficient over the 96 dev tasks).
     selection_lambda: float = 0.3
     min_value: float = 0.0
-    coverage_low: float = 0.0535
-    coverage_high: float = 0.2312
+    coverage_low: float = 0.6137
+    coverage_high: float = 0.7746
     rrf_k: int = 60
 
     # Benchmark LLM keys (M2, SPEC §10). Optional: the deterministic fake

@@ -384,9 +384,9 @@ curl -s -X POST http://localhost:8000/v1/context/assemble \
 `document_id`, `version_id`, `source_url`, `heading_path`, `md`, `tokens`,
 `scores{lexical_rank,vector_rank,rrf,rerank}` e `evidence[]{block_id,page,quote}`),
 `sources[]` (status por URL), `token_usage{output_tokens,budget_tokens,tokenizer}`,
-`coverage` (`insufficient`/`partial`/`sufficient` — heurística do maior rerank;
-limiares calibrados no M8: `coverage_low=0.0535`, `coverage_high=0.2312`),
-`warnings[]` e `trust: "untrusted_source"`.
+`coverage` (`insufficient`/`partial`/`sufficient` — heurística do maior rerank
+ABSOLUTO; limiares calibrados no M8: `coverage_low=0.6137`,
+`coverage_high=0.7746`), `warnings[]` e `trust: "untrusted_source"`.
 
 **Semântica de falha (SPEC §8):** se **uma** URL falha, a resposta continua
 **200** com o erro em `sources[].status` + `warnings` (nunca um 200 vazio e
@@ -448,8 +448,9 @@ PURA é unit-testada (`tests/unit/bench/test_calibrate.py`), sem rede.
 |---|---|
 | `pick_best(results)` | Escolhe a combinação vencedora: taxa de sucesso (desc), desempate por menor custo/tarefa concluída, depois menor média de tokens de contexto, depois `(lambda_, min_value)` crescente — vencedor único e determinístico. |
 | `percentiles(scores, pcts)` | Percentis por posição (nearest-rank, mesma convenção de `report._percentile`), ex.: `p33`/`p66`. |
-| `coverage_from_scores(scores)` | Deriva `(coverage_low, coverage_high) = (p33, p66)` da distribuição do máximo-rerank observado no `dev` (D7) — heurística honesta sobre o único observável, sem rótulos. |
-| `run_calibration(...)` | Carrega SÓ `split == "dev"`, mede as 9 combinações (λ ∈ {0.3,0.5,0.7} × min_value ∈ {0.0,0.05,0.1}) no orçamento 4000 com os provedores reais, escolhe o vencedor, deriva a cobertura e escreve o artefato `bench/results/calibration_<ts>/`. |
+| `coverage_from_scores(scores)` | Deriva `(coverage_low, coverage_high) = (p33, p66)` da distribuição do **máximo de rerank por tarefa** (score absoluto) observado no `dev` — a mesma grandeza que `assemble._coverage` classifica em runtime, então limiar e observável são a mesma coisa. Heurística honesta sobre o observável real, sem rótulos. |
+| `run_calibration(...)` | Carrega SÓ `split == "dev"`, mede as 9 combinações (λ ∈ {0.3,0.5,0.7} × min_value ∈ {0.0,0.05,0.1}) no orçamento 4000 com os provedores reais, escolhe o vencedor, deriva a cobertura do máximo-rerank por tarefa e escreve o artefato `bench/results/calibration_<ts>/` (inclui `coverage_scores.csv` para auditoria). |
+| `recompute_coverage(...)` | Recomputa SÓ os limiares de cobertura a partir da distribuição do máximo-rerank do `dev` (apenas Jina, via cache; sem OpenAI, sem a grade). CLI: `--coverage-only`. |
 
 Invocação (após subir a infra e com as chaves no `.env` real):
 
@@ -473,12 +474,24 @@ orçamento), gastando zero cota de Jina para pares já computados.
 
 A calibração real no `dev` (96 tarefas, orçamento 4000) elegeu **λ = 0.3,
 min_value = 0.0** (taxa de sucesso 0.8125 — no dev, a seleção vai melhor **sem**
-corte por valor mínimo). Os limiares de cobertura vêm dos percentis p33/p66 da
-distribuição completa dos scores de rerank do top-30 observados no dev:
-**coverage_low = 0.0535**, **coverage_high = 0.2312**. Valores congelados em
-`app/config.py` / `.env.example`. A calibração foi feita **só no split `dev`**; o
-split `test` não foi tocado (regra de honestidade do M8). Detalhes e a tabela das
-9 combinações em [`PROGRESS.md`](PROGRESS.md) e [`DECISIONS.md`](DECISIONS.md).
+corte por valor mínimo). Os limiares de cobertura são o **p33/p66 do máximo
+ABSOLUTO de rerank por tarefa** no dev (96 tarefas) — a mesma grandeza que
+`assemble._coverage` observa: **coverage_low = 0.6137**, **coverage_high =
+0.7746**. Com eles, as 96 tarefas dev se dividem em 31/31/34
+(insufficient/partial/sufficient), ou seja, a cobertura não colapsa num único
+rótulo. Valores congelados em `app/config.py` / `.env.example`. A calibração foi
+feita **só no split `dev`**; o split `test` não foi tocado (regra de honestidade
+do M8). Detalhes e a tabela das 9 combinações em [`PROGRESS.md`](PROGRESS.md) e
+[`DECISIONS.md`](DECISIONS.md).
+
+> **Cobertura — score absoluto.** O `JinaRerankProvider` devolve o
+> `relevance_score` **absoluto** da Jina (comparável entre tarefas); a
+> normalização min-max usada pela **seleção** vive em `rerank_candidates` (não
+> afeta a cobertura). Assim `assemble._coverage` e os limiares congelados
+> comparam a **mesma grandeza** (o máximo absoluto por tarefa). Os números são
+> reproduzíveis a partir de
+> `bench/results/coverage_20261012T193038_322186/coverage_scores.csv`
+> (re-rodar `percentiles` sobre o CSV reproduz 0.6137/0.7746, sem gastar Jina).
 
 ---
 

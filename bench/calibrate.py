@@ -24,9 +24,15 @@ Split of responsibilities:
 
 Grid (human decision, DECISIONS.md 2026-10-13): ``lambda ∈ {0.3, 0.5, 0.7}`` ×
 ``min_value ∈ {0.0, 0.05, 0.1}`` = 9 combinations, calibrated ONLY at budget
-4000. ``coverage_low``/``coverage_high`` are NOT in the grid; they are derived
-from the ``p33``/``p66`` percentiles of the observed dev max-rerank distribution
-for the winning combination.
+4000. ``coverage_low``/``coverage_high`` are NOT in the grid; they are the
+``p33``/``p66`` percentiles of the PER-TASK MAXIMUM absolute rerank score across
+the dev tasks — the exact quantity ``assemble._coverage`` classifies on, so the
+frozen thresholds and the runtime observable are the same grandeza. (The
+reranker returns ABSOLUTE relevance scores — see ``app/providers/rerank/jina.py``
+— so the per-task max varies across tasks and does not degenerate to ``1.0`` the
+way the old per-call min-max normalization did.) The per-task max scores are
+dumped to ``coverage_scores.csv`` so the frozen thresholds are reproducible
+without any Jina call.
 """
 
 from __future__ import annotations
@@ -137,13 +143,18 @@ def percentiles(
 
 
 def coverage_from_scores(scores: list[float]) -> tuple[float, float]:
-    """Derive ``(coverage_low, coverage_high)`` from observed rerank scores (D7).
+    """Derive ``(coverage_low, coverage_high)`` from the per-task max rerank.
 
-    Splits the observed max-rerank distribution into roughly equal thirds:
-    ``coverage_low = p33`` and ``coverage_high = p66``. This is an honest
-    heuristic over the single observable (max rerank) and needs no labels, so it
-    never consults the test split. An empty input yields the config defaults'
-    spirit ``(0.0, 0.0)`` (the caller should note too few scores).
+    Splits the observed distribution into roughly equal thirds:
+    ``coverage_low = p33`` and ``coverage_high = p66``. The input is the list of
+    PER-TASK MAXIMUM absolute rerank scores across the dev tasks — the exact
+    quantity ``assemble._coverage`` classifies on, so the frozen thresholds and
+    the runtime observable are the SAME grandeza. (The reranker returns ABSOLUTE
+    relevance scores, comparable across tasks; the per-task max therefore has
+    real spread and does not degenerate to ``1.0`` the way the old per-call
+    min-max normalization did.) An honest heuristic over the real observable,
+    needing no labels, so it never consults the test split. An empty input
+    yields ``(0.0, 0.0)`` (the caller should note too few scores).
     """
     pct = percentiles(scores, (0.33, 0.66))
     return pct["p33"], pct["p66"]
@@ -260,6 +271,21 @@ def _write_combinations_csv(out_dir: Path, results: list[CombinationResult]) -> 
     (out_dir / "combinations.csv").write_text("".join(lines), encoding="utf-8")
 
 
+def _write_coverage_scores_csv(out_dir: Path, scores: list[float]) -> None:
+    """Dump the PER-TASK MAX rerank scores (sorted) that the thresholds use.
+
+    This is the auditable source of ``coverage_low``/``coverage_high``: anyone
+    can re-run :func:`percentiles` over this file and reproduce the frozen p33/
+    p66 without a single Jina call. One row per dev task (its max absolute rerank
+    score — the quantity ``assemble._coverage`` observes). Sorted + fixed
+    precision for a diff-friendly, deterministic artifact.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    lines = ["per_task_max_rerank_score\n"]
+    lines.extend(f"{s:.6f}\n" for s in sorted(scores))
+    (out_dir / "coverage_scores.csv").write_text("".join(lines), encoding="utf-8")
+
+
 def _write_artifact(
     out_dir: Path,
     *,
@@ -269,6 +295,9 @@ def _write_artifact(
     coverage_high: float,
     coverage_pcts: dict[str, float],
     n_coverage_scores: int,
+    coverage_scores: list[float],
+    pooled_top30_pcts: dict[str, float],
+    n_pooled_top30: int,
     coverage_errors: int,
     budget: int,
     n_tasks: int,
@@ -279,16 +308,23 @@ def _write_artifact(
     rerank_cache_hits: int | None,
     embed_api_calls: int | None,
 ) -> None:
-    """Write the calibration artifact: ``combinations.csv`` + winner + summary."""
+    """Write the calibration artifact: combos + winner + summary + score dump."""
     _write_combinations_csv(out_dir, results)
+    _write_coverage_scores_csv(out_dir, coverage_scores)
 
     winner_payload = {
         "selection_lambda": winner.lambda_,
         "min_value": winner.min_value,
+        # Frozen coverage: p33/p66 of the PER-TASK MAX absolute rerank scores —
+        # the same quantity assemble._coverage observes at runtime.
         "coverage_low": coverage_low,
         "coverage_high": coverage_high,
         "coverage_percentiles": coverage_pcts,
+        "coverage_source": "per_task_max_absolute_rerank_score",
         "n_coverage_scores": n_coverage_scores,
+        # Pooled top-30 percentiles — supplementary audit context only.
+        "pooled_top30_percentiles": pooled_top30_pcts,
+        "n_pooled_top30": n_pooled_top30,
         "coverage_errors": coverage_errors,
         "success_rate": winner.success_rate,
         "cost_per_completed_task": winner.cost_per_completed_task,
@@ -325,12 +361,23 @@ def _write_artifact(
         f"- cost_per_completed_task = {winner.cost_per_completed_task:.6f}",
         f"- mean_context_tokens = {winner.mean_context_tokens:.1f}",
         "",
-        "## Coverage thresholds (derived from observed dev max-rerank, D7)",
+        "## Coverage thresholds (per-task MAX absolute rerank — same as runtime)",
+        "",
+        "Frozen from the p33/p66 of the PER-TASK MAX absolute rerank score "
+        "across the dev tasks (dumped to coverage_scores.csv for audit). This is "
+        "the exact quantity assemble._coverage classifies on, so threshold and "
+        "observable are the same grandeza. Absolute scores (the reranker no "
+        "longer min-max normalizes per call) make the per-task max vary across "
+        "tasks, so the three coverage buckets stay non-degenerate.",
         "",
         f"- coverage_low = p33 = {coverage_low:.4f}",
         f"- coverage_high = p66 = {coverage_high:.4f}",
-        f"- scores observed: {n_coverage_scores} (tasks skipped on "
-        f"provider error: {coverage_errors})",
+        f"- per-task max scores observed: {n_coverage_scores} (tasks skipped "
+        f"on provider error: {coverage_errors})",
+        f"- pooled top-30 p33/p66 (supplementary): "
+        f"{pooled_top30_pcts.get('p33', 0.0):.4f}/"
+        f"{pooled_top30_pcts.get('p66', 0.0):.4f} "
+        f"over {n_pooled_top30} scores",
         "",
         "## Cost (answerer, priced from prices.yaml)",
         "",
@@ -389,7 +436,15 @@ def run_calibration(
     # coverage (D7) comes from the SAME cached result — no second rerank pass.
     prepare_runner = OursRunner(embeddings=embeddings, reranker=reranker)
     prepared_by_task: dict[str, PreparedCandidates] = {}
+    # Coverage observable: the PER-TASK MAX absolute rerank score — the exact
+    # quantity ``assemble._coverage`` thresholds on. The thresholds are the
+    # p33/p66 of this distribution, so threshold and observable are the SAME
+    # grandeza. (The reranker now returns ABSOLUTE scores, comparable across
+    # tasks — see app/providers/rerank/jina.py — so the per-task max no longer
+    # degenerates to 1.0 the way the old per-call min-max normalization did.)
     coverage_scores: list[float] = []
+    # The POOLED top-30 scores are kept only as supplementary audit context.
+    pooled_top30_scores: list[float] = []
     coverage_errors = 0
     for task in tasks:
         try:
@@ -399,6 +454,7 @@ def run_calibration(
             print(f"prepare: task {task.id} failed, skipped: {exc}")
             continue
         prepared_by_task[task.id] = prepared
+        pooled_top30_scores.extend(prepared.rerank_scores)
         if prepared.max_rerank is not None:
             coverage_scores.append(prepared.max_rerank)
 
@@ -428,8 +484,12 @@ def run_calibration(
     ]
     winner = pick_best(results)
 
+    # Freeze coverage from the PER-TASK MAX absolute-rerank distribution — the
+    # same quantity assemble._coverage observes (threshold == observable).
     coverage_low, coverage_high = coverage_from_scores(coverage_scores)
     coverage_pcts = percentiles(coverage_scores, (0.33, 0.66))
+    # Record the pooled top-30 percentiles too, as supplementary audit context.
+    pooled_top30_pcts = percentiles(pooled_top30_scores, (0.33, 0.66))
 
     answerer_cost = model_cost_usd(
         input_tokens=cost_acc.answerer_input_tokens,
@@ -450,6 +510,9 @@ def run_calibration(
         coverage_high=coverage_high,
         coverage_pcts=coverage_pcts,
         n_coverage_scores=len(coverage_scores),
+        coverage_scores=coverage_scores,
+        pooled_top30_pcts=pooled_top30_pcts,
+        n_pooled_top30=len(pooled_top30_scores),
         coverage_errors=coverage_errors,
         budget=budget,
         n_tasks=len(measured_tasks),
@@ -461,6 +524,71 @@ def run_calibration(
         embed_api_calls=embed_api_calls,
     )
     return out_dir
+
+
+def recompute_coverage(
+    *,
+    tasks_path: str | Path = DEFAULT_TASKS_PATH,
+    corpus_dir: str | Path = DEFAULT_CORPUS_DIR,
+    results_root: str | Path = DEFAULT_RESULTS_ROOT,
+    timestamp: str | None = None,
+    retrieval_factory: (
+        Callable[[], tuple[EmbeddingProvider, RerankProvider]] | None
+    ) = None,
+) -> tuple[float, float, Path]:
+    """Recompute ONLY the coverage thresholds from the dev rerank distribution.
+
+    Runs the prepare pass (search + Jina rerank, served from the persistent
+    cache when available — zero OpenAI, no grid, no answerer/judge) over the dev
+    split, collects each task's MAX absolute rerank score, and derives
+    ``(coverage_low, coverage_high)`` as the p33/p66 of that distribution — the
+    same quantity ``assemble._coverage`` observes. Writes a lightweight artifact
+    (``coverage_scores.csv`` + ``coverage.json``) and returns the thresholds and
+    the artifact dir. HONESTY RULE: dev split ONLY (filtered in code).
+    """
+    tasks = [t for t in load_tasks(tasks_path) if t.split == _DEV_SPLIT]
+    if not tasks:
+        raise ValueError(f"no tasks with split=={_DEV_SPLIT!r} in {tasks_path}")
+
+    store = CorpusStore(corpus_dir)
+    embeddings, reranker = (retrieval_factory or _make_retrieval_providers)()
+    prepare_runner = OursRunner(embeddings=embeddings, reranker=reranker)
+
+    coverage_scores: list[float] = []
+    errors = 0
+    for task in tasks:
+        try:
+            prepared = prepare_runner.prepare_candidates(task, store=store)
+        except Exception as exc:  # noqa: BLE001 — report, never invent.
+            errors += 1
+            print(f"prepare: task {task.id} failed, skipped: {exc}")
+            continue
+        if prepared.max_rerank is not None:
+            coverage_scores.append(prepared.max_rerank)
+
+    coverage_low, coverage_high = coverage_from_scores(coverage_scores)
+
+    if timestamp is None:
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S_%f")
+    out_dir = Path(results_root) / f"coverage_{timestamp}"
+    _write_coverage_scores_csv(out_dir, coverage_scores)
+    payload = {
+        "coverage_low": coverage_low,
+        "coverage_high": coverage_high,
+        "coverage_percentiles": percentiles(coverage_scores, (0.33, 0.66)),
+        "coverage_source": "per_task_max_absolute_rerank_score",
+        "n_coverage_scores": len(coverage_scores),
+        "errors": errors,
+        "split": _DEV_SPLIT,
+        "rerank_api_calls": getattr(reranker, "api_calls", None),
+        "rerank_cache_hits": getattr(reranker, "hits", None),
+        "git_commit": _git_commit(),
+    }
+    (out_dir / "coverage.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return coverage_low, coverage_high, out_dir
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -475,7 +603,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--real",
         action="store_true",
-        required=True,
         help="confirm the REAL providers run (spends keys; dev split only)",
     )
     parser.add_argument(
@@ -484,12 +611,31 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=CALIBRATION_BUDGET,
         help="context token budget (human decision: calibrate only at 4000)",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--coverage-only",
+        action="store_true",
+        help=(
+            "recompute ONLY the coverage thresholds from the dev rerank "
+            "distribution (Jina only, cached; no OpenAI, no grid). Still a REAL "
+            "run (uses the Jina key)."
+        ),
+    )
+    args = parser.parse_args(argv)
+    # Either path is a REAL run; require explicit confirmation via one of the
+    # two flags so a bare invocation never silently spends keys.
+    if not (args.real or args.coverage_only):
+        parser.error("pass --real (full grid) or --coverage-only (coverage recompute)")
+    return args
 
 
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point: run the real dev-split calibration and print the path."""
     args = _parse_args(argv)
+    if args.coverage_only:
+        low, high, out_dir = recompute_coverage()
+        print(f"coverage_low={low:.4f} coverage_high={high:.4f}")
+        print(f"wrote coverage artifact to {out_dir}")
+        return
     out_dir = run_calibration(budget=args.budget)
     print(f"wrote calibration artifact to {out_dir}")
 

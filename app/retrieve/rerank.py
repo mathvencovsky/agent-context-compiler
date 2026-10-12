@@ -4,10 +4,13 @@ The fused RRF ranking (SPEC §6 step 3) is trimmed to its top-30 and each
 surviving candidate is assigned the ``value`` the greedy selector will use:
 
 - ``use_rerank=True``: the reranker scores every candidate's document text
-  against the query. The provider already returns scores in ``[0, 1]`` in input
-  order (:class:`~app.providers.rerank.base.RerankProvider`); we clamp
-  defensively and use that as the value, keeping the raw score for
-  ``scores.rerank``.
+  against the query, returning an ABSOLUTE relevance score in ``[0, 1]`` in input
+  order (:class:`~app.providers.rerank.base.RerankProvider`). The greedy
+  selector's VALUE is the per-batch min-max normalization of those scores (so a
+  task's best candidate anchors the diversity trade-off), while the ABSOLUTE
+  score is reported as ``scores.rerank`` — it is comparable across tasks and is
+  the observable the coverage heuristic thresholds on. ``rerank_score`` is
+  ``None`` only in the rerank-off ablation.
 - ``use_rerank=False`` (ablation): the provider is skipped and the value is the
   min-max NORMALIZED RRF score over the top-30. A single candidate — or an
   all-equal set — normalizes to ``1.0``. ``rerank_score`` is ``None`` in this
@@ -34,11 +37,13 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
-def _normalize_rrf(scores: list[float]) -> list[float]:
-    """Min-max normalize fused scores to ``[0, 1]``.
+def _min_max_normalize(scores: list[float]) -> list[float]:
+    """Min-max normalize scores to ``[0, 1]``.
 
     A single element or an all-equal set has no spread, so every value maps to
-    ``1.0`` (the fragments are equally the best available).
+    ``1.0`` (the fragments are equally the best available). Used both for the
+    rerank-off RRF value and for the per-batch selection value derived from the
+    reranker's absolute scores.
     """
     if not scores:
         return []
@@ -73,11 +78,19 @@ def rerank_candidates[K](
 
     if use_rerank:
         texts = [documents[key] for key, _ in top]
-        raw_scores = provider.rerank(query, texts)
+        # ``raw_scores`` are ABSOLUTE rerank scores (the real provider returns
+        # the vendor's relevance_score verbatim; see jina.py). The greedy
+        # selector's VALUE is the per-batch min-max normalization of those
+        # absolute scores (so selection behavior matches the historical pipeline
+        # — the provider used to normalize before returning). The REPORTED
+        # ``rerank_score`` is the ABSOLUTE score, which is comparable across
+        # tasks and is what ``assemble._coverage`` thresholds on.
+        raw_scores = [_clamp01(s) for s in provider.rerank(query, texts)]
+        values = _min_max_normalize(raw_scores)
         return [
-            (key, _clamp01(score), score)
-            for (key, _), score in zip(top, raw_scores, strict=True)
+            (key, value, absolute)
+            for (key, _), value, absolute in zip(top, values, raw_scores, strict=True)
         ]
 
-    normalized = _normalize_rrf([fused_score for _, fused_score in top])
+    normalized = _min_max_normalize([fused_score for _, fused_score in top])
     return [(key, value, None) for (key, _), value in zip(top, normalized, strict=True)]

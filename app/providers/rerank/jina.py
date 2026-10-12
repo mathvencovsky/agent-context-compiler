@@ -66,10 +66,18 @@ class JinaRerankProvider:
     def rerank(self, query: str, documents: list[str]) -> list[float]:
         """Score each document against ``query`` via the Jina rerank API.
 
-        Returns one relevance score per document IN INPUT ORDER. The vendor
-        returns results by ``index`` (not necessarily input order); scores are
-        reordered to input order and min-max normalized to ``[0, 1]`` (a single
-        document, or all-equal scores, normalizes to ``1.0``).
+        Returns one ABSOLUTE relevance score per document IN INPUT ORDER. The
+        vendor returns results by ``index`` (not necessarily input order), so
+        scores are reordered to input order. The raw ``relevance_score`` is
+        returned verbatim (clamped to ``[0, 1]`` defensively) — NOT min-max
+        normalized per call. Absolute scores are comparable ACROSS calls/tasks,
+        which the coverage heuristic (``assemble._coverage``) requires; the
+        per-candidate min-max normalization that the greedy selector uses as its
+        value lives in ``app.retrieve.rerank.rerank_candidates`` instead, so the
+        selection behavior is unchanged while coverage gets a meaningful,
+        cross-task-comparable observable (DECISIONS.md 2026-10-13 — the per-call
+        normalization previously here made every task's max score 1.0, breaking
+        coverage).
         """
         if not documents:
             return []
@@ -89,12 +97,13 @@ class JinaRerankProvider:
         response.raise_for_status()
         results = response.json()["results"]
 
-        # Reorder vendor results (keyed by index) back into input order.
+        # Reorder vendor results (keyed by index) back into input order and keep
+        # the ABSOLUTE relevance score (defensively clamped to [0, 1]).
         raw_scores: list[float] = [0.0] * len(documents)
         for item in results:
-            raw_scores[item["index"]] = float(item["relevance_score"])
+            raw_scores[item["index"]] = _clamp01(float(item["relevance_score"]))
 
-        return _min_max_normalize(raw_scores)
+        return raw_scores
 
     def _post_with_retry(
         self,
@@ -137,11 +146,6 @@ def _retry_after(response: httpx.Response, fallback: float) -> float:
         return fallback
 
 
-def _min_max_normalize(scores: list[float]) -> list[float]:
-    """Min-max scale ``scores`` to ``[0, 1]``; single/all-equal -> all ``1.0``."""
-    lo = min(scores)
-    hi = max(scores)
-    span = hi - lo
-    if span == 0.0:
-        return [1.0] * len(scores)
-    return [(s - lo) / span for s in scores]
+def _clamp01(value: float) -> float:
+    """Clamp ``value`` into ``[0, 1]`` (defensive against vendor drift)."""
+    return max(0.0, min(1.0, value))

@@ -99,6 +99,17 @@ class CachingRerankProvider:
     a task's top-30 is invariant to those). On a hit the vendor is NOT called.
     Also counts ``api_calls`` (actual vendor calls) and ``hits`` so the run can
     report how many rerank calls were really made.
+
+    What is cached is the delegate's return verbatim, which for
+    :class:`~app.providers.rerank.jina.JinaRerankProvider` is the ABSOLUTE
+    ``relevance_score`` (NOT min-max normalized). This is deliberate: the
+    coverage observable (``assemble._coverage``) and the frozen thresholds both
+    read the absolute per-task max, so caching the absolute score keeps the
+    stored data reproducible and comparable across tasks. Any min-max
+    normalization the greedy selector needs is applied downstream in
+    ``app.retrieve.rerank.rerank_candidates``, never baked into the cache. (An
+    earlier cache stored per-call-normalized scores, which pinned every task's
+    max at 1.0 and broke coverage; see DECISIONS.md 2026-10-13.)
     """
 
     def __init__(

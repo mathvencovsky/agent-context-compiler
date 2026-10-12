@@ -107,16 +107,23 @@ class PreparedCandidates:
     """The selection-invariant result of the pipeline steps (1)-(5).
 
     Holds the reranked :class:`Candidate` list plus the minimal maps needed to
-    emit the context (``md_by_key``, ``url_by_document``) and the max rerank
-    score (for coverage derivation). Depends only on the task + search/rerank —
-    NOT on ``lambda_``/``min_value`` — so it can be computed once per task and
-    reused across the calibration grid.
+    emit the context (``md_by_key``, ``url_by_document``), the max rerank score
+    (per-task observable used by ``assemble._coverage``) and the FULL list of
+    top-30 rerank scores (``rerank_scores``). Depends only on the task +
+    search/rerank — NOT on ``lambda_``/``min_value`` — so it can be computed
+    once per task and reused across the calibration grid.
+
+    ``rerank_scores`` is the raw, un-aggregated per-candidate rerank-score list
+    (the reranker's output for the fused top-30, in trimmed order). The M8
+    calibrator pools these across the dev tasks to derive the frozen coverage
+    thresholds (D7 "Option A"); it is the auditable source of those numbers.
     """
 
     candidates: list[Candidate]
     md_by_key: dict[_Key, str]
     url_by_document: dict[str, str]
     max_rerank: float | None
+    rerank_scores: list[float]
 
 
 def _source_for(url: str, content_type: str) -> tuple[SourceInfo, str, str]:
@@ -260,7 +267,11 @@ class OursRunner:
         indexed, url_by_document = self._index_task(task, store)
         if not indexed:
             return PreparedCandidates(
-                candidates=[], md_by_key={}, url_by_document={}, max_rerank=None
+                candidates=[],
+                md_by_key={},
+                url_by_document={},
+                max_rerank=None,
+                rerank_scores=[],
             )
 
         embeddings = self._embeddings()
@@ -280,7 +291,11 @@ class OursRunner:
         fused = rrf_fuse([lexical_ranked, vector_ranked], k=_RRF_K)
         if not fused:
             return PreparedCandidates(
-                candidates=[], md_by_key={}, url_by_document={}, max_rerank=None
+                candidates=[],
+                md_by_key={},
+                url_by_document={},
+                max_rerank=None,
+                rerank_scores=[],
             )
 
         # (5) rerank the top-30 (injected provider or fake) -> selection value.
@@ -313,6 +328,7 @@ class OursRunner:
             md_by_key=md_by_key,
             url_by_document=url_by_document,
             max_rerank=max_rerank,
+            rerank_scores=rerank_scores,
         )
 
     def assemble_from_candidates(

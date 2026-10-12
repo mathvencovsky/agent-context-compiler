@@ -226,6 +226,30 @@ def test_prepared_candidates_are_lambda_invariant(
         pa = a.prepare_candidates(task, store=store)
         pb = b.prepare_candidates(task, store=store)
         assert pa.max_rerank == pb.max_rerank
+        assert pa.rerank_scores == pb.rerank_scores
         assert [(c.document_id, c.ord, c.value, c.tokens) for c in pa.candidates] == [
             (c.document_id, c.ord, c.value, c.tokens) for c in pb.candidates
         ]
+
+
+def test_prepared_exposes_full_top30_scores(
+    store: CorpusStore, tasks: list[Task]
+) -> None:
+    """``prepare_candidates`` exposes the FULL top-30 rerank scores (M8 D7).
+
+    The M8 calibrator pools ``rerank_scores`` across the dev tasks to derive the
+    frozen coverage thresholds from the real distribution (Option A), instead of
+    the per-task max which Jina normalization pins at 1.0. This proves the field
+    is populated and that ``max_rerank`` is exactly the max of that list — so the
+    pooled distribution the thresholds come from is auditable. Fully offline.
+    """
+    runner = OursRunner()
+    saw_scores = False
+    for task in _answerable_tasks(tasks):
+        prepared = runner.prepare_candidates(task, store=store)
+        if prepared.rerank_scores:
+            saw_scores = True
+            assert prepared.max_rerank == max(prepared.rerank_scores)
+            # The fake reranker returns scores in [0, 1].
+            assert all(0.0 <= s <= 1.0 for s in prepared.rerank_scores)
+    assert saw_scores, "no task produced any rerank score"

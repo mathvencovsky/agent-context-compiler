@@ -26,8 +26,15 @@ def test_top_30_cap() -> None:
     assert [key for key, _, _ in out] == [f"k{i}" for i in range(30)]
 
 
-def test_rerank_on_uses_provider_scores_in_range_and_aligned() -> None:
-    """With rerank on, values are the (clamped) provider scores, aligned to input."""
+def test_rerank_on_reports_absolute_score_and_normalizes_value() -> None:
+    """With rerank on: reported ``raw`` is the ABSOLUTE provider score; the
+    selection ``value`` is the per-batch min-max normalization of those scores.
+
+    The absolute score is what ``assemble._coverage`` thresholds on (comparable
+    across tasks); the normalized value is what the greedy selector uses (so the
+    best candidate anchors the diversity trade-off). The two coincide only when
+    the batch already spans ``[0, 1]``.
+    """
     fused = [("a", 0.9), ("b", 0.8), ("c", 0.7)]
     documents = {
         "a": "authenticate api header token",
@@ -35,7 +42,7 @@ def test_rerank_on_uses_provider_scores_in_range_and_aligned() -> None:
         "c": "api token header",
     }
     provider = FakeRerankProvider()
-    expected = provider.rerank("api token header", list(documents.values()))
+    absolute = provider.rerank("api token header", list(documents.values()))
 
     out = rerank_candidates(
         "api token header",
@@ -46,10 +53,15 @@ def test_rerank_on_uses_provider_scores_in_range_and_aligned() -> None:
     )
     keys = [key for key, _, _ in out]
     assert keys == ["a", "b", "c"]  # input order preserved
-    for (_, value, raw), exp in zip(out, expected, strict=True):
+    # Reported raw == absolute provider score (for scores.rerank / coverage).
+    for (_, _, raw), exp in zip(out, absolute, strict=True):
+        assert raw == exp
+    # Selection value == min-max normalization of the absolute scores.
+    lo, hi = min(absolute), max(absolute)
+    for _, value, raw in out:
         assert 0.0 <= value <= 1.0
-        assert raw == exp  # raw rerank score retained for scores.rerank
-        assert value == exp
+        expected_value = 1.0 if hi == lo else (raw - lo) / (hi - lo)
+        assert abs(value - expected_value) < 1e-9
 
 
 def test_rerank_off_uses_normalized_rrf_in_unit_range() -> None:
