@@ -10,6 +10,19 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-13: M8 — medição FINAL do split `test` após o fix de proveniência (citação 0.000 → 0.585)
+Contexto: a rodada da Etapa 2 (commit `48e9e57`) mediu o split `test` ANTES do fix do Defeito 1 (o runner `ours` emitia só o Markdown dos chunks, sem o header `[URL]`, então o respondedor não tinha URL para citar e a precisão de citação era 0.000). O fix (commit `6cfad7c`) fez `assemble_from_candidates` emitir `[URL] <source_url>\n<md>` por fragmento (mesma proveniência do `naive_rag`), validado PRIMEIRO no dev (0.000 → 0.406, `m8-dev-remeasure.md`). Faltava a confirmação FINAL no split reservado, abortada antes por falta de crédito OpenAI (recarregado US$16).
+Decisão: rodar o benchmark COMPLETO no `test` (41 tarefas × 9 estratégias × 3 orçamentos = 1107 linhas) no commit `6cfad7c`, com os parâmetros CONGELADOS da Etapa 1 (só LIDOS de `app/config.py`), reusando o cache persistente, e documentar o resultado HONESTO. O split `test` foi apenas MEDIDO; nada foi ajustado olhando-o (`git diff app/config.py` vazio). Artefato: `bench/results/m8-test-2026-10-13/` (config.json `git_commit=6cfad7c`).
+Resultado honesto (orçamento de referência 4000, fonte `results.csv`):
+- **Citação do `ours`: 0.000 → 0.585** (24/41 tarefas com citação verificada, idêntico em 2000/4000/8000). O Defeito 1 está corrigido e MEDIDO no split reservado.
+- **Qualidade: empate geral** com `naive_rag` (ours=0.780 [0.634, 0.902] vs 0.707 [0.561, 0.854]); nenhuma categoria com vitória NEM derrota de IC não sobreposto; `ours` numericamente à frente. Nos 3 orçamentos: ours 0.732/0.780/0.805 (sobe) vs naive_rag 0.780/0.707/0.683 (cai).
+- **Custo ~metade**: ours US$ 0.005100 vs naive_rag US$ 0.008923 por tarefa concluída (~43% mais barato), ~44% menos tokens de contexto, INSUFFICIENT=0.000 (vs 0.098). A tese "menos custo pelo mesmo resultado, com evidência rastreável" se sustenta no split reservado.
+- **Rerank ajuda** no test (ours 0.780 > ours_no_rerank 0.732, +0.049), consistente com o dev (+0.062); INVERTE o número pré-fix (no-rerank 0.805 > ours 0.732). Não desligar.
+- Reuso do cache: 0 chamadas reais de Jina (205 hits), 0 batches reais de embeddings (14501 hits) — zero gasto novo de recuperação; o fix não toca a recuperação.
+Correção do template obsoleto: `bench/report_m8.py` emitia prosa FIXA ("citation precision is 0.000" / "`ours` não cita" / "ours_no_rerank=0.805 vs ours=0.732") herdada da rodada antiga, que CONTRADIZIA a coluna `cite_prec`=0.585 do próprio relatório. `_citation_signal_section` e `_sumario_md` passam a COMPUTAR a precisão de citação e o efeito do rerank a partir dos dados medidos (não mais texto fixo); `report.md`/`sumario.md` desta rodada foram reescritos com os números reais. Os testes de `tests/unit/bench/test_run_sweep.py` seguem verdes (afirmam contagens dinâmicas, não a prosa).
+Alternativas: re-rodar o benchmark pago para regenerar a prosa — descartado, a correção é documental e a fonte autoritativa (results.csv) já existe; só o GERADOR de prosa e os dois .md foram corrigidos, sem novo gasto. Manter a prosa fixa com nota — descartado: um relatório que se autocontradiz (0.000 vs 0.585) não é honesto.
+Consequências: `bench/report_m8.py` (`_citation_signal_section` + bloco de sinal do `_sumario_md` computam dos dados); artefatos `bench/results/m8-test-2026-10-13/` (gitignored); docs `m8-test-remeasure.md`, `m8-test-verification.md`, PROGRESS.md, README.md atualizados com os números pós-fix. `app/config.py` NÃO tocado. A decisão seguir/ajustar/parar é do humano.
+
 ## 2026-10-13: M8 Stage 2 — benchmark no split `test` (DS1–DS7)
 Contexto: a Etapa 2 roda o benchmark COMPLETO no split `test` (41 tarefas) com os parâmetros CONGELADOS da Etapa 1, mede (nunca ajusta) e produz os quatro artefatos (SPEC §10.5). Não há design doc; as decisões de implementação ficam aqui.
 Decisão:

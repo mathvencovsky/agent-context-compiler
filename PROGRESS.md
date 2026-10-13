@@ -170,7 +170,69 @@ cobertura). Nenhum teste foi desativado, pulado ou afrouxado. O driver de
 calibração (`run_calibration`/`recompute_coverage`) não é coletado pelo pytest —
 só a lógica pura é testada.
 
+### M8 — MEDIÇÃO FINAL honesta no split `test` após o fix de proveniência (2026-10-13, commit `6cfad7c`)
+
+Esta é a MEDIÇÃO FINAL do split reservado, DEPOIS da correção do Defeito 1
+(proveniência por fragmento no runner `ours`, commit `6cfad7c`) e do diagnóstico
+do Defeito 2 (rerank). SUPERSEDE os números da seção "M8 ETAPA 2" logo abaixo
+(que vinham do commit `48e9e57`, ANTES do fix, com citação 0.000). Artefato:
+`bench/results/m8-test-2026-10-13/` (1107 linhas = 41 × 9 × 3; git_commit
+`6cfad7c`). `git diff app/config.py` = **vazio**; `.env` preservado. Detalhe
+completo em `.agents/tasks/m8-test-remeasure.md`.
+
+- **Citação do `ours` no TEST: 0.000 → 0.585.** O fix de proveniência fez o
+  `ours` passar a emitir citações rastreáveis e VERIFICÁVEIS: coluna
+  `citation_correct` do `results.csv` = 24/41 tarefas (precisão 0.585) nos três
+  orçamentos. Confirma, no split reservado, o mesmo efeito do dev (0.000 → 0.406).
+- **Qualidade `ours` × `naive_rag` por categoria (orçamento de referência 4000,
+  IC95% bootstrap, n_boot=1000/seed=1234567).** Nenhum IC não sobreposto em
+  categoria alguma → EMPATE em todas, inclusive geral; `ours` numericamente à
+  frente, nenhuma derrota de IC não sobreposto:
+
+  | categoria | n | ours | ours IC95 | naive_rag | naive_rag IC95 | veredito |
+  |---|---|---|---|---|---|---|
+  | geral | 41 | **0.780** | [0.634, 0.902] | 0.707 | [0.561, 0.854] | empate |
+  | api_reference | 17 | 0.765 | [0.529, 0.941] | 0.706 | [0.471, 0.882] | empate |
+  | changelog | 4 | 1.000 | [1.000, 1.000] | 1.000 | [1.000, 1.000] | empate |
+  | guide | 12 | 0.833 | [0.583, 1.000] | 0.750 | [0.500, 1.000] | empate |
+  | params_table | 5 | 0.600 | [0.200, 1.000] | 0.600 | [0.200, 1.000] | empate |
+  | pdf | 3 | 0.667 | [0.000, 1.000] | 0.333 | [0.000, 1.000] | empate |
+
+  Nos três orçamentos: `ours` 0.732/0.780/0.805 (SOBE com orçamento) vs
+  `naive_rag` 0.780/0.707/0.683 (CAI com orçamento).
+- **Custo ~metade.** Orçamento 4000, custo/tarefa concluída: `ours` **US$
+  0.005100** vs `naive_rag` **US$ 0.008923** (~43% mais barato), com ~44% menos
+  tokens de contexto (1495 vs 2678) e INSUFFICIENT=0.000 (vs 0.098 do RAG). A
+  tese do produto ("menos custo pelo mesmo resultado, com evidência rastreável")
+  se SUSTENTA no split reservado — qualidade em empate, mais barato, e agora
+  COM citações verificáveis.
+- **Rerank AJUDA no test** (orçamento 4000): `ours`=0.780 > `ours_no_rerank`=
+  0.732 (delta +0.049 a favor do reranker; ICs sobrepostos). INVERTE o sinal da
+  rodada pré-fix (que dizia no-rerank melhor) e fica consistente com o dev
+  (+0.062). Não desligar o reranker por padrão.
+- **9 falhas** (`correct=0`) do `ours` no 4000, diagnosticadas (DS6):
+  retrieval/answer (ver `report.md`).
+- **Reuso do cache: ZERO gasto novo de Jina/embeddings.** Rerank (Jina): 0
+  chamadas reais / 205 cache hits. Embeddings (OpenAI): 0 batches reais / 14501
+  cache hits. O fix muda só o passo de emissão (header `[URL]`), não a
+  recuperação, então todos os pares já estavam no cache persistente. Nenhum dos
+  10M tokens de Jina/embeddings consumido. O respondedor OpenAI + juiz Anthropic
+  (não cacheáveis) gastaram na ordem autorizada (US$3–6) nesta rodada de 1107
+  respostas.
+- **Template obsoleto FLAGADO e corrigido.** O gerador `bench/report_m8.py`
+  emitia um parágrafo FIXO ("citation precision is 0.000" / "`ours` não cita" /
+  "ours_no_rerank=0.805 vs ours=0.732") herdado da rodada antiga, que
+  CONTRADIZIA a própria coluna `cite_prec`=0.585 do mesmo relatório. O gerador
+  foi corrigido para COMPUTAR a precisão de citação e o efeito do rerank a partir
+  dos dados medidos; `report.md`/`sumario.md` desta rodada carregam os números
+  reais (fonte autoritativa: `results.csv`, conferido coluna a coluna).
+
 ### M8 ETAPA 2 — benchmark no split `test` (concluída, 2026-10-13)
+
+> NOTA: os números desta seção são da rodada pré-fix (commit `48e9e57`, citação
+> 0.000). A MEDIÇÃO FINAL pós-fix (commit `6cfad7c`, citação 0.585) está na seção
+> acima e a SUPERSEDE. Esta seção fica como registro histórico da mecânica da
+> Etapa 2.
 
 O que foi entregue:
 

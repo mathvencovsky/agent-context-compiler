@@ -155,7 +155,7 @@ verde no GitHub Actions.
 | **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
 | **M6** | Chunking e indexação | ✅ Concluído |
 | **M7** | Busca, seleção e endpoint `assemble` | ✅ Concluído |
-| **M8** | Benchmark completo e calibração | ✅ Benchmark completo rodado (Etapa 2); calibração (Etapa 1) congelada — decisão com o humano |
+| **M8** | Benchmark completo e calibração | ✅ Medição final no split `test` concluída (pós-fix de proveniência; citação 0.585, empate de qualidade, custo ~metade); calibração (Etapa 1) congelada — decisão de seguir/ajustar/parar com o humano |
 | **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
 | **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
@@ -166,7 +166,8 @@ embeddings vetoriais `text-embedding-3-small` no pgvector) → busca híbrida (R
 + rerank (Jina) + seleção sob orçamento → `POST /v1/context/assemble`. As duas
 operações do produto (`resolve` e `assemble`) já respondem por HTTP. Os marcos de
 segurança (M1, M4) passaram por revisão adversarial independente, sem findings
-HIGH/MEDIUM em aberto. Falta a calibração do benchmark completo (M8).
+HIGH/MEDIUM em aberto. O benchmark completo do M8 já foi medido no split `test`
+(ver "Conclusão do módulo M8" abaixo); resta a decisão de produto do humano.
 
 **O benchmark (M2) já mede baselines com dados reais.** Corpus congelado de 50
 páginas (10 fontes, incluindo SPAs e PDFs), 137 tarefas validadas por humano nas
@@ -508,17 +509,24 @@ lógica pura é unit-testada em `tests/unit/bench/test_run_sweep.py`, zero rede)
 | `compare_ours_vs_rag(rows, ...)` | `bench/report_m8.py` | Compara `ours` × `naive_rag` por categoria + geral; vence quem tem o limite inferior do IC acima do superior do outro, senão EMPATE. |
 | `diagnose_failure(probe)` | `bench/report_m8.py` | Classificação DETERMINÍSTICA (sem LLM) de uma falha (`correct=0`) em `retrieval`/`selection`/`answer` (DS6). Correto-mas-sem-citação é SUCESSO (§10.4), não falha. |
 
-**Conclusão do módulo (honesta, orçamento de referência 4000).** No split `test`,
-`ours` NÃO venceu o `naive_rag` com IC não sobreposto em NENHUMA categoria — é
-empate em todas (geral 0.732 [0.585, 0.854] vs 0.707 [0.561, 0.854]); `ours`
-entrega esse empate com ~40% menos custo por tarefa concluída (US$ 0.005313 vs
-US$ 0.008935) e ~metade dos tokens de contexto, mas emite precisão de citação
-0.000 e `ours_no_rerank` (0.805) supera `ours` (0.732) no mesmo orçamento. Em
-resumo: a eficiência de tokens/custo se sustenta nos dados; a vantagem de
-QUALIDADE sobre o `naive_rag` e a evidência citável NÃO estão demonstradas neste
-run. A decisão de seguir, ajustar ou parar é do humano. Números completos em
-[`PROGRESS.md`](PROGRESS.md) e nos artefatos de
-`bench/results/m8-stage2-2026-10-13/`.
+**Conclusão do módulo M8 (honesta, medição final no split `test`, orçamento de
+referência 4000, commit `6cfad7c`).** No split reservado, `ours` NÃO venceu o
+`naive_rag` com IC não sobreposto em NENHUMA categoria — é empate em todas
+(geral `ours`=0.780 [0.634, 0.902] vs `naive_rag`=0.707 [0.561, 0.854]), com
+`ours` numericamente à frente e sem derrota de IC não sobreposto. O que `ours`
+entrega nesse empate: **custo por tarefa concluída ~metade** (US$ 0.005100 vs
+US$ 0.008923, ~43% mais barato), **~44% menos tokens de contexto** (1495 vs
+2678), **INSUFFICIENT 0.000** (vs 0.098) e — depois da correção do bug de
+proveniência — **evidência rastreável: precisão de citação 0.585** (24/41
+tarefas com citação verificada), ANTES 0.000. O reranker AJUDA no test
+(`ours`=0.780 > `ours_no_rerank`=0.732), consistente com o dev. Em resumo: a
+tese "**menos custo pelo mesmo resultado, com evidência rastreável**" se
+sustenta nos dados do split reservado — qualidade em EMPATE (não superioridade
+estatística), mais barato, mais enxuto e agora com citações verificáveis. A
+decisão de seguir, ajustar ou parar é do humano. Números completos em
+[`PROGRESS.md`](PROGRESS.md), em
+[`.agents/tasks/m8-test-remeasure.md`](.agents/tasks/m8-test-remeasure.md) e nos
+artefatos de `bench/results/m8-test-2026-10-13/`.
 
 ---
 

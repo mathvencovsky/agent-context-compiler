@@ -324,26 +324,30 @@ def _failures_section(probes: Sequence[FailureProbe]) -> list[str]:
 def _citation_signal_section(probes: Sequence[FailureProbe]) -> list[str]:
     """Surface the ``ours`` citation signal for the human (finding 6).
 
-    ``ours`` emits answers with no verified citation on every task (citation
-    precision 0.000 across all budgets). This is NOT counted as a task failure
-    (SPEC §10.4 scores by the ``correct`` flag) but it is a real pipeline signal
-    for a product whose thesis is traceable evidence, so it is reported here
-    explicitly rather than buried.
+    Reports, from the data, how many ``ours`` tasks carried at least one VERIFIED
+    citation (``quote`` fuzzy-matching the cited document AND overlapping the
+    expected evidence, SPEC §10.4). Citation precision is NOT a task-success
+    metric (success is the judge ``correct`` flag), but for a product whose
+    thesis is traceable evidence it is a first-class signal, so it is reported
+    here explicitly from the measured probes rather than asserted.
     """
     n = len(probes)
     cited = sum(1 for p in probes if p.citation_correct)
     correct = sum(1 for p in probes if p.correct)
+    cite_prec = (cited / n) if n else 0.0
     return [
         f"## `ours` citation signal (reference budget {REFERENCE_BUDGET})",
         "",
         f"- tasks graded: {n}",
         f"- tasks correct (judge `correct=1`): {correct}",
         f"- tasks with at least one VERIFIED citation: {cited}",
+        f"- citation precision: {cite_prec:.3f}",
         "",
-        "Across every budget `ours` citation precision is 0.000: it answers "
-        "without emitting a citation that verifies against the evidence. This is "
-        "reported for the human as a pipeline signal; per SPEC §10.4 it does not "
-        "change the success/failure counts above.",
+        f"At the reference budget `ours` citation precision is {cite_prec:.3f} "
+        f"({cited}/{n} tasks carry a citation that verifies against the "
+        "evidence). Per SPEC §10.4 the citation metric is separate from the "
+        "success/failure counts above; it is reported here for the human as the "
+        "product's traceable-evidence signal.",
         "",
     ]
 
@@ -526,24 +530,40 @@ def _sumario_md(sweep_rows: Sequence[SweepRow]) -> str:
             f"precisão de citação={cell.citation_precision:.3f}"
         )
     lines.append("")
-    # Signal for the human: ours emits no verified citation on any task.
+    # Signal for the human, computed from the measured reference-budget rows:
+    # the ours citation precision and the ours-vs-no_rerank comparison.
     ours_ref_rows = [r for r in ref_rows if r.strategy == _OURS]
     ours_cite = (
         _summarize(ours_ref_rows, strategy=_OURS, category="*").citation_precision
         if ours_ref_rows
         else 0.0
     )
+    ours_rate = _rate([r.correct for r in ours_ref_rows])
+    no_rerank_rows = [r for r in ref_rows if r.strategy == "ours_no_rerank"]
+    no_rerank_rate = _rate([r.correct for r in no_rerank_rows])
     lines.append("## Sinal para o humano (não altera sucesso/§10.4)")
     lines.append(
-        f"  - **`ours` não cita**: precisão de citação={ours_cite:.3f} em todos os "
-        "orçamentos — responde sem emitir citação verificável contra a evidência. "
-        "Relevante para um produto cuja tese é evidência rastreável; por §10.4 não "
-        "muda a taxa de sucesso acima."
+        f"  - **Citação do `ours`**: precisão de citação={ours_cite:.3f} no "
+        f"orçamento {REFERENCE_BUDGET} — a fração das tarefas com ao menos uma "
+        "citação que verifica contra a evidência (SPEC §10.4). Relevante para um "
+        "produto cuja tese é evidência rastreável; por §10.4 não muda a taxa de "
+        "sucesso acima."
     )
-    lines.append(
-        "  - **Remover o reranker eleva o sucesso**: ours_no_rerank=0.805 vs "
-        "ours=0.732 no orçamento 4000 (ICs ainda se sobrepõem)."
-    )
+    if no_rerank_rows:
+        if no_rerank_rate > ours_rate:
+            verb = "eleva"
+            rel = ">"
+        elif no_rerank_rate < ours_rate:
+            verb = "reduz"
+            rel = "<"
+        else:
+            verb = "não muda"
+            rel = "="
+        lines.append(
+            f"  - **Remover o reranker {verb} o sucesso**: ours_no_rerank="
+            f"{no_rerank_rate:.3f} {rel} ours={ours_rate:.3f} no orçamento "
+            f"{REFERENCE_BUDGET} (ICs ainda se sobrepõem)."
+        )
     lines.append("")
     lines.append(
         "Honestidade (ROADMAP M8): nenhum parâmetro foi ajustado olhando o split "
