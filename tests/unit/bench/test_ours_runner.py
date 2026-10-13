@@ -232,6 +232,51 @@ def test_prepared_candidates_are_lambda_invariant(
         ]
 
 
+def test_context_includes_source_url_provenance(
+    store: CorpusStore, tasks: list[Task]
+) -> None:
+    """The ``ours`` context carries a source-URL header per fragment (Defect 1).
+
+    Before the fix the runner emitted only the chunks' Markdown, so the answerer
+    had no URL to cite and citation precision was 0.000. With the stub reranker
+    (which clears ``min_value``) selection yields real fragments; this asserts
+    that every non-empty context contains the ``[URL] `` provenance header and,
+    for each URL in ``used_urls``, the exact ``[URL] <url>`` line — the shape the
+    answerer copies into ``{url, quote}`` citations. Fully offline (no network).
+    """
+    _StubReranker.calls = 0
+    runner = OursRunner(reranker=_StubReranker(), min_value=0.0)
+    built_any = False
+    for task in _answerable_tasks(tasks):
+        result = runner.build_context(task, budget_tokens=_BUDGET, store=store)
+        assert 0 <= result.context_tokens <= _BUDGET
+        if not result.text:
+            continue
+        built_any = True
+        assert "[URL] " in result.text
+        for url in result.used_urls:
+            assert f"[URL] {url}" in result.text
+    assert built_any, "stub reranker + min_value=0 produced no context to assert on"
+
+
+def test_provenance_counts_against_budget(
+    store: CorpusStore, tasks: list[Task]
+) -> None:
+    """The URL provenance header is charged against the token budget (D-FIX2).
+
+    With a deliberately tiny budget and the stub reranker, the emitted context
+    (provenance header + Markdown) must still fit the budget — proving the
+    header is concatenated BEFORE the final token truncation and never pushes
+    ``context_tokens`` past ``budget_tokens``. Fully offline (fake providers).
+    """
+    tiny_budget = 64
+    _StubReranker.calls = 0
+    runner = OursRunner(reranker=_StubReranker(), min_value=0.0)
+    for task in _answerable_tasks(tasks):
+        result = runner.build_context(task, budget_tokens=tiny_budget, store=store)
+        assert result.context_tokens <= tiny_budget
+
+
 def test_prepared_exposes_full_top30_scores(
     store: CorpusStore, tasks: list[Task]
 ) -> None:

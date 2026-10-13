@@ -19,7 +19,12 @@ reranked with the deterministic :class:`FakeRerankProvider`
 (:func:`app.retrieve.rerank.rerank_candidates`), and the survivors are chosen
 under the token budget by :func:`app.retrieve.select.select`. The emitted
 context is the selected chunks' Markdown in document order (``(document_id,
-ord)``), truncated for safety.
+ord)``), each prefixed with its source URL (``[URL] <url>\n<md>`` — the SAME
+provenance header the ``naive_rag`` baseline emits) so the answerer can produce
+verifiable ``{url, quote}`` citations, mirroring the real product's
+:class:`~app.retrieve.assemble.Fragment` provenance. The provenance header
+counts against the token budget (the final truncation measures the full text),
+and the result is truncated for safety.
 
 The ablations flip exactly one knob each (SPEC §6):
 
@@ -341,6 +346,11 @@ class OursRunner:
         ``(lambda_, min_value)`` over the cached candidates. The output is
         byte-identical to running the whole pipeline with the same params
         (``select`` sees the same candidates either way).
+
+        Each selected fragment is emitted as ``[URL] <source_url>\n<md>`` (same
+        provenance header as ``naive_rag``) so the answerer can quote a URL +
+        verbatim text; the header is included BEFORE the token-budget truncation
+        so ``context_tokens <= budget_tokens`` still holds.
         """
         if not prepared.candidates:
             return ContextResult(text="", context_tokens=0, used_urls=[])
@@ -358,15 +368,24 @@ class OursRunner:
                 min_value=self.min_value,
             )
 
-        # (7) emit the selected chunks' Markdown in document order.
+        # (7) emit the selected chunks' Markdown in document order, each
+        # prefixed with its source URL so the answerer can cite {url, quote}
+        # verbatim (mirrors naive_rag's "[URL] <url>\n<text>" provenance and the
+        # product's Fragment.source_url). The header counts against the budget:
+        # it is concatenated BEFORE truncate_to_budget, so context_tokens still
+        # stays <= budget_tokens.
         used_urls: list[str] = []
         parts: list[str] = []
         for candidate in selected:
             key: _Key = (candidate.document_id, candidate.ord)
+            md = prepared.md_by_key[key]
             url = prepared.url_by_document.get(candidate.document_id)
-            if url is not None and url not in used_urls:
-                used_urls.append(url)
-            parts.append(prepared.md_by_key[key])
+            if url is not None:
+                if url not in used_urls:
+                    used_urls.append(url)
+                parts.append(f"[URL] {url}\n{md}")
+            else:
+                parts.append(md)
 
         joined = "\n\n".join(parts)
         truncated, tokens = truncate_to_budget(joined, budget_tokens)
