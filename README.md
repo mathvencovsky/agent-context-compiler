@@ -80,19 +80,38 @@ Honestidade de escopo, para alinhar expectativas de piloto:
 - **Disponibilidade.** São serviços hospedados que funcionam hoje; NINA está em
   construção.
 
-### Vantagem comprovada vs. hipótese
+### O que o benchmark provou (M8, split test reservado)
 
-Tudo acima é o diferencial **pretendido** — e, por decisão de projeto, **não
-conta como vantagem até o benchmark provar**. O teste decisivo (marco M8) não é
-nem o Firecrawl: é o **`naive_rag`**, o RAG competente que um bom dev montaria em
-uma tarde. No benchmark, o Firecrawl entra em pé de igualdade de pipeline
-(Markdown do Firecrawl + o mesmo chunking/BM25 do `naive_rag`), de modo que a
-comparação isola a qualidade de **extração + seleção**, não o crawling.
+O teste decisivo não é o Firecrawl: é o **`naive_rag`**, o RAG competente que um
+bom dev montaria em uma tarde. O M8 rodou o benchmark completo no split `test`
+(41 tarefas, parâmetros calibrados só no `dev` e congelados antes de medir o
+`test`). No orçamento de referência de 4000 tokens:
 
-A pergunta que o M8 responde, com intervalos de confiança: *em que categoria, se
-em alguma, o NINA (`ours`) vence o `naive_rag` sem sobreposição de IC?* Enquanto
-essa resposta não existir, trate os itens acima como hipóteses a validar, não
-como fatos de marketing.
+| Métrica (test, @4000) | **NINA (`ours`)** | `naive_rag` |
+|---|---|---|
+| Taxa de sucesso | **0,780** [IC95 0,634–0,902] | 0,707 [0,561–0,854] |
+| Custo por tarefa concluída | **US$ 0,0051** | US$ 0,0089 |
+| Tokens de contexto (média) | **1.495** | 2.678 |
+| Precisão de citação | **0,585** | 0,512 |
+| Taxa INSUFFICIENT | **0,000** | 0,098 |
+
+**Leitura honesta:** em qualidade é **empate estatístico** (os ICs se
+sobrepõem; não há vitória de IC não-sobreposto em nenhuma categoria — NINA não
+é "mais preciso que RAG"). Mas, à paridade de qualidade, NINA entrega o
+resultado com **~43% menos custo**, **~44% menos tokens de contexto**, **citação
+verificável funcionando** (acima do baseline) e **sem desistir de tarefas**
+(0% INSUFFICIENT vs ~10%).
+
+**A tese validada, portanto, é eficiência + evidência rastreável a PARIDADE de
+qualidade** — "o mesmo resultado de um RAG competente, por menos custo e com a
+prova anexada" —, não superioridade de qualidade. Decisão do projeto no M8:
+**seguir** com esse posicionamento (ver [`DECISIONS.md`](DECISIONS.md)).
+
+Ressalvas que acompanham o número: os `n` por categoria são pequenos (pdf n=3,
+`params_table` n=5, changelog n=4) com ICs largos — a conclusão geral (n=41) é
+mais sólida que as por-categoria; e a vantagem de custo depende dos preços
+atuais dos modelos. Números completos e reprodutíveis em
+[`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md).
 
 ---
 
@@ -155,7 +174,7 @@ verde no GitHub Actions.
 | **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
 | **M6** | Chunking e indexação | ✅ Concluído |
 | **M7** | Busca, seleção e endpoint `assemble` | ✅ Concluído |
-| **M8** | Benchmark completo e calibração | ✅ Medição final no split `test` concluída (pós-fix de proveniência; citação 0.585, empate de qualidade, custo ~metade); calibração (Etapa 1) congelada — decisão de seguir/ajustar/parar com o humano |
+| **M8** | Benchmark completo e calibração | ✅ Concluído — tese validada no split `test` (paridade de qualidade, ~43% mais barato, citação 0,585); **decisão: seguir** (nicho eficiência + evidência) |
 | **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
 | **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
@@ -166,17 +185,18 @@ embeddings vetoriais `text-embedding-3-small` no pgvector) → busca híbrida (R
 + rerank (Jina) + seleção sob orçamento → `POST /v1/context/assemble`. As duas
 operações do produto (`resolve` e `assemble`) já respondem por HTTP. Os marcos de
 segurança (M1, M4) passaram por revisão adversarial independente, sem findings
-HIGH/MEDIUM em aberto. O benchmark completo do M8 já foi medido no split `test`
-(ver "Conclusão do módulo M8" abaixo); resta a decisão de produto do humano.
+HIGH/MEDIUM em aberto.
 
-**O benchmark (M2) já mede baselines com dados reais.** Corpus congelado de 50
-páginas (10 fontes, incluindo SPAs e PDFs), 137 tarefas validadas por humano nas
-cinco categorias com split dev/test estratificado, e uma primeira execução com os
-modelos reais (respondedor OpenAI, juiz Anthropic) estabeleceu a linha de base: o
-`naive_rag` — o RAG competente a ser batido — acerta ~73% no split `dev`, contra
-~26% do `raw_html` bruto. É o número que o pipeline `ours` precisará superar no M8.
-O detalhe por marco está em [`PROGRESS.md`](PROGRESS.md); as decisões técnicas não
-óbvias, em [`DECISIONS.md`](DECISIONS.md).
+**O benchmark (M8) rodou de ponta a ponta e sustenta a tese.** Sobre um corpus
+congelado de 50 páginas (10 fontes, incluindo SPAs e PDFs) e 137 tarefas
+validadas por humano, o pipeline `ours` foi medido contra o `naive_rag` no split
+`test` reservado com parâmetros calibrados só no `dev`: **empate em qualidade**
+(0,780 vs 0,707, ICs sobrepostos) entregue com **~43% menos custo**, **citação
+verificável funcionando** (0,585 vs 0,512) e **0% de respostas INSUFFICIENT** (vs
+~10%). A tese validada é **eficiência + evidência rastreável a paridade de
+qualidade** — e a decisão do projeto foi **seguir** com esse posicionamento (ver
+"O que o benchmark provou" acima e [`DECISIONS.md`](DECISIONS.md)). O detalhe por
+marco está em [`PROGRESS.md`](PROGRESS.md).
 
 ---
 
@@ -522,8 +542,11 @@ tarefas com citação verificada), ANTES 0.000. O reranker AJUDA no test
 (`ours`=0.780 > `ours_no_rerank`=0.732), consistente com o dev. Em resumo: a
 tese "**menos custo pelo mesmo resultado, com evidência rastreável**" se
 sustenta nos dados do split reservado — qualidade em EMPATE (não superioridade
-estatística), mais barato, mais enxuto e agora com citações verificáveis. A
-decisão de seguir, ajustar ou parar é do humano. Números completos em
+estatística), mais barato, mais enxuto e agora com citações verificáveis.
+**Decisão do projeto (2026-10-13): seguir**, posicionando o produto no nicho
+"eficiência + evidência rastreável a paridade de qualidade" — não como "mais
+preciso que RAG" (ver [`DECISIONS.md`](DECISIONS.md)). Próximo: M9 (pronto para
+pilotos). Números completos em
 [`PROGRESS.md`](PROGRESS.md), em
 [`.agents/tasks/m8-test-remeasure.md`](.agents/tasks/m8-test-remeasure.md) e nos
 artefatos de `bench/results/m8-test-2026-10-13/`.
