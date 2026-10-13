@@ -155,7 +155,7 @@ verde no GitHub Actions.
 | **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
 | **M6** | Chunking e indexação | ✅ Concluído |
 | **M7** | Busca, seleção e endpoint `assemble` | ✅ Concluído |
-| **M8** | Benchmark completo e calibração | ◧ Etapa 1 (calibração dev) concluída; Etapa 2 (test) pendente |
+| **M8** | Benchmark completo e calibração | ✅ Benchmark completo rodado (Etapa 2); calibração (Etapa 1) congelada — decisão com o humano |
 | **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
 | **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
@@ -492,6 +492,33 @@ do M8). Detalhes e a tabela das 9 combinações em [`PROGRESS.md`](PROGRESS.md) 
 > reproduzíveis a partir de
 > `bench/results/coverage_20261012T193038_322186/coverage_scores.csv`
 > (re-rodar `percentiles` sobre o CSV reproduz 0.6137/0.7746, sem gastar Jina).
+
+### Varredura e relatório (M8 Etapa 2 — `bench/sweep.py`, `bench/report_m8.py`)
+
+A Etapa 2 roda o benchmark completo no split `test` (41 tarefas × 9 estratégias
+× 3 orçamentos) com os parâmetros CONGELADOS, só MEDINDO. As funções novas (a
+lógica pura é unit-testada em `tests/unit/bench/test_run_sweep.py`, zero rede):
+
+| Função | Módulo | O que faz |
+|---|---|---|
+| `run_sweep(*, strategies, split, budgets, real, out_name, ...)` | `bench/sweep.py` | Driver da varredura: carrega o split uma vez, injeta os provedores REAIS de recuperação nos `ours*` (ou os fakes), mede todo `(tarefa, estratégia, orçamento)` e escreve os quatro artefatos. CLI: `python -m bench.sweep --strategies ... --split test --budgets 2000,4000,8000 --real`. |
+| `build_sweep_rows(...)` | `bench/sweep.py` | Função PURA de montagem das linhas: para os `ours*` prepara a recuperação uma vez por tarefa (`prepare_candidates`) e aplica só a seleção por orçamento (DS3); devolve uma `SweepRow` por `(tarefa, estratégia, orçamento)` + os `FailureProbe` do `ours` no orçamento de referência. |
+| `register_ours(*, embeddings, reranker, lambda_, min_value)` | `bench/runners/base.py` | Reconstrói o registry com os provedores de recuperação REAIS e os knobs congelados ligados aos runners `ours*` (default = fakes; nenhum teste chama isto). |
+| `write_report(out_dir, *, sweep_rows, probes, ...)` | `bench/report_m8.py` | Emite `report.md` (tabelas por estratégia e categoria com IC95%, custo/concluída e latência p50/p95 por orçamento; ablação; falhas), `results.csv` (coluna `budget`), `config.json` (parâmetros congelados + commit + versões) e `sumario.md`. |
+| `compare_ours_vs_rag(rows, ...)` | `bench/report_m8.py` | Compara `ours` × `naive_rag` por categoria + geral; vence quem tem o limite inferior do IC acima do superior do outro, senão EMPATE. |
+| `diagnose_failure(probe)` | `bench/report_m8.py` | Classificação DETERMINÍSTICA (sem LLM) de uma falha (`correct=0`) em `retrieval`/`selection`/`answer` (DS6). Correto-mas-sem-citação é SUCESSO (§10.4), não falha. |
+
+**Conclusão do módulo (honesta, orçamento de referência 4000).** No split `test`,
+`ours` NÃO venceu o `naive_rag` com IC não sobreposto em NENHUMA categoria — é
+empate em todas (geral 0.732 [0.585, 0.854] vs 0.707 [0.561, 0.854]); `ours`
+entrega esse empate com ~40% menos custo por tarefa concluída (US$ 0.005313 vs
+US$ 0.008935) e ~metade dos tokens de contexto, mas emite precisão de citação
+0.000 e `ours_no_rerank` (0.805) supera `ours` (0.732) no mesmo orçamento. Em
+resumo: a eficiência de tokens/custo se sustenta nos dados; a vantagem de
+QUALIDADE sobre o `naive_rag` e a evidência citável NÃO estão demonstradas neste
+run. A decisão de seguir, ajustar ou parar é do humano. Números completos em
+[`PROGRESS.md`](PROGRESS.md) e nos artefatos de
+`bench/results/m8-stage2-2026-10-13/`.
 
 ---
 

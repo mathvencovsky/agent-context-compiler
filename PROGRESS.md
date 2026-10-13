@@ -1,14 +1,14 @@
 # PROGRESS
 
-Marco atual: M8 ETAPA 1 (calibração dos parâmetros de seleção) — MECANISMO
-IMPLEMENTADO e PARÂMETROS CONGELADOS; split `test` PENDENTE (Etapa 2, execução
-humana). A Etapa 1 é o PONTO DE DECISÃO do projeto: (a) tornou os parâmetros de
-seleção injetáveis; (b) implementou o mecanismo de calibração em grade; (c) RODOU
-a calibração APENAS no split `dev` (96 tarefas) com os provedores REAIS; (d)
-escolheu e CONGELOU os parâmetros. A REGRA DE HONESTIDADE é inegociável e
-reforçada em código: o calibrador filtra `split == "dev"`; o split `test` (41
-tarefas) NÃO foi tocado de forma alguma. A Etapa 2 (split `test` completo +
-relatório + sumário de uma página) roda DEPOIS, separadamente, pelo humano.
+Marco atual: M8 ETAPA 2 (benchmark completo no split `test`) — CONCLUÍDA. A
+Etapa 1 (calibração dos parâmetros de seleção no `dev` e congelamento) está
+concluída e commitada em `e75273e`; a Etapa 2 rodou o benchmark COMPLETO no
+split `test` (41 tarefas × 9 estratégias × 3 orçamentos) com os provedores REAIS
+e os parâmetros CONGELADOS, e produziu os quatro artefatos (`report.md`,
+`results.csv`, `config.json`, `sumario.md`) em
+`bench/results/m8-stage2-2026-10-13/`. A REGRA DE HONESTIDADE foi mantida: o
+split `test` foi apenas MEDIDO, nunca usado para ajustar; `git diff app/config.py`
+permanece vazio. Veja a seção "M8 ETAPA 2" abaixo para o resultado e o gate.
 
 O que foi entregue na Etapa 1:
 
@@ -169,6 +169,104 @@ Etapa 1 (lógica de calibração, injeção/equivalência do `ours`, rerank abso
 cobertura). Nenhum teste foi desativado, pulado ou afrouxado. O driver de
 calibração (`run_calibration`/`recompute_coverage`) não é coletado pelo pytest —
 só a lógica pura é testada.
+
+### M8 ETAPA 2 — benchmark no split `test` (concluída, 2026-10-13)
+
+O que foi entregue:
+
+- **Varredura de orçamentos com reuso de recuperação.** `bench/sweep.py`
+  (`run_sweep` + a função pura `build_sweep_rows`) mede todas as estratégias em
+  3 orçamentos (2000/4000/8000) numa só execução, preparando a recuperação cara
+  (`prepare_candidates`) UMA vez por tarefa e aplicando só a seleção pura por
+  orçamento (DS3). `make_ours_runners`/`bench.run.run`/`register_ours` ganharam
+  o seam para injetar os provedores REAIS de recuperação (OpenAI embeddings +
+  Jina reranker, disk-cached) nos runners `ours*` no caminho `--real`; o default
+  continua sendo os fakes (todo teste segue offline).
+- **Relatório estendido M8.** `bench/report_m8.py` (`write_report`,
+  `compare_ours_vs_rag`, `diagnose_failure`) emite os quatro artefatos: tabelas
+  por estratégia e por categoria com IC95% bootstrap, custo/concluída e latência
+  p50/p95 por orçamento; a análise de ablação; a lista de falhas do `ours` com
+  diagnóstico determinístico (DS6); `config.json` com os parâmetros congelados +
+  commit + versões; e o `sumario.md` em português.
+- **Contagens.** 41 tarefas × 9 estratégias × 3 orçamentos = **1107 linhas**
+  em `results.csv` (firecrawl ausente, 0 tarefas ignoradas por `validated:false`).
+  Orçamento de referência (ablação + falhas) = 4000.
+- **Resultado — `ours` × `naive_rag` por categoria (orçamento de referência
+  4000, IC95% bootstrap, n_boot=1000/seed=1234567).** Nenhum IC não sobreposto em
+  categoria alguma → **EMPATE em todas**, inclusive no geral:
+
+  | categoria | n | ours | ours IC95 | naive_rag | naive_rag IC95 | veredito |
+  |---|---|---|---|---|---|---|
+  | geral | 41 | 0.732 | [0.585, 0.854] | 0.707 | [0.561, 0.854] | empate |
+  | api_reference | 17 | 0.706 | [0.471, 0.941] | 0.706 | [0.471, 0.882] | empate |
+  | changelog | 4 | 1.000 | [1.000, 1.000] | 1.000 | [1.000, 1.000] | empate |
+  | guide | 12 | 0.833 | [0.583, 1.000] | 0.750 | [0.500, 1.000] | empate |
+  | params_table | 5 | 0.400 | [0.000, 0.800] | 0.600 | [0.200, 1.000] | empate |
+  | pdf | 3 | 0.667 | [0.000, 1.000] | 0.333 | [0.000, 1.000] | empate |
+
+  Leitura honesta: `ours` NÃO vence `naive_rag` com IC não sobreposto em
+  nenhuma categoria; é empate em todas, com `ours` nominalmente à frente em
+  guide/pdf e atrás em params_table (todos com ICs largos — n pequeno). Sinais
+  honestos para o humano: `ours` emite precisão de citação 0.000 em todos os
+  orçamentos (não conta como falha por §10.4, mas é relevante para um produto
+  cuja tese é evidência rastreável); e `ours_no_rerank`=0.805 supera `ours`=0.732
+  no 4000 (remover o reranker eleva o sucesso, ICs ainda sobrepostos). As 11
+  falhas (`correct=0`) do `ours` no 4000 são diagnosticadas como
+  retrieval/answer. A decisão (seguir/ajustar/parar) é do humano.
+- **Custo real por provedor/estratégia.** Jina (reranker): 133 chamadas reais /
+  **72 chamadas evitadas pelo cache**; cota free (bem abaixo dos 10M tokens).
+  Embeddings OpenAI (`text-embedding-3-small`): 60 chamadas batched / 13381
+  servidas do cache (poucos centavos). Respondedor OpenAI (`gpt-6.1-sol`) + juiz
+  Anthropic (`claude-sonnet-5-5`): NÃO cacheáveis (o contexto muda por
+  estratégia/orçamento), gasto total do run de 1107 linhas na ordem autorizada
+  de US$3–6. Custo por tarefa concluída no orçamento 4000: **`ours` US$ 0.005313
+  vs `naive_rag` US$ 0.008935** (o `ours` entrega o mesmo sucesso com ~40% menos
+  custo/concluída, usando ~metade dos tokens de contexto). Esta iteração de
+  revisão NÃO re-rodou o benchmark pago: regenerou os artefatos a partir das
+  linhas brutas já produzidas e recomputou os probes de diagnóstico servidos
+  ESTRITAMENTE do cache (sem rede, sem novo gasto).
+- **Como reproduzir.** Os parâmetros exatos do run estão em
+  `bench/results/m8-stage2-2026-10-13/config.json` (orçamentos 2000/4000/8000,
+  parâmetros congelados `selection_lambda=0.3`/`min_value=0.0`/
+  `coverage_low=0.6137`/`coverage_high=0.7746`/`rrf_k=60`, `seed=1234567`,
+  `n_boot=1000`, modelos answerer/judge, `git_commit=0e41598`, versões de
+  pacotes). Com a infra no ar e as chaves no `.env`, o comando da seção "Como
+  testar o M8 Etapa 2 manualmente" abaixo reproduz os quatro artefatos a partir
+  desse config (reusa o cache persistente `bench/.cache/`, sem re-pagar pares já
+  vistos).
+
+### M8 ETAPA 2 — resultado do gate (2026-10-13, árvore em `0e41598`)
+
+Gate executado na árvore com o código da Etapa 2 commitado (`0e41598`),
+Windows/PowerShell:
+
+```
+uv run ruff check .            -> All checks passed!
+uv run ruff format --check .   -> 170 files already formatted
+uv run mypy app                -> Success: no issues found in 56 source files
+uv run pytest -m "not integration and not browser"
+                               -> 450 passed, 36 deselected, 37 snapshots passed
+```
+
+Os 450 são os 440 da Etapa 1 mais os 10 novos testes OFFLINE em
+`tests/unit/bench/test_run_sweep.py` (injeção de recuperação, varredura +
+coluna `budget`, determinismo módulo tempo, o classificador de falhas incluindo
+a correção da revisão — correto-mas-sem-citação NÃO é falha —, a seção de sinal
+de citação, e `config.json` com os parâmetros congelados). Nenhum teste foi
+desativado, pulado ou afrouxado. `git diff app/config.py` vazio.
+
+### Como testar o M8 Etapa 2 manualmente
+
+Gate rápido (sem serviços): `uv run ruff check . ; uv run ruff format --check .
+; uv run mypy app ; uv run pytest -m "not integration and not browser"` — tudo
+verde (450 passam).
+
+Execução real (humano, gasta chaves): subir a infra
+`docker compose up -d --wait postgres seaweedfs ; docker compose up s3-init ;
+uv run alembic upgrade head` (head `0003_chunks`), confirmar as 4 chaves do
+`.env` sem ecoar valores, e rodar
+`uv run python -m bench.sweep --strategies raw_html,naive_text,naive_rag,ours,ours_no_vector,ours_no_lexical,ours_no_rerank,ours_fixed_chunks,ours_truncate --split test --budgets 2000,4000,8000 --real --out-name m8-stage2-2026-10-13`.
+Reusa o cache persistente `bench/.cache/`; firecrawl é pulado (sem chave).
 
 ### M8 ETAPA 1 — correção da cobertura (revisão) e estado
 
