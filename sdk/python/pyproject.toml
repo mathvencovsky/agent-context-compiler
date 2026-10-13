@@ -1,0 +1,24 @@
+# NINA Python SDK — a SEPARATE installable distribution (`nina-client`).
+#
+# This package is intentionally decoupled from the `nina` application
+# distribution: a pilot installs ONLY the thin client, not the server. It talks
+# to the NINA HTTP API over its own `httpx` client (NOT the fetch guard — the
+# guard governs UNTRUSTED page content; this client calls NINA's OWN API, a
+# trusted endpoint, exactly like the Jina/OpenAI provider clients; see the
+# repo's DECISIONS.md). The only runtime dependency is `httpx` (BSD-3-Clause),
+# satisfying the MIT/BSD/Apache-2.0 license rule in CLAUDE.md.
+[project]
+name = "nina-client"
+version = "0.1.0"
+description = "Typed Python client for the NINA context-compiler API."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nina_client"]

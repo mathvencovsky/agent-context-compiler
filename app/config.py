@@ -92,6 +92,18 @@ class Settings(BaseSettings):
     coverage_high: float = 0.7746
     rrf_k: int = 60
 
+    # Rate limit + render quota (M9, SPEC §8 'rate_limited'/'GET /v1/usage').
+    # Process-local token bucket per API key: rate_limit_capacity is the burst
+    # size (tokens), rate_limit_refill_per_sec the steady refill rate. Each /v1
+    # request costs one token; exceeding the bucket -> 429 with Retry-After.
+    # render_daily_quota caps browser renders per key per UTC day; exceeding it
+    # -> 429 'rate_limited' with Retry-After until the next UTC midnight. All
+    # three are overridable PER KEY via the api_keys.limits JSONB (keys
+    # 'rate_capacity', 'rate_refill_per_sec', 'render_daily_quota').
+    rate_limit_capacity: int = 60
+    rate_limit_refill_per_sec: float = 1.0
+    render_daily_quota: int = 200
+
     # Benchmark LLM keys (M2, SPEC §10). Optional: the deterministic fake
     # provider ignores them and every test runs without network. Only the real
     # OpenAI answerer / Anthropic judge adapters read these, in the human run.

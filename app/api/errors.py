@@ -15,6 +15,8 @@ subclasses :class:`FetchError` so it serializes through the same handler.
 
 from __future__ import annotations
 
+from math import ceil
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -44,6 +46,48 @@ class AllSourcesFailed(FetchError):
     http_status = 422
 
 
+class Unauthorized(FetchError):
+    """A /v1 request lacked a valid active API key (SPEC §8 unauthorized=401).
+
+    Raised by :func:`app.api.auth.require_api_key` when the ``Authorization:
+    Bearer <key>`` header is missing/malformed, or the presented key is unknown
+    or revoked. The ``unauthorized`` code is already in the SPEC §8 table; it
+    subclasses :class:`FetchError` so it serializes through the same handler.
+    """
+
+    code = "unauthorized"
+    http_status = 401
+
+
+class RateLimited(FetchError):
+    """A /v1 request exceeded the per-key rate limit or render quota (SPEC §8).
+
+    Raised by the FEAT-002 quota dependency BEFORE the handler runs when the
+    per-key token bucket is empty, or when the per-key daily render quota is
+    exhausted (the render quota reuses this ``rate_limited`` code — a documented
+    choice, DECISIONS.md). The ``retry_after`` seconds (always > 0) are carried
+    on the instance AND mirrored into ``details`` so the global handler can emit
+    the ``Retry-After`` header; the ``rate_limited`` code is already in the SPEC
+    §8 table.
+    """
+
+    code = "rate_limited"
+    http_status = 429
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after: float,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        merged: dict[str, object] = {"retry_after": retry_after}
+        if details:
+            merged.update(details)
+        super().__init__(message, details=merged)
+        self.retry_after = retry_after
+
+
 class AblationNotAllowed(FetchError):
     """An assemble ablation flag was sent while ``ENV == "production"`` (SPEC §6).
 
@@ -65,6 +109,11 @@ def fetch_error_handler(request: Request, exc: Exception) -> JSONResponse:
     routed here.
     """
     assert isinstance(exc, FetchError)
+    headers: dict[str, str] | None = None
+    retry_after = exc.details.get("retry_after")
+    if isinstance(retry_after, (int, float)):
+        # SPEC §8 / RFC 9110: Retry-After is a non-negative integer of seconds.
+        headers = {"Retry-After": str(max(0, ceil(retry_after)))}
     return JSONResponse(
         status_code=exc.http_status,
         content={
@@ -74,6 +123,7 @@ def fetch_error_handler(request: Request, exc: Exception) -> JSONResponse:
                 "details": exc.details,
             }
         },
+        headers=headers,
     )
 
 

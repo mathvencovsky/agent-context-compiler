@@ -209,6 +209,87 @@ class AssembleResponse(BaseModel):
     trust: Literal["untrusted_source"] = "untrusted_source"
 
 
+class UsageByEndpoint(BaseModel):
+    """Usage rolled up for one endpoint within a day (SPEC §8 GET /v1/usage)."""
+
+    endpoint: str
+    requests: int
+    tokens_delivered: int
+    renders: int
+    latency_p50_ms: int
+    latency_p95_ms: int
+
+
+class UsageByDay(BaseModel):
+    """One UTC day's usage, broken down per endpoint (SPEC §8 GET /v1/usage)."""
+
+    day: str
+    requests: int
+    tokens_delivered: int
+    renders: int
+    latency_p50_ms: int
+    latency_p95_ms: int
+    endpoints: list[UsageByEndpoint]
+
+
+class UsageResponse(BaseModel):
+    """Response envelope of ``GET /v1/usage`` (SPEC §8).
+
+    ``by_day`` carries the per-day rollup (each with its per-endpoint
+    breakdown); the top-level counters are the totals across every day. Latency
+    percentiles are nearest-rank over the matching events' ``latency_ms``.
+    """
+
+    requests: int
+    tokens_delivered: int
+    renders: int
+    latency_p50_ms: int
+    latency_p95_ms: int
+    by_day: list[UsageByDay]
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "requests": 3,
+                    "tokens_delivered": 1200,
+                    "renders": 1,
+                    "latency_p50_ms": 42,
+                    "latency_p95_ms": 110,
+                    "by_day": [
+                        {
+                            "day": "2026-10-14",
+                            "requests": 3,
+                            "tokens_delivered": 1200,
+                            "renders": 1,
+                            "latency_p50_ms": 42,
+                            "latency_p95_ms": 110,
+                            "endpoints": [
+                                {
+                                    "endpoint": "/v1/documents/resolve",
+                                    "requests": 2,
+                                    "tokens_delivered": 0,
+                                    "renders": 1,
+                                    "latency_p50_ms": 30,
+                                    "latency_p95_ms": 55,
+                                },
+                                {
+                                    "endpoint": "/v1/context/assemble",
+                                    "requests": 1,
+                                    "tokens_delivered": 1200,
+                                    "renders": 0,
+                                    "latency_p50_ms": 110,
+                                    "latency_p95_ms": 110,
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+
 class ErrorDetail(BaseModel):
     """The ``error`` object of the SPEC §8 error envelope."""
 

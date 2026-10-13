@@ -30,8 +30,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
+from app.api.auth import require_api_key
 from app.api.documents import (
     BlobStoreDep,
     NowDep,
@@ -51,13 +52,16 @@ from app.api.schemas import (
     SourceStatusModel,
     TokenUsage,
 )
+from app.api.usage import require_quota, set_usage_units
 from app.providers.embeddings.base import EmbeddingProvider
 from app.providers.embeddings.openai import OpenAIEmbeddingProvider
 from app.providers.rerank.base import RerankProvider
 from app.providers.rerank.jina import JinaRerankProvider
 from app.retrieve.assemble import AssembleResult, assemble_context
 
-router = APIRouter()
+# Bearer auth gates /v1/context/assemble too (no-op in dev — SPEC §8); the M9
+# quota dependency spends one token from the per-key bucket before the handler.
+router = APIRouter(dependencies=[Depends(require_api_key), Depends(require_quota)])
 
 
 # --------------------------------------------------------------------------- #
@@ -155,6 +159,7 @@ def _to_response(result: AssembleResult) -> AssembleResponse:
 @router.post("/v1/context/assemble", response_model=AssembleResponse)
 def assemble(
     req: AssembleRequest,
+    request: Request,
     session_factory: SessionFactoryDep,
     blobs: BlobStoreDep,
     robots: RobotsCheckerDep,
@@ -192,5 +197,11 @@ def assemble(
                 ]
             },
         )
+
+    # (M9) usage units: the delivered output tokens for this assemble. Renders
+    # are not separately metered for assemble — its internal resolves are
+    # cache-first and already governed by the per-key token bucket (documented
+    # MVP choice); only resolve meters a browser render.
+    set_usage_units(request, {"output_tokens": result.output_tokens, "renders": 0})
 
     return _to_response(result)

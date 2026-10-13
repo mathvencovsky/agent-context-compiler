@@ -24,6 +24,10 @@ dependencies = [
     # dep for the ORM Vector column added in FEAT-002; pinned here so the
     # lockfile settles once (see DECISIONS.md 2026-10-12).
     "pgvector>=0.3",
+    # mcp: official Model Context Protocol SDK. MIT-licensed (confirmed in the
+    # PyPI license classifier), satisfying the MIT/BSD/Apache-2.0 rule in
+    # CLAUDE.md. Powers app/mcp_server/ (FEAT-003); see DECISIONS.md.
+    "mcp>=1.0",
 ]
 
 [dependency-groups]

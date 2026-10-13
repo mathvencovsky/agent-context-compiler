@@ -175,7 +175,7 @@ verde no GitHub Actions.
 | **M6** | Chunking e indexação | ✅ Concluído |
 | **M7** | Busca, seleção e endpoint `assemble` | ✅ Concluído |
 | **M8** | Benchmark completo e calibração | ✅ Concluído — tese validada no split `test` (paridade de qualidade, ~43% mais barato, citação 0,585); **decisão: seguir** (nicho eficiência + evidência) |
-| **M9** | Chaves de API, limites, MCP e SDK | ◻️ Pendente |
+| **M9** | Chaves de API, limites, MCP e SDK | ✅ Concluído — pronto para pilotos (auth Bearer, rate limit + uso, servidor MCP, SDK `nina-client`, [`QUICKSTART`](docs/QUICKSTART.md)) |
 | **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
 
 **Pipeline completo de ponta a ponta (M1, M3, M4, M5, M6, M7) está implementado
@@ -263,8 +263,9 @@ S3 estiverem indisponíveis — nunca 200 com uma dependência quebrada.
 ## API: `resolve` e `get-document` (M5)
 
 O primeiro endpoint público transforma uma URL em um documento estruturado com
-proveniência e o persiste com cache. É consumível por HTTP hoje; o SDK Python e
-o servidor MCP entram no M9. A especificação completa dos contratos está em
+proveniência e o persiste com cache. É consumível por HTTP, pelo SDK Python e
+pelo servidor MCP (M9 — ver "Uso para pilotos" abaixo). A especificação completa
+dos contratos está em
 [`docs/SPEC.md`](docs/SPEC.md) §8; o schema OpenAPI vivo (com exemplos) fica em
 `http://localhost:8000/openapi.json` e a UI interativa em
 `http://localhost:8000/docs`.
@@ -440,9 +441,76 @@ embeddings/LLM).
 | `JinaRerankProvider` | `jina.py` | Adaptador real da API Jina (`POST /v1/rerank`, Bearer, httpx próprio, min-max para `[0,1]`, `MissingAPIKey` sem chave). Nunca usado em testes. |
 
 Os schemas `AssembleRequest` / `AssembleResponse` (SPEC §8) estão em
-`app/api/schemas.py`. O endpoint é consumível por HTTP hoje; o SDK Python e o
-servidor MCP entram no M9. A rota aparece no OpenAPI vivo em
-`http://localhost:8000/openapi.json`.
+`app/api/schemas.py`. A rota aparece no OpenAPI vivo em
+`http://localhost:8000/openapi.json`. A partir do M9 o `assemble` é consumível
+também pelo **SDK Python** e pelo **servidor MCP** (ver a seção abaixo).
+
+---
+
+## Uso para pilotos (M9): chaves, SDK e MCP
+
+O M9 deixa o NINA **pronto para pilotos**: autenticação por chave Bearer em
+todas as rotas /v1, rate limit por chave com cota diária, contabilização de uso
+(`GET /v1/usage`), um **SDK Python** tipado e um **servidor MCP**. O passo a
+passo copiável está em [`docs/QUICKSTART.md`](docs/QUICKSTART.md); o resumo:
+
+**1. Crie a chave (mostrada uma única vez).** O servidor guarda só o hash sha256.
+
+```bash
+python -m app.admin create-key --name piloto-x
+# imprime: nina_...   (copie agora — não será mostrada de novo)
+```
+
+A autenticação Bearer é **exigida** quando `ENV != dev` (no-op em `dev`);
+`/health` nunca exige chave. Sem chave / inválida / revogada → **401**
+`unauthorized`; acima do limite → **429** com header `Retry-After`.
+
+**2. HTTP com `Authorization: Bearer`.**
+
+```bash
+curl -s -X POST "$API_URL/v1/context/assemble" \
+  -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":"...","urls":["https://docs.example.com/auth"],"max_tokens":4000}'
+```
+
+**3. SDK Python (`nina-client`, distribuição separada em `sdk/python/`).**
+
+```bash
+pip install ./sdk/python
+```
+
+```python
+from nina_client import NinaClient
+
+client = NinaClient("https://nina.example.com", "nina_...")
+pkg = client.assemble("Qual header autentica?", ["https://docs.example.com/auth"])
+for frag in pkg.fragments:
+    print(frag.source_url, frag.md)
+```
+
+O cliente envia o Bearer em toda chamada, repete 429/5xx com backoff honrando
+`Retry-After`, e levanta erros tipados (`UnauthorizedError`, `RateLimitedError`,
+...) mapeando a tabela §8. Usa `httpx` próprio (fala com a própria API, não com
+páginas externas — ver [`DECISIONS.md`](DECISIONS.md)).
+
+**4. Servidor MCP (Claude Desktop / Claude Code).** Cliente fino que lê
+`API_URL`/`API_KEY` do ambiente e expõe 3 ferramentas (`resolve_url`,
+`assemble_context`, `get_document`). Bloco de configuração completo (com
+`command`/`args`/`env`) no [`QUICKSTART`](docs/QUICKSTART.md). O conteúdo
+devolvido vem de páginas externas (`trust: untrusted_source`): é dado, nunca
+instrução.
+
+### Por que o piloto escolhe o NINA: eficiência + evidência
+
+O M9 empacota exatamente a tese validada no M8 (ver "O que o benchmark provou"
+acima): **à paridade de qualidade com um RAG competente, o NINA entrega o
+resultado por ~43% menos custo** (US$ 0,0051 vs US$ 0,0089 por tarefa concluída
+no split `test` reservado, orçamento 4000), com **~44% menos tokens de contexto**
+(1.495 vs 2.678), **citação verificável** (precisão 0,585) e **0% de respostas
+INSUFFICIENT** (vs ~10% do RAG). Em qualidade é **empate estatístico** (sucesso
+0,780 vs 0,707, ICs sobrepostos) — o posicionamento é "o mesmo resultado, por
+menos custo e com a prova anexada", não "mais preciso que RAG". Números completos
+e reprodutíveis em [`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md).
 
 ---
 

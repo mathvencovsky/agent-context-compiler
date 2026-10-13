@@ -15,7 +15,7 @@ Two tables back the resolve/get-document endpoints:
 ``warnings`` is stored as JSONB (Postgres). ``status`` is a textual enum that is
 ``'ready'`` for the MVP (DECISIONS.md 2026-10-11); a version is only persisted
 after a successful extraction. ``chunks`` (M6) backs lexical + vector search;
-api_keys/usage_events belong to M9 and are intentionally absent here.
+``api_keys``/``usage_events`` (M9) back Bearer auth and usage accounting.
 
 The ``chunks`` table (SPEC §7, M6) stores one indexed chunk per row. Its ``tsv``
 column is a Postgres GENERATED column (``to_tsvector('simple', text)``) — the
@@ -29,9 +29,15 @@ from __future__ import annotations
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Computed, ForeignKey, UniqueConstraint, func
+from sqlalchemy import JSON, Computed, ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+#: JSONB in Postgres, plain JSON on SQLite. The real database is always
+#: Postgres; the SQLite variant only lets the OFFLINE unit tests build the
+#: api_keys/usage_events tables with an in-memory engine (no services, no
+#: network) — Postgres behavior is unchanged (SPEC §7).
+_JSONB = postgresql.JSONB().with_variant(JSON(), "sqlite")
 
 
 class Base(DeclarativeBase):
@@ -109,3 +115,42 @@ class Chunk(Base):
         Computed("to_tsvector('simple', text)", persisted=True),
         nullable=True,
     )
+
+
+class ApiKey(Base):
+    """An issued API key (SPEC §7, M9).
+
+    Only the sha256 ``key_hash`` is ever persisted — the plaintext (prefix
+    ``nina_``) is shown once by ``app/admin.py`` and never stored or logged
+    (CLAUDE.md). ``revoked_at`` NULL means active; ``limits`` is a per-key JSONB
+    override map read by the FEAT-003 rate limiter.
+    """
+
+    __tablename__ = "api_keys"
+
+    # Holds the key_... id (make_api_key_id).
+    id: Mapped[str] = mapped_column(primary_key=True)
+    key_hash: Mapped[str] = mapped_column(unique=True, index=True)
+    name: Mapped[str] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column()
+    limits: Mapped[dict[str, object]] = mapped_column(_JSONB)
+
+
+class UsageEvent(Base):
+    """One authenticated request's usage record (SPEC §7, M9).
+
+    The table + model land in FEAT-001; the WRITING/aggregation of these rows is
+    FEAT-002. ``units`` carries the per-request usage counters (JSONB).
+    """
+
+    __tablename__ = "usage_events"
+
+    # Holds the evt_... id (make_usage_event_id).
+    id: Mapped[str] = mapped_column(primary_key=True)
+    api_key_id: Mapped[str] = mapped_column(ForeignKey("api_keys.id"), index=True)
+    endpoint: Mapped[str] = mapped_column()
+    ts: Mapped[datetime] = mapped_column()
+    status_code: Mapped[int] = mapped_column()
+    latency_ms: Mapped[int] = mapped_column()
+    units: Mapped[dict[str, object]] = mapped_column(_JSONB)

@@ -29,12 +29,14 @@ cache or test transport behaves correctly.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.auth import require_api_key
 from app.api.errors import NotFound
 from app.api.schemas import (
     RenderDecision,
@@ -43,6 +45,7 @@ from app.api.schemas import (
     ResolveResponse,
     Stats,
 )
+from app.api.usage import charge_render, require_quota, set_usage_units
 from app.config import Settings, get_settings
 from app.extract.html import extract_html
 from app.extract.ir import (
@@ -71,7 +74,11 @@ from app.store.repo import (
     make_session_factory,
 )
 
-router = APIRouter()
+# Bearer auth gates every /v1 route (no-op in dev; enforced otherwise — SPEC §8).
+# require_quota spends one token from the per-key bucket before the handler runs
+# (M9). /health is registered on the app in main.py and is intentionally NOT
+# gated.
+router = APIRouter(dependencies=[Depends(require_api_key), Depends(require_quota)])
 
 _HTML_CONTENT_TYPES = frozenset(
     {"text/html", "application/xhtml+xml", "application/xml", "text/xml"}
@@ -181,11 +188,15 @@ def _extract_document(
     render: RenderDecision,
     resolver: Resolver | None,
     settings: Settings,
+    on_render: Callable[[], None] | None = None,
 ) -> tuple[Document, str]:
     """Extract an IR document from a fetched body (HTML or PDF branch).
 
     Returns the Document and the decoded raw text used for token counting.
     Raises :class:`UnsupportedContentType` for anything that is not HTML or PDF.
+    ``on_render`` (M9) is invoked right BEFORE a headless-browser render so the
+    caller can charge the per-key daily render quota (and reject with 429 before
+    the browser work happens).
     """
     if content_type == _PDF_CONTENT_TYPE:
         source = SourceInfo(
@@ -233,6 +244,8 @@ def _extract_document(
         render=render,
         settings=settings,
     ):
+        if on_render is not None:
+            on_render()
         rendered = render_url(
             guard.normalized_url, resolver=resolver, settings=settings
         )
@@ -259,6 +272,13 @@ def _extract_document(
     return doc, decoded
 
 
+def _render_charger(request: Request | None) -> Callable[[], None] | None:
+    """Return an ``on_render`` callback charging the render quota, or None (M9)."""
+    if request is None:
+        return None
+    return lambda: charge_render(request)
+
+
 def _ensure_not_empty(doc: Document) -> None:
     """Never return a 200 with empty content and no warning (CLAUDE.md)."""
     if not doc.blocks and not doc.warnings:
@@ -277,6 +297,7 @@ def _ensure_not_empty(doc: Document) -> None:
 @router.post("/v1/documents/resolve", response_model=ResolveResponse)
 def resolve(
     req: ResolveRequest,
+    request: Request,
     session_factory: SessionFactoryDep,
     blobs: BlobStoreDep,
     robots: RobotsCheckerDep,
@@ -285,7 +306,46 @@ def resolve(
     now: NowDep,
     settings: SettingsDep,
 ) -> ResolveResponse:
-    """Resolve a URL to its agent-ready document, using the cache state machine."""
+    """Resolve a URL to its agent-ready document (HTTP entry point).
+
+    Thin wrapper over :func:`resolve_document` that passes the live
+    :class:`Request` so the M9 usage units / render-quota hooks fire. The
+    assemble orchestrator calls :func:`resolve_document` directly (no request).
+    """
+    return resolve_document(
+        req,
+        session_factory=session_factory,
+        blobs=blobs,
+        robots=robots,
+        resolver=resolver,
+        transport=transport,
+        now=now,
+        settings=settings,
+        request=request,
+    )
+
+
+def resolve_document(
+    req: ResolveRequest,
+    *,
+    session_factory: sessionmaker[Session],
+    blobs: BlobStore,
+    robots: RobotsChecker,
+    resolver: Resolver | None,
+    transport: Transport | None,
+    now: datetime,
+    settings: Settings,
+    request: Request | None = None,
+) -> ResolveResponse:
+    """Resolve a URL to its agent-ready document, using the cache state machine.
+
+    ``request`` is present on the HTTP path (``None`` when the assemble
+    orchestrator calls this internally); the M9 usage units / render-quota hooks
+    only fire when a request is present.
+    """
+    # Default usage units (M9): no render unless the fetch path renders below.
+    if request is not None:
+        set_usage_units(request, {"renders": 0})
     guard = validate_url(req.url, resolver=resolver, settings=settings)
     normalized_url = guard.normalized_url
     document_id = make_document_id(normalized_url)
@@ -369,7 +429,15 @@ def resolve(
             render=req.render,
             resolver=resolver,
             settings=settings,
+            on_render=_render_charger(request),
         )
+
+        # (M9) record whether a browser render happened for usage accounting.
+        if request is not None:
+            set_usage_units(
+                request,
+                {"renders": 1 if doc.source.render_mode == "browser" else 0},
+            )
 
         # (9) explicit failure: never a 200 empty with no warning.
         _ensure_not_empty(doc)

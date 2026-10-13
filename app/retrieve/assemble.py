@@ -34,7 +34,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from app.api.documents import resolve as resolve_document
+from app.api.documents import resolve_document
 from app.api.schemas import AssembleRequest, ResolveRequest
 from app.index.indexer import index_version
 from app.retrieve.lexical import lexical_search

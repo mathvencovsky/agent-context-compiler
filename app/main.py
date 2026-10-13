@@ -19,6 +19,8 @@ from sqlalchemy import create_engine, text
 from app.api.assemble import router as assemble_router
 from app.api.documents import router as documents_router
 from app.api.errors import fetch_error_handler, generic_exception_handler
+from app.api.usage import UsageMiddleware
+from app.api.usage import router as usage_router
 from app.config import Settings, get_settings
 from app.fetch.errors import FetchError
 from app.logging import RequestIdMiddleware, configure_logging, logger
@@ -80,6 +82,11 @@ def create_app() -> FastAPI:
     configure_logging()
 
     app = FastAPI(title="NINA", version="0.1.0")
+    # Outermost first: the usage middleware records ONE event per /v1 request
+    # (M9) and the request-id middleware binds the log context. add_middleware
+    # stacks LIFO, so RequestIdMiddleware (added last) wraps UsageMiddleware and
+    # runs first — the request_id is bound before usage touches the request.
+    app.add_middleware(UsageMiddleware)
     app.add_middleware(RequestIdMiddleware)
 
     # Register the M5 routes directly on the app router so they appear flat in
@@ -90,6 +97,8 @@ def create_app() -> FastAPI:
     app.router.routes.extend(documents_router.routes)
     # The M7 assemble router mounts the same way (same reasoning as above).
     app.router.routes.extend(assemble_router.routes)
+    # The M9 usage router (GET /v1/usage) mounts the same way.
+    app.router.routes.extend(usage_router.routes)
     # Extending the routes directly (above) keeps them enumerable in
     # ``app.routes``, but — unlike ``include_router`` — it leaves each route's
     # ``dependency_overrides_provider`` unset. The provider is captured when the
@@ -99,7 +108,11 @@ def create_app() -> FastAPI:
     # injectable ``Depends`` seams can actually be overridden (the integration
     # tests rely on this). No runtime behavior change when nothing is
     # overridden. See DECISIONS.md 2026-10-11.
-    for route in (*documents_router.routes, *assemble_router.routes):
+    for route in (
+        *documents_router.routes,
+        *assemble_router.routes,
+        *usage_router.routes,
+    ):
         if isinstance(route, APIRoute):
             route.dependency_overrides_provider = app
             route.app = request_response(route.get_route_handler())

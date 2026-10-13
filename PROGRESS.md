@@ -1,6 +1,115 @@
 # PROGRESS
 
-Marco atual: M8 ETAPA 2 (benchmark completo no split `test`) — CONCLUÍDA. A
+Marco atual: **M9 (Pronto para pilotos) — CONCLUÍDO** (SPEC §7/§8/§9, ROADMAP
+M9). O NINA agora é consumível com segurança por um piloto externo: chaves de
+API + autenticação Bearer em todas as rotas /v1, rate limit (token bucket em
+memória por processo) + cota diária, gravação de `usage_events` em toda
+requisição /v1 + `GET /v1/usage`, servidor MCP (3 ferramentas, stdio +
+streamable HTTP), SDK Python tipado instalável (`sdk/python/`, dist
+`nina-client`) e `docs/QUICKSTART.md` com 3 exemplos copiáveis. Sem crawler e sem
+LLM no caminho crítico (inalterado). NADA foi commitado (decisão humana).
+
+### M9 — o que foi entregue
+
+- **FEAT-001 — Chaves + auth Bearer.** Migração `0004_api_keys_usage_events`
+  (novo HEAD), modelos `ApiKey`/`UsageEvent`, geração/hash de chave
+  (`app/usage/keys.py`: `nina_` + `token_urlsafe(32)`, sha256, mostrada uma
+  vez), `ApiKeyRepo`, CLI `python -m app.admin create-key/revoke-key`
+  (`app/admin.py`), e o dependency `require_api_key` (`app/api/auth.py`) anexado
+  a TODAS as rotas /v1 — no-op em `ENV=dev`, exigido fora de dev, `/health` sem
+  auth. `Unauthorized`(401) em `app/api/errors.py`.
+- **FEAT-002 — Rate limit + cota + uso.** `TokenBucketLimiter` em memória por
+  processo (`app/usage/limits.py`, thread-safe, relógio injetável), cota diária
+  de renders reusando `rate_limited`/429 + `Retry-After`, `UsageEventRepo`
+  (`app/usage/events.py`, agregação p50/p95 nearest-rank), `UsageMiddleware` +
+  `GET /v1/usage` (`app/api/usage.py`), schemas de usage e `RateLimited`(429)
+  com header `Retry-After`.
+- **FEAT-003 — Servidor MCP.** `app/mcp_server/` com o SDK oficial `mcp` (MIT):
+  `client.py` (cliente HTTP fino tipado, `httpx` próprio, Bearer da env),
+  `server.py` (`build_server` com as 3 ferramentas `resolve_url`/
+  `assemble_context`/`get_document`, cada descrição avisando `untrusted_source`),
+  `__main__.py` (stdio default, streamable HTTP via `--http`).
+- **FEAT-004 — SDK Python + e2e + QUICKSTART + docs.** `sdk/python/` como
+  distribuição SEPARADA (`nina-client`, build `hatchling`, só `httpx` em
+  runtime): `nina_client/client.py` (`NinaClient` tipado com
+  `resolve`/`assemble`/`get_document`, Bearer, retries/backoff honrando
+  `Retry-After`, transport injetável), `errors.py` (erros tipados mapeando a
+  tabela §8 por `code`) e `models.py` (dataclasses tolerantes espelhando
+  `app/api/schemas.py`). `tests/unit/sdk/test_sdk_client.py` (OFFLINE,
+  `httpx.MockTransport`): Bearer enviado, resposta tipada, retry em
+  429+`Retry-After`, `UnauthorizedError`/`RateLimitedError` do envelope.
+  `tests/integration/test_sdk_e2e.py`: `NinaClient` contra a API local
+  (TestClient, ENV=production, providers FAKE, chave via `ApiKeyRepo`, transport
+  sync delegando ao TestClient) recebe fragmentos com proveniência — zero rede,
+  zero chaves reais. `docs/QUICKSTART.md` com 3 blocos copiáveis (curl, SDK,
+  config MCP no Claude Desktop/Code) começando pelo passo de criar a chave.
+
+### M9 — posicionamento (eficiência + evidência) nos docs
+
+O README ganhou uma seção de uso para pilotos (criar chave, auth Bearer, SDK,
+MCP, link para o QUICKSTART) que reafirma o posicionamento validado no M8:
+**paridade de qualidade com o `naive_rag` a ~metade do custo, com evidência
+rastreável** (test @4000: sucesso `ours` 0.780 vs 0.707 — empate de IC; custo
+US$ 0.0051 vs 0.0089, ~43% mais barato; ~44% menos tokens de contexto; citação
+0.585; INSUFFICIENT 0.000). O produto é vendido como "o mesmo resultado de um
+RAG competente, por menos custo e com a prova anexada", NÃO como "mais preciso
+que RAG".
+
+### M9 — dívidas / notas
+
+- O token bucket é EM MEMÓRIA por processo (decisão humana): não escala
+  horizontalmente — 1 bucket por worker, adequado ao MVP de 1 worker. Escalar
+  horizontalmente exigirá um limiter compartilhado (Redis/Postgres) num marco
+  futuro.
+- A cota diária de renders reusa o code §8 `rate_limited` (a SPEC não tem code
+  dedicado para cota) — escolha documentada em DECISIONS.md.
+- Os provedores reais (OpenAI/Jina) e o MCP/SDK contra a API real nunca são
+  exercidos em teste (zero rede); só a execução humana com chave os usa.
+- O SDK é uma distribuição separada e NÃO é instalado pelo build principal; os
+  testes o importam adicionando `sdk/python` ao `sys.path`. Para publicar o SDK,
+  empacotar `sdk/python/` isoladamente (`pip install ./sdk/python`).
+
+### Como testar o M9 manualmente
+
+Gate rápido (sem serviços, sem rede), Windows/PowerShell (separador `;`):
+
+```
+uv run ruff check . ; uv run ruff format --check . ; uv run mypy app ; uv run pytest -m "not integration and not browser"
+```
+
+Integração (Postgres + pgvector + SeaweedFS via Docker):
+
+```
+docker compose up -d --wait postgres seaweedfs ; docker compose up s3-init ; uv run alembic upgrade head ; uv run pytest -m integration -q
+```
+
+(head `0004_api_keys_usage_events`). Round-trip de migração:
+`uv run alembic downgrade -1 ; uv run alembic upgrade head`. NÃO rode
+`cp .env.example .env` por cima do `.env` real.
+
+Uso real do SDK/MCP (humano, exige a API no ar e uma chave): criar a chave com
+`python -m app.admin create-key --name piloto-x` (mostrada uma vez), exportar
+`API_URL`/`API_KEY`, e seguir os 3 blocos do `docs/QUICKSTART.md`.
+
+### M9 — resultado do gate (árvore atual, nada commitado)
+
+```
+uv run ruff check .            -> All checks passed!
+uv run ruff format --check .   -> 201 files already formatted
+uv run mypy app                -> Success: no issues found in 65 source files
+uv run pytest -m "not integration and not browser"
+                               -> 490 passed, 48 deselected, 37 snapshots passed
+uv run pytest -m integration -q (infra no ar, head 0004)
+                               -> 39 passed, 499 deselected
+```
+
+Os 490 incluem os 6 novos unit do SDK (`tests/unit/sdk`); os 39 de integração
+incluem os 2 novos e2e do SDK (`tests/integration/test_sdk_e2e.py`). O SDK
+isolado passa `mypy --strict` (4 arquivos). Nenhum teste M0–M8 regrediu.
+
+---
+
+Marco anterior: M8 ETAPA 2 (benchmark completo no split `test`) — CONCLUÍDA. A
 Etapa 1 (calibração dos parâmetros de seleção no `dev` e congelamento) está
 concluída e commitada em `e75273e`; a Etapa 2 rodou o benchmark COMPLETO no
 split `test` (41 tarefas × 9 estratégias × 3 orçamentos) com os provedores REAIS
