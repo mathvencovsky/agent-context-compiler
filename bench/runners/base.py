@@ -16,11 +16,15 @@ frozen snapshot and are registered here too.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.index.tokens import count_tokens
 from bench.corpus_store import CorpusStore
 from bench.tasks_schema import Task
+
+if TYPE_CHECKING:
+    from app.providers.embeddings.base import EmbeddingProvider
+    from app.providers.rerank.base import RerankProvider
 
 
 @dataclass(frozen=True)
@@ -74,8 +78,21 @@ def truncate_to_budget(text: str, budget_tokens: int) -> tuple[str, int]:
 _REGISTRY: dict[str, Runner] = {}
 
 
-def _ensure_registered() -> None:
-    """Populate the registry from the baseline modules (idempotent)."""
+def _ensure_registered(
+    *,
+    embeddings: EmbeddingProvider | None = None,
+    reranker: RerankProvider | None = None,
+    lambda_: float | None = None,
+    min_value: float | None = None,
+) -> None:
+    """Populate the registry from the baseline modules (idempotent).
+
+    ``embeddings``/``reranker`` are injected ONLY into the ``ours*`` runners
+    (M8 Stage 2 real run); the default ``None`` keeps the deterministic fakes,
+    so every test and the fake-provider path are unchanged. ``lambda_``/
+    ``min_value`` override the ``ours*`` selection knobs (the Stage 2 run passes
+    the frozen config values); ``None`` keeps the ``make_ours_runners`` defaults.
+    """
     if _REGISTRY:
         return
     from bench.runners.firecrawl import make_firecrawl_runner
@@ -88,7 +105,14 @@ def _ensure_registered() -> None:
         _REGISTRY[runner.name] = runner
 
     # M7: the full NINA pipeline (``ours``) plus its five ablation variants.
-    for ours_runner in make_ours_runners():
+    # M8 Stage 2: the real retrieval providers + frozen selection knobs are
+    # injected here when present (default None = fakes / module defaults).
+    ours_kwargs: dict[str, object] = {"embeddings": embeddings, "reranker": reranker}
+    if lambda_ is not None:
+        ours_kwargs["lambda_"] = lambda_
+    if min_value is not None:
+        ours_kwargs["min_value"] = min_value
+    for ours_runner in make_ours_runners(**ours_kwargs):  # type: ignore[arg-type]
         _REGISTRY[ours_runner.name] = ours_runner
 
     # firecrawl auto-skips (returns None) when FIRECRAWL_API_KEY is absent
@@ -96,6 +120,31 @@ def _ensure_registered() -> None:
     firecrawl = make_firecrawl_runner()
     if firecrawl is not None:
         _REGISTRY[firecrawl.name] = firecrawl
+
+
+def register_ours(
+    *,
+    embeddings: EmbeddingProvider | None = None,
+    reranker: RerankProvider | None = None,
+    lambda_: float | None = None,
+    min_value: float | None = None,
+) -> None:
+    """Rebuild the registry with REAL retrieval providers wired into ``ours*``.
+
+    The M8 Stage 2 real run calls this once (``bench.run.run(real=True)``) so the
+    ``ours``/``ours_*`` runners use the injected OpenAI embeddings + Jina
+    reranker and the FROZEN selection knobs instead of the fakes/defaults. Clears
+    the registry first so a previous fake-wired state is replaced. Tests never
+    call this (the default path builds the fakes), so no test touches the
+    network.
+    """
+    _REGISTRY.clear()
+    _ensure_registered(
+        embeddings=embeddings,
+        reranker=reranker,
+        lambda_=lambda_,
+        min_value=min_value,
+    )
 
 
 def get_runner(name: str) -> Runner:

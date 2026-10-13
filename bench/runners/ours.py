@@ -453,13 +453,72 @@ def _truncate_select(
     return selected
 
 
-def make_ours_runners() -> list[OursRunner]:
-    """Return the ``ours`` runner and its five ablation variants (SPEC §6)."""
+def make_ours_runners(
+    *,
+    embeddings: EmbeddingProvider | None = None,
+    reranker: RerankProvider | None = None,
+    lambda_: float = _SELECTION_LAMBDA,
+    min_value: float = _MIN_VALUE,
+) -> list[OursRunner]:
+    """Return the ``ours`` runner and its five ablation variants (SPEC §6).
+
+    ``embeddings``/``reranker`` default to ``None`` (the deterministic fakes are
+    built per call, identical to today's behavior and used by every test). The
+    M8 Stage 2 real run passes the DISK-CACHED OpenAI embeddings + Jina reranker
+    so each ``ours*`` runner exercises the real retrieval pipeline over the
+    frozen snapshot while reusing the persistent cache.
+
+    ``lambda_``/``min_value`` default to the module constants (today's behavior);
+    the Stage 2 real run passes the FROZEN selection knobs read from
+    ``app.config`` (λ=0.3, min_value=0.0) so the benchmark measures the frozen
+    pipeline. These are the SPEC §6 selection knobs; they are only READ here,
+    never written, so ``app/config.py`` stays untouched.
+    """
     return [
-        OursRunner(),
-        OursRunner(name="ours_no_vector", use_vector=False),
-        OursRunner(name="ours_no_lexical", use_lexical=False),
-        OursRunner(name="ours_no_rerank", use_rerank=False),
-        OursRunner(name="ours_fixed_chunks", structural_chunking=False),
-        OursRunner(name="ours_truncate", selection="truncate"),
+        OursRunner(
+            embeddings=embeddings,
+            reranker=reranker,
+            lambda_=lambda_,
+            min_value=min_value,
+        ),
+        OursRunner(
+            name="ours_no_vector",
+            use_vector=False,
+            embeddings=embeddings,
+            reranker=reranker,
+            lambda_=lambda_,
+            min_value=min_value,
+        ),
+        OursRunner(
+            name="ours_no_lexical",
+            use_lexical=False,
+            embeddings=embeddings,
+            reranker=reranker,
+            lambda_=lambda_,
+            min_value=min_value,
+        ),
+        OursRunner(
+            name="ours_no_rerank",
+            use_rerank=False,
+            embeddings=embeddings,
+            reranker=reranker,
+            lambda_=lambda_,
+            min_value=min_value,
+        ),
+        OursRunner(
+            name="ours_fixed_chunks",
+            structural_chunking=False,
+            embeddings=embeddings,
+            reranker=reranker,
+            lambda_=lambda_,
+            min_value=min_value,
+        ),
+        OursRunner(
+            name="ours_truncate",
+            selection="truncate",
+            embeddings=embeddings,
+            reranker=reranker,
+            lambda_=lambda_,
+            min_value=min_value,
+        ),
     ]
