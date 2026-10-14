@@ -92,6 +92,16 @@ class Settings(BaseSettings):
     coverage_high: float = 0.7746
     rrf_k: int = 60
 
+    # lexical_weight is a NEW M8 retrieval-precision knob (not part of the Stage
+    # 1 frozen set above). It is the per-list weight the WEIGHTED RRF applies to
+    # the lexical (exact-term) ranking relative to the vector ranking (fixed at
+    # 1.0), so specific-detail queries can lean on exact-term evidence:
+    # score(d) = lexical_weight/(k+rank_lex) + 1.0/(k+rank_vec). The default 1.0
+    # is the IDENTITY — it reproduces today's RRF byte-for-byte — and stays 1.0
+    # until the honest DEV-ONLY calibration (bench.calibrate lexical_weight grid)
+    # picks and freezes a value here, exactly like selection_lambda/min_value.
+    lexical_weight: float = 1.0
+
     # Rate limit + render quota (M9, SPEC §8 'rate_limited'/'GET /v1/usage').
     # Process-local token bucket per API key: rate_limit_capacity is the burst
     # size (tokens), rate_limit_refill_per_sec the steady refill rate. Each /v1

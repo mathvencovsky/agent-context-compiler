@@ -34,7 +34,13 @@ _FIXTURE_BENCH = Path(__file__).resolve().parents[2] / "fixtures" / "bench"
 _CORPUS_DIR = str(_FIXTURE_BENCH / "corpus")
 _TASKS_PATH = str(_FIXTURE_BENCH / "tasks.yaml")
 
-_STRATEGIES = ["raw_html", "naive_rag", "ours", "ours_no_rerank"]
+_STRATEGIES = [
+    "raw_html",
+    "naive_rag",
+    "naive_rag_vector",
+    "ours",
+    "ours_no_rerank",
+]
 _BUDGETS = [400, 800, 1600]
 
 
@@ -198,7 +204,7 @@ def test_sweep_is_deterministic_modulo_time(tmp_path: Path) -> None:
 
 
 def test_config_json_records_frozen_params_and_budgets(tmp_path: Path) -> None:
-    """``config.json`` carries the 5 frozen params and the swept budgets."""
+    """``config.json`` carries the frozen params (incl. lexical_weight) + budgets."""
     out = sweep.run_sweep(
         strategies=["ours", "naive_rag"],
         split="dev",
@@ -219,8 +225,39 @@ def test_config_json_records_frozen_params_and_budgets(tmp_path: Path) -> None:
         "coverage_low",
         "coverage_high",
         "rrf_k",
+        "lexical_weight",
     }
+    # The new M8 knob (FEAT-001) is recorded for reproducibility; default 1.0.
+    assert "lexical_weight" in frozen
+    assert frozen["lexical_weight"] == 1.0
     assert config["budgets"] == _BUDGETS
+
+
+def test_sweep_compares_ours_vs_both_baselines(tmp_path: Path) -> None:
+    """report.md + sumario.md carry the ours-vs-naive_rag_vector comparison too."""
+    out = sweep.run_sweep(
+        strategies=_STRATEGIES,
+        split="dev",
+        budgets=_BUDGETS,
+        corpus_dir=_CORPUS_DIR,
+        tasks_path=_TASKS_PATH,
+        results_root=tmp_path,
+        prices_path=_FIXTURE_BENCH.parent.parent.parent / "bench" / "prices.yaml",
+        out_name="cmp",
+        provider_factory=_fake_providers,
+        retrieval_factory=lambda: (_CountingEmbeddings(), _CountingReranker()),
+    )
+    report = (out / "report.md").read_text(encoding="utf-8")
+    sumario = (out / "sumario.md").read_text(encoding="utf-8")
+    # Both baseline comparison blocks are present in the report.
+    assert "ours vs naive_rag by category (reference budget)" in report
+    assert "ours vs naive_rag_vector by category (reference budget)" in report
+    # The sumario covers both baselines and the extended central question.
+    assert "`ours` vs `naive_rag`" in sumario
+    assert "`ours` vs `naive_rag_vector`" in sumario
+    assert "naive_rag` E `naive_rag_vector`" in sumario
+    # naive_rag_vector appears in the per-strategy table (iterates all strategies).
+    assert "| naive_rag_vector |" in report
 
 
 def test_report_notes_ignored_unvalidated_task(tmp_path: Path) -> None:

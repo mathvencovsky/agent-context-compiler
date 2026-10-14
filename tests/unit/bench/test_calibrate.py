@@ -14,10 +14,13 @@ import pytest
 
 from bench.calibrate import (
     GRID,
+    LEXICAL_WEIGHT_GRID,
     CombinationResult,
+    LexicalWeightResult,
     coverage_from_scores,
     percentiles,
     pick_best,
+    pick_best_lexical_weight,
 )
 
 
@@ -121,3 +124,74 @@ def test_coverage_from_scores_returns_ordered_thresholds() -> None:
     assert low <= high
     assert low in scores
     assert high in scores
+
+
+def _lw(
+    lexical_weight: float,
+    *,
+    success_rate: float,
+    cost: float = 1.0,
+    ctx: float = 100.0,
+) -> LexicalWeightResult:
+    return LexicalWeightResult(
+        lexical_weight=lexical_weight,
+        n_tasks=96,
+        success_rate=success_rate,
+        cost_per_completed_task=cost,
+        mean_context_tokens=ctx,
+    )
+
+
+def test_lexical_weight_grid_shape_and_identity_first() -> None:
+    """The dev-only lexical_weight grid is the four expected points, 1.0 first.
+
+    1.0 (the identity) must be in the grid so the sweep can reproduce today's
+    behavior, and it is the smallest value so the pick_best tie-break defaults
+    to it.
+    """
+    assert LEXICAL_WEIGHT_GRID == (1.0, 1.5, 2.0, 3.0)
+    assert LEXICAL_WEIGHT_GRID[0] == 1.0
+    assert min(LEXICAL_WEIGHT_GRID) == 1.0
+
+
+def test_pick_best_lexical_weight_prefers_highest_success() -> None:
+    """Primary key: the weight with the highest dev success rate wins."""
+    results = [
+        _lw(1.0, success_rate=0.50),
+        _lw(2.0, success_rate=0.70),
+        _lw(3.0, success_rate=0.60),
+    ]
+    assert pick_best_lexical_weight(results).lexical_weight == 2.0
+
+
+def test_pick_best_lexical_weight_cost_then_tokens_break_tie() -> None:
+    """Equal success -> lowest cost, then lowest mean context tokens."""
+    cost_tie = [
+        _lw(1.0, success_rate=0.70, cost=2.0),
+        _lw(2.0, success_rate=0.70, cost=1.0),
+    ]
+    assert pick_best_lexical_weight(cost_tie).lexical_weight == 2.0
+
+    token_tie = [
+        _lw(1.5, success_rate=0.70, cost=1.0, ctx=200.0),
+        _lw(3.0, success_rate=0.70, cost=1.0, ctx=120.0),
+    ]
+    assert pick_best_lexical_weight(token_tie).lexical_weight == 3.0
+
+
+def test_pick_best_lexical_weight_final_tie_prefers_identity() -> None:
+    """All metrics equal -> lowest weight (the 1.0 identity) wins, order-free."""
+    results = [
+        _lw(3.0, success_rate=0.70),
+        _lw(1.0, success_rate=0.70),
+        _lw(2.0, success_rate=0.70),
+    ]
+    best = pick_best_lexical_weight(results)
+    assert best.lexical_weight == 1.0
+    assert pick_best_lexical_weight(list(reversed(results))) == best
+
+
+def test_pick_best_lexical_weight_empty_raises() -> None:
+    """An empty result list has no winner to pick."""
+    with pytest.raises(ValueError, match="at least one"):
+        pick_best_lexical_weight([])

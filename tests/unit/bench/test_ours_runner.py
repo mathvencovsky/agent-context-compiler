@@ -277,6 +277,60 @@ def test_provenance_counts_against_budget(
         assert result.context_tokens <= tiny_budget
 
 
+def test_lexical_weight_default_matches_today(
+    store: CorpusStore, tasks: list[Task]
+) -> None:
+    """``lexical_weight=1.0`` (the default) reproduces today's fused ranking.
+
+    The M8 weighted-RRF knob defaults to the identity, so a runner that passes
+    the explicit default must produce byte-identical prepared candidates and
+    context to one that never sets it. Fully offline (fake providers).
+    """
+    default = OursRunner()
+    explicit_identity = OursRunner(lexical_weight=1.0)
+    for task in _answerable_tasks(tasks):
+        pa = default.prepare_candidates(task, store=store)
+        pb = explicit_identity.prepare_candidates(task, store=store)
+        assert [(c.document_id, c.ord, c.value, c.tokens) for c in pa.candidates] == [
+            (c.document_id, c.ord, c.value, c.tokens) for c in pb.candidates
+        ]
+        assert default.build_context(
+            task, budget_tokens=_BUDGET, store=store
+        ) == explicit_identity.build_context(task, budget_tokens=_BUDGET, store=store)
+
+
+def test_lexical_weight_threads_into_fusion(
+    store: CorpusStore, tasks: list[Task]
+) -> None:
+    """A heavier ``lexical_weight`` reaches the fusion and can reorder candidates.
+
+    Proves the knob is not a silent no-op: with a large lexical weight, at least
+    one task's prepared candidate ordering (document_id, ord, value) differs from
+    the identity default — so the weight genuinely biases the fused ranking.
+    Fully offline (fake providers).
+    """
+    identity = OursRunner(lexical_weight=1.0)
+    heavy = OursRunner(lexical_weight=5.0)
+    differed = False
+    for task in _answerable_tasks(tasks):
+        pa = identity.prepare_candidates(task, store=store)
+        pb = heavy.prepare_candidates(task, store=store)
+        order_a = [(c.document_id, c.ord, round(c.value, 9)) for c in pa.candidates]
+        order_b = [(c.document_id, c.ord, round(c.value, 9)) for c in pb.candidates]
+        if order_a != order_b:
+            differed = True
+    assert differed, "lexical_weight=5.0 never changed the fused candidates"
+
+
+def test_make_ours_runners_threads_lexical_weight() -> None:
+    """``make_ours_runners`` propagates ``lexical_weight`` to every variant."""
+    runners = make_ours_runners(lexical_weight=2.5)
+    assert runners  # non-empty
+    assert all(r.lexical_weight == 2.5 for r in runners)
+    # The default stays the identity 1.0 so existing behavior is unchanged.
+    assert all(r.lexical_weight == 1.0 for r in make_ours_runners())
+
+
 def test_prepared_exposes_full_top30_scores(
     store: CorpusStore, tasks: list[Task]
 ) -> None:

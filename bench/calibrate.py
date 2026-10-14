@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -74,6 +74,15 @@ GRID: list[tuple[float, float]] = [
     for lambda_ in (0.3, 0.5, 0.7)
     for min_value in (0.0, 0.05, 0.1)
 ]
+
+#: DEV-ONLY weighted-RRF precision grid (M8 FEAT-001). The lexical (exact-term)
+#: list's weight in the fusion relative to the vector list (fixed at 1.0); 1.0
+#: is the identity (today's RRF). Unlike the selection grid, lexical_weight
+#: changes the FUSED ranking, so prepare_candidates is NOT invariant to it — the
+#: calibrator runs the prepare pass ONCE PER WEIGHT (see
+#: :func:`run_lexical_weight_calibration`), still reusing the disk cache for the
+#: invariant embeddings and per-pair rerank.
+LEXICAL_WEIGHT_GRID: tuple[float, ...] = (1.0, 1.5, 2.0, 3.0)
 
 #: Calibration runs ONLY at this budget (human decision).
 CALIBRATION_BUDGET = 4000
@@ -116,6 +125,47 @@ def pick_best(results: list[CombinationResult]) -> CombinationResult:
             r.mean_context_tokens,
             r.lambda_,
             r.min_value,
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class LexicalWeightResult:
+    """Measured metrics for one ``lexical_weight`` grid point (FEAT-001).
+
+    Mirrors :class:`CombinationResult` for the DEV-ONLY weighted-RRF sweep: the
+    single swept parameter is ``lexical_weight`` (the per-list weight the lexical
+    ranking gets in the fusion vs the vector list, fixed at 1.0). ``success_rate``
+    is the fraction of dev tasks graded correct at the frozen selection knobs;
+    the cost/token fields drive the deterministic tie-break exactly as in
+    :func:`pick_best`.
+    """
+
+    lexical_weight: float
+    n_tasks: int
+    success_rate: float
+    cost_per_completed_task: float
+    mean_context_tokens: float
+
+
+def pick_best_lexical_weight(results: list[LexicalWeightResult]) -> LexicalWeightResult:
+    """Return the winning ``lexical_weight`` (same ordering as :func:`pick_best`).
+
+    Primary key: success rate (higher wins). Tie-break 1: lowest cost per
+    completed task. Tie-break 2: lowest mean context tokens. Final deterministic
+    tie-break: lowest ``lexical_weight`` — so the identity (1.0) wins any exact
+    tie and the result is a single reproducible winner. Raises
+    :class:`ValueError` on an empty input.
+    """
+    if not results:
+        raise ValueError("pick_best_lexical_weight requires at least one result")
+    return min(
+        results,
+        key=lambda r: (
+            -r.success_rate,
+            r.cost_per_completed_task,
+            r.mean_context_tokens,
+            r.lexical_weight,
         ),
     )
 
@@ -251,6 +301,182 @@ def _measure_combination(
         cost_per_completed_task=(total_cost / completed) if completed else float("inf"),
         mean_context_tokens=(mean(context_tokens) if context_tokens else 0.0),
     )
+
+
+def _measure_lexical_weight(
+    lexical_weight: float,
+    *,
+    tasks: list[Task],
+    store: CorpusStore,
+    embeddings: EmbeddingProvider,
+    reranker: RerankProvider,
+    answerer: LLMProvider,
+    judge: LLMProvider,
+    prices: dict[str, Any],
+    budget: int,
+    selection_lambda: float,
+    min_value: float,
+    cost_acc: _CostAccumulator,
+) -> LexicalWeightResult:
+    """Measure one ``lexical_weight`` grid point on the dev split (FEAT-001).
+
+    IMPORTANT: ``lexical_weight`` changes the FUSED ranking, so the prepare pass
+    is NOT invariant to it — this runs ``prepare_candidates`` ONCE for THIS
+    weight (reusing the persistent disk cache for the weight-invariant embeddings
+    and per-pair rerank) and then applies the pure selection + emit at the FROZEN
+    selection knobs before the answer+grade+price path. Returns the dev success
+    rate, cost per completed task and mean context tokens for the tie-break.
+    """
+    runner = OursRunner(
+        embeddings=embeddings,
+        reranker=reranker,
+        lambda_=selection_lambda,
+        min_value=min_value,
+        lexical_weight=lexical_weight,
+    )
+    corrects: list[bool] = []
+    context_tokens: list[int] = []
+    total_cost = 0.0
+    for task in tasks:
+        prepared = runner.prepare_candidates(task, store=store)
+        context = runner.assemble_from_candidates(prepared, budget_tokens=budget)
+        answer_result = answer(task, context.text, provider=answerer)
+        grade_result = grade(task, answer_result, store=store, judge_provider=judge)
+        corrects.append(grade_result.correct)
+        context_tokens.append(context.context_tokens)
+        cost_acc.answerer_input_tokens += answer_result.input_tokens
+        cost_acc.answerer_output_tokens += answer_result.output_tokens
+        total_cost += model_cost_usd(
+            input_tokens=answer_result.input_tokens,
+            output_tokens=answer_result.output_tokens,
+            model=answerer.model,
+            prices=prices,
+        )
+
+    n = len(tasks)
+    completed = sum(1 for ok in corrects if ok)
+    return LexicalWeightResult(
+        lexical_weight=lexical_weight,
+        n_tasks=n,
+        success_rate=(completed / n) if n else 0.0,
+        cost_per_completed_task=(total_cost / completed) if completed else float("inf"),
+        mean_context_tokens=(mean(context_tokens) if context_tokens else 0.0),
+    )
+
+
+def run_lexical_weight_calibration(
+    *,
+    tasks_path: str | Path = DEFAULT_TASKS_PATH,
+    corpus_dir: str | Path = DEFAULT_CORPUS_DIR,
+    results_root: str | Path = DEFAULT_RESULTS_ROOT,
+    prices_path: str | Path = DEFAULT_PRICES_PATH,
+    grid: Sequence[float] = LEXICAL_WEIGHT_GRID,
+    budget: int = CALIBRATION_BUDGET,
+    timestamp: str | None = None,
+    provider_factory: Callable[[], tuple[LLMProvider, LLMProvider]] | None = None,
+    retrieval_factory: (
+        Callable[[], tuple[EmbeddingProvider, RerankProvider]] | None
+    ) = None,
+) -> Path:
+    """Sweep the DEV-ONLY ``lexical_weight`` grid and write a winner artifact.
+
+    HUMAN-run (spends keys by default). Loads ONLY ``split == "dev"`` tasks (the
+    HONESTY RULE enforced in code), then for EACH weight in ``grid`` runs the
+    full prepare pass (the fusion depends on the weight, so prepare is re-run per
+    weight — NOT reused across weights) + the pure selection at the FROZEN
+    selection knobs read from ``app.config`` + answer + grade at ``budget``. Picks
+    the winner with :func:`pick_best_lexical_weight` and writes
+    ``<results_root>/lexical_weight_<ts>/{lexical_weights.csv, winner.json}``.
+    The persistent ``bench/.cache/`` still serves the weight-invariant embeddings
+    and per-pair rerank, so the paid spend is amortized across weights.
+    """
+    from app.config import get_settings
+
+    tasks = [t for t in load_tasks(tasks_path) if t.split == _DEV_SPLIT]
+    if not tasks:
+        raise ValueError(f"no tasks with split=={_DEV_SPLIT!r} in {tasks_path}")
+
+    settings = get_settings()
+    store = CorpusStore(corpus_dir)
+    prices = load_prices(prices_path)
+    answerer, judge = (provider_factory or _make_providers)()
+    embeddings, reranker = (retrieval_factory or _make_retrieval_providers)()
+
+    cost_acc = _CostAccumulator()
+    results = [
+        _measure_lexical_weight(
+            lexical_weight,
+            tasks=tasks,
+            store=store,
+            embeddings=embeddings,
+            reranker=reranker,
+            answerer=answerer,
+            judge=judge,
+            prices=prices,
+            budget=budget,
+            selection_lambda=settings.selection_lambda,
+            min_value=settings.min_value,
+            cost_acc=cost_acc,
+        )
+        for lexical_weight in grid
+    ]
+    winner = pick_best_lexical_weight(results)
+
+    if timestamp is None:
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S_%f")
+    out_dir = Path(results_root) / f"lexical_weight_{timestamp}"
+    _write_lexical_weights_csv(out_dir, results)
+
+    answerer_cost = model_cost_usd(
+        input_tokens=cost_acc.answerer_input_tokens,
+        output_tokens=cost_acc.answerer_output_tokens,
+        model=answerer.model,
+        prices=prices,
+    )
+    winner_payload = {
+        "lexical_weight": winner.lexical_weight,
+        "success_rate": winner.success_rate,
+        "cost_per_completed_task": winner.cost_per_completed_task,
+        "mean_context_tokens": winner.mean_context_tokens,
+        "grid": list(grid),
+        "budget": budget,
+        "split": _DEV_SPLIT,
+        "n_tasks": len(tasks),
+        "selection_lambda": settings.selection_lambda,
+        "min_value": settings.min_value,
+        "answerer_cost_usd": answerer_cost,
+        "answerer_input_tokens": cost_acc.answerer_input_tokens,
+        "answerer_output_tokens": cost_acc.answerer_output_tokens,
+        "rerank_api_calls": getattr(reranker, "api_calls", None),
+        "rerank_cache_hits": getattr(reranker, "hits", None),
+        "embed_api_calls": getattr(embeddings, "api_calls", None),
+        "git_commit": _git_commit(),
+    }
+    (out_dir / "winner.json").write_text(
+        json.dumps(winner_payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return out_dir
+
+
+def _write_lexical_weights_csv(
+    out_dir: Path, results: list[LexicalWeightResult]
+) -> None:
+    """Write the lexical_weight sweep table (sorted by weight, fixed precision)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    header = (
+        "lexical_weight,n_tasks,success_rate,"
+        "cost_per_completed_task,mean_context_tokens\n"
+    )
+    ordered = sorted(results, key=lambda r: r.lexical_weight)
+    lines = [header]
+    for r in ordered:
+        lines.append(
+            f"{r.lexical_weight:.2f},{r.n_tasks},"
+            f"{r.success_rate:.4f},{r.cost_per_completed_task:.6f},"
+            f"{r.mean_context_tokens:.1f}\n"
+        )
+    (out_dir / "lexical_weights.csv").write_text("".join(lines), encoding="utf-8")
 
 
 def _write_combinations_csv(out_dir: Path, results: list[CombinationResult]) -> None:
@@ -620,11 +846,23 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "run (uses the Jina key)."
         ),
     )
+    parser.add_argument(
+        "--lexical-weight",
+        action="store_true",
+        help=(
+            "run the DEV-ONLY weighted-RRF lexical_weight sweep "
+            f"({', '.join(f'{w:g}' for w in LEXICAL_WEIGHT_GRID)}) at the frozen "
+            "selection knobs. REAL run (spends keys); prepares once per weight."
+        ),
+    )
     args = parser.parse_args(argv)
-    # Either path is a REAL run; require explicit confirmation via one of the
-    # two flags so a bare invocation never silently spends keys.
-    if not (args.real or args.coverage_only):
-        parser.error("pass --real (full grid) or --coverage-only (coverage recompute)")
+    # Every path is a REAL run; require explicit confirmation via one of the
+    # flags so a bare invocation never silently spends keys.
+    if not (args.real or args.coverage_only or args.lexical_weight):
+        parser.error(
+            "pass --real (selection grid), --coverage-only (coverage recompute) "
+            "or --lexical-weight (weighted-RRF sweep)"
+        )
     return args
 
 
@@ -635,6 +873,10 @@ def main(argv: list[str] | None = None) -> None:
         low, high, out_dir = recompute_coverage()
         print(f"coverage_low={low:.4f} coverage_high={high:.4f}")
         print(f"wrote coverage artifact to {out_dir}")
+        return
+    if args.lexical_weight:
+        out_dir = run_lexical_weight_calibration(budget=args.budget)
+        print(f"wrote lexical_weight calibration artifact to {out_dir}")
         return
     out_dir = run_calibration(budget=args.budget)
     print(f"wrote calibration artifact to {out_dir}")

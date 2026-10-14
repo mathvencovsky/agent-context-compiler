@@ -82,25 +82,31 @@ Honestidade de escopo, para alinhar expectativas de piloto:
 
 ### O que o benchmark provou (M8, split test reservado)
 
-O teste decisivo não é o Firecrawl: é o **`naive_rag`**, o RAG competente que um
-bom dev montaria em uma tarde. O M8 rodou o benchmark completo no split `test`
-(41 tarefas, parâmetros calibrados só no `dev` e congelados antes de medir o
-`test`). No orçamento de referência de 4000 tokens:
+O teste decisivo não é o Firecrawl: são dois RAGs que um bom dev montaria — o
+**`naive_rag`** (BM25) e o **`naive_rag_vector`** (híbrido BM25+embeddings, o
+"RAG competente de 2026"). O M8 rodou o benchmark no split `test` (41 tarefas,
+parâmetros calibrados só no `dev` e congelados antes de medir o `test`). No
+orçamento de referência de 4000 tokens:
 
-| Métrica (test, @4000) | **NINA (`ours`)** | `naive_rag` |
-|---|---|---|
-| Taxa de sucesso | **0,780** [IC95 0,634–0,902] | 0,707 [0,561–0,854] |
-| Custo por tarefa concluída | **US$ 0,0051** | US$ 0,0089 |
-| Tokens de contexto (média) | **1.495** | 2.678 |
-| Precisão de citação | **0,585** | 0,512 |
-| Taxa INSUFFICIENT | **0,000** | 0,098 |
+| Métrica (test, @4000) | **NINA (`ours`)** | `naive_rag` (BM25) | `naive_rag_vector` (híbrido) |
+|---|---|---|---|
+| Taxa de sucesso | **0,805** [0,683–0,927] | 0,756 [0,634–0,878] | 0,683 [0,537–0,829] |
+| Custo por tarefa concluída | **US$ 0,0049** | US$ 0,0084 | US$ 0,0092 |
+| Tokens de contexto (média) | **1.495** | 2.677 | 2.673 |
+| Precisão de citação | **0,585** | 0,512 | 0,512 |
+| Taxa INSUFFICIENT | **0,000** | 0,098 | 0,098 |
 
-**Leitura honesta:** em qualidade é **empate estatístico** (os ICs se
-sobrepõem; não há vitória de IC não-sobreposto em nenhuma categoria — NINA não
-é "mais preciso que RAG"). Mas, à paridade de qualidade, NINA entrega o
-resultado com **~43% menos custo**, **~44% menos tokens de contexto**, **citação
-verificável funcionando** (acima do baseline) e **sem desistir de tarefas**
-(0% INSUFFICIENT vs ~10%).
+**Leitura honesta:** em qualidade é **empate estatístico** com ambos os
+baselines (os ICs se sobrepõem; os `n` por categoria são pequenos — NINA não é
+"mais preciso que RAG"). Mas, à paridade de qualidade, NINA entrega o resultado
+com **~43% menos custo que o BM25 e ~47% menos que o RAG vetorial**, **~44%
+menos tokens de contexto**, **citação verificável funcionando** (acima dos
+baselines) e **sem desistir de tarefas** (0% INSUFFICIENT vs ~10%). Notável: o
+RAG vetorial — o baseline "mais forte" — teve a MENOR taxa de sucesso dos três e
+o maior custo neste corpus técnico (embeddings de propósito geral não batem BM25
+em busca de termo exato). E o NINA é o único que **melhora** com mais orçamento
+(0,707→0,805 de 2000 para 4000), enquanto os baselines estagnam ou pioram — a
+assinatura de "seleção, não despejo de texto".
 
 **A tese validada, portanto, é eficiência + evidência rastreável a PARIDADE de
 qualidade** — "o mesmo resultado de um RAG competente, por menos custo e com a

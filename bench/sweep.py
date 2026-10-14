@@ -441,7 +441,8 @@ def run_sweep(
     answerer, judge = (provider_factory or (lambda: _make_providers(real=real)))()
 
     # Read the FROZEN selection knobs (M8 Stage 1) and wire the real retrieval
-    # providers into the ours* runners. app/config.py is only READ here.
+    # providers into the ours* runners AND the naive_rag_vector baseline (which
+    # shares the embeddings seam via register_ours). app/config.py is only READ.
     from app.config import get_settings
 
     settings = get_settings()
@@ -451,6 +452,7 @@ def run_sweep(
         reranker=reranker,
         lambda_=settings.selection_lambda,
         min_value=settings.min_value,
+        lexical_weight=settings.lexical_weight,
     )
 
     rows, probes = build_sweep_rows(
@@ -484,6 +486,7 @@ def run_sweep(
         settings_coverage_low=settings.coverage_low,
         settings_coverage_high=settings.coverage_high,
         settings_rrf_k=settings.rrf_k,
+        settings_lexical_weight=settings.lexical_weight,
         retrieval_stats=retrieval_stats,
     )
     return out_dir

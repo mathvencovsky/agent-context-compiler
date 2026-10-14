@@ -228,7 +228,11 @@ class OursRunner:
 
     ``lambda_`` and ``min_value`` are the SPEC §6 selection knobs; they default
     to the module constants (identical to today's behavior) and are injected by
-    the M8 calibrator to sweep the grid. ``embeddings`` and ``reranker`` default
+    the M8 calibrator to sweep the grid. ``lexical_weight`` is the M8 WEIGHTED-
+    RRF precision knob: the per-list weight the lexical ranking gets in the
+    fusion relative to the vector ranking (fixed at 1.0). It defaults to 1.0
+    (identity — reproduces today's fused ranking byte-for-byte) and is swept
+    DEV-ONLY by the calibrator. ``embeddings`` and ``reranker`` default
     to ``None``, in which case the deterministic fakes are constructed per call
     (so every test stays offline); the calibrator injects the REAL
     ``OpenAIEmbeddingProvider`` / ``JinaRerankProvider`` for the dev run.
@@ -242,6 +246,7 @@ class OursRunner:
     selection: str = "greedy"
     lambda_: float = _SELECTION_LAMBDA
     min_value: float = _MIN_VALUE
+    lexical_weight: float = 1.0
     embeddings: EmbeddingProvider | None = field(default=None)
     reranker: RerankProvider | None = field(default=None)
 
@@ -292,8 +297,15 @@ class OursRunner:
         else:
             vector_ranked = []
 
-        # (4) RRF fusion over the two rankings.
-        fused = rrf_fuse([lexical_ranked, vector_ranked], k=_RRF_K)
+        # (4) weighted RRF fusion over the two rankings. The lexical list is
+        # weighted by self.lexical_weight (M8 precision knob; default 1.0 =
+        # identity) and the vector list by a fixed 1.0. Both lists are always
+        # passed (empty when ablated) so the two weights stay aligned.
+        fused = rrf_fuse(
+            [lexical_ranked, vector_ranked],
+            k=_RRF_K,
+            weights=[self.lexical_weight, 1.0],
+        )
         if not fused:
             return PreparedCandidates(
                 candidates=[],
@@ -478,6 +490,7 @@ def make_ours_runners(
     reranker: RerankProvider | None = None,
     lambda_: float = _SELECTION_LAMBDA,
     min_value: float = _MIN_VALUE,
+    lexical_weight: float = 1.0,
 ) -> list[OursRunner]:
     """Return the ``ours`` runner and its five ablation variants (SPEC §6).
 
@@ -490,8 +503,10 @@ def make_ours_runners(
     ``lambda_``/``min_value`` default to the module constants (today's behavior);
     the Stage 2 real run passes the FROZEN selection knobs read from
     ``app.config`` (λ=0.3, min_value=0.0) so the benchmark measures the frozen
-    pipeline. These are the SPEC §6 selection knobs; they are only READ here,
-    never written, so ``app/config.py`` stays untouched.
+    pipeline. ``lexical_weight`` is the M8 weighted-RRF precision knob (default
+    1.0 = identity); the Stage 2 run passes the frozen config value so the fused
+    ranking matches the product. These knobs are only READ here, never written,
+    so ``app/config.py`` stays untouched.
     """
     return [
         OursRunner(
@@ -499,6 +514,7 @@ def make_ours_runners(
             reranker=reranker,
             lambda_=lambda_,
             min_value=min_value,
+            lexical_weight=lexical_weight,
         ),
         OursRunner(
             name="ours_no_vector",
@@ -507,6 +523,7 @@ def make_ours_runners(
             reranker=reranker,
             lambda_=lambda_,
             min_value=min_value,
+            lexical_weight=lexical_weight,
         ),
         OursRunner(
             name="ours_no_lexical",
@@ -515,6 +532,7 @@ def make_ours_runners(
             reranker=reranker,
             lambda_=lambda_,
             min_value=min_value,
+            lexical_weight=lexical_weight,
         ),
         OursRunner(
             name="ours_no_rerank",
@@ -523,6 +541,7 @@ def make_ours_runners(
             reranker=reranker,
             lambda_=lambda_,
             min_value=min_value,
+            lexical_weight=lexical_weight,
         ),
         OursRunner(
             name="ours_fixed_chunks",
@@ -531,6 +550,7 @@ def make_ours_runners(
             reranker=reranker,
             lambda_=lambda_,
             min_value=min_value,
+            lexical_weight=lexical_weight,
         ),
         OursRunner(
             name="ours_truncate",
@@ -539,5 +559,6 @@ def make_ours_runners(
             reranker=reranker,
             lambda_=lambda_,
             min_value=min_value,
+            lexical_weight=lexical_weight,
         ),
     ]

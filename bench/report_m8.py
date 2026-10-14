@@ -45,9 +45,11 @@ from bench.sweep import REFERENCE_BUDGET, FailureProbe, SweepRow, write_results_
 if TYPE_CHECKING:  # pragma: no cover - typing only
     pass
 
-#: The full pipeline and the baseline it is compared against (SPEC §10.5 / M8).
+#: The full pipeline and the baselines it is compared against (SPEC §10.5 / M8).
 _OURS = "ours"
 _NAIVE_RAG = "naive_rag"
+#: The competent vector RAG baseline (FEAT-002) — compared alongside naive_rag.
+_NAIVE_RAG_VECTOR = "naive_rag_vector"
 
 #: How many ``ours`` failures to list with a diagnosis (SPEC §10.5).
 _N_FAILURES = 10
@@ -159,7 +161,7 @@ def _category_tables(rows: list[ResultRow]) -> list[str]:
 
 @dataclass(frozen=True)
 class _Comparison:
-    """Success-rate comparison of ``ours`` vs ``naive_rag`` for one category."""
+    """Success-rate comparison of ``ours`` vs one baseline for a category."""
 
     category: str
     n: int
@@ -167,7 +169,8 @@ class _Comparison:
     ours_ci: tuple[float, float]
     rag_rate: float
     rag_ci: tuple[float, float]
-    verdict: str  # "ours" | "naive_rag" | "tie"
+    verdict: str  # "ours" | <baseline name> | "tie"
+    baseline: str
 
 
 def _rate(flags: list[bool]) -> float:
@@ -175,17 +178,22 @@ def _rate(flags: list[bool]) -> float:
 
 
 def compare_ours_vs_rag(
-    rows: list[ResultRow], *, categories: Sequence[str] | None = None
+    rows: list[ResultRow],
+    *,
+    baseline: str = _NAIVE_RAG,
+    categories: Sequence[str] | None = None,
 ) -> list[_Comparison]:
-    """Compare ``ours`` vs ``naive_rag`` success per category + overall (DS/§10.5).
+    """Compare ``ours`` vs ``baseline`` success per category + overall (DS/§10.5).
 
     Non-overlap rule: ``ours`` wins a category when its CI lower bound exceeds
-    ``naive_rag``'s CI upper bound (and vice versa); otherwise the CIs overlap
+    the baseline's CI upper bound (and vice versa); otherwise the CIs overlap
     and the verdict is a tie. The overall comparison uses ``category="*"``. All
     CIs are the deterministic bootstrap from :func:`report._bootstrap_ci`.
+    ``baseline`` is ``naive_rag`` (BM25-only) by default or ``naive_rag_vector``
+    (the competent hybrid vector RAG, FEAT-002).
     """
     ours_rows = [r for r in rows if r.strategy == _OURS]
-    rag_rows = [r for r in rows if r.strategy == _NAIVE_RAG]
+    rag_rows = [r for r in rows if r.strategy == baseline]
     cats = (
         list(categories)
         if categories is not None
@@ -205,13 +213,13 @@ def compare_ours_vs_rag(
         o_flags = [r.correct for r in o]
         g_flags = [r.correct for r in g]
         o_ci = _bootstrap_ci(o_flags, strategy=_OURS, category=category)
-        g_ci = _bootstrap_ci(g_flags, strategy=_NAIVE_RAG, category=category)
+        g_ci = _bootstrap_ci(g_flags, strategy=baseline, category=category)
         o_rate = _rate(o_flags)
         g_rate = _rate(g_flags)
         if o_ci[0] > g_ci[1]:
             verdict = "ours"
         elif g_ci[0] > o_ci[1]:
-            verdict = "naive_rag"
+            verdict = baseline
         else:
             verdict = "tie"
         comparisons.append(
@@ -223,9 +231,33 @@ def compare_ours_vs_rag(
                 rag_rate=g_rate,
                 rag_ci=g_ci,
                 verdict=verdict,
+                baseline=baseline,
             )
         )
     return comparisons
+
+
+def _comparison_block(rows: list[ResultRow], *, baseline: str) -> list[str]:
+    """Render the per-category + overall ``ours`` vs ``baseline`` CI table."""
+    lines = [
+        f"## ours vs {baseline} by category (reference budget)",
+        "",
+        f"| category | n | ours | ours_CI95 | {baseline} | {baseline}_CI95 | verdict |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    comparisons = compare_ours_vs_rag(rows, baseline=baseline)
+    if not comparisons:
+        lines.append(f"| (no {baseline} rows at the reference budget) | | | | | | |")
+    for comp in comparisons:
+        label = "overall" if comp.category == "*" else comp.category
+        lines.append(
+            f"| {label} | {comp.n} | {comp.ours_rate:.3f} "
+            f"| [{comp.ours_ci[0]:.3f}, {comp.ours_ci[1]:.3f}] "
+            f"| {comp.rag_rate:.3f} | [{comp.rag_ci[0]:.3f}, {comp.rag_ci[1]:.3f}] "
+            f"| {comp.verdict} |"
+        )
+    lines.append("")
+    return lines
 
 
 def _ablation_section(rows: list[ResultRow]) -> list[str]:
@@ -363,6 +395,7 @@ def _build_config(
     settings_coverage_low: float,
     settings_coverage_high: float,
     settings_rrf_k: int,
+    settings_lexical_weight: float,
 ) -> dict[str, Any]:
     """Assemble the Stage 2 ``config.json`` payload (frozen params + provenance)."""
     from bench.report import BASE_SEED, N_BOOT
@@ -378,6 +411,7 @@ def _build_config(
             "coverage_low": settings_coverage_low,
             "coverage_high": settings_coverage_high,
             "rrf_k": settings_rrf_k,
+            "lexical_weight": settings_lexical_weight,
         },
         "n_boot": N_BOOT,
         "seed": BASE_SEED,
@@ -438,62 +472,47 @@ def _report_md(
     ref_rows = _rows_at_budget(sweep_rows, REFERENCE_BUDGET)
     lines.extend(_ablation_section(ref_rows))
 
-    lines.append("## ours vs naive_rag by category (reference budget)")
-    lines.append("")
-    lines.append("| category | n | ours | ours_CI95 | naive_rag | rag_CI95 | verdict |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
-    for comp in compare_ours_vs_rag(ref_rows):
-        label = "overall" if comp.category == "*" else comp.category
-        lines.append(
-            f"| {label} | {comp.n} | {comp.ours_rate:.3f} "
-            f"| [{comp.ours_ci[0]:.3f}, {comp.ours_ci[1]:.3f}] "
-            f"| {comp.rag_rate:.3f} | [{comp.rag_ci[0]:.3f}, {comp.rag_ci[1]:.3f}] "
-            f"| {comp.verdict} |"
-        )
-    lines.append("")
+    lines.extend(_comparison_block(ref_rows, baseline=_NAIVE_RAG))
+    lines.extend(_comparison_block(ref_rows, baseline=_NAIVE_RAG_VECTOR))
 
     lines.extend(_failures_section(probes))
     lines.extend(_citation_signal_section(probes))
     return "\n".join(lines) + "\n"
 
 
-def _sumario_md(sweep_rows: Sequence[SweepRow]) -> str:
-    """Render the one-page Portuguese summary for the human (presents data only)."""
-    ref_rows = _rows_at_budget(sweep_rows, REFERENCE_BUDGET)
-    comparisons = compare_ours_vs_rag(ref_rows)
+def _sumario_baseline_block(ref_rows: list[ResultRow], *, baseline: str) -> list[str]:
+    """Render the Portuguese win/loss/tie block for ``ours`` vs one baseline."""
+    comparisons = compare_ours_vs_rag(ref_rows, baseline=baseline)
     overall = next((c for c in comparisons if c.category == "*"), None)
     per_cat = [c for c in comparisons if c.category != "*"]
 
     wins = [c for c in per_cat if c.verdict == "ours"]
-    losses = [c for c in per_cat if c.verdict == "naive_rag"]
+    losses = [c for c in per_cat if c.verdict == baseline]
     ties = [c for c in per_cat if c.verdict == "tie"]
 
     def _fmt(c: _Comparison) -> str:
         return (
             f"  - **{c.category}** (n={c.n}): ours={c.ours_rate:.3f} "
             f"IC95 [{c.ours_ci[0]:.3f}, {c.ours_ci[1]:.3f}] | "
-            f"naive_rag={c.rag_rate:.3f} IC95 [{c.rag_ci[0]:.3f}, {c.rag_ci[1]:.3f}]"
+            f"{baseline}={c.rag_rate:.3f} "
+            f"IC95 [{c.rag_ci[0]:.3f}, {c.rag_ci[1]:.3f}]"
         )
 
-    lines = [
-        "# Sumário M8 Etapa 2 — `ours` vs `naive_rag` (split test)",
-        "",
-        f"Orçamento de referência: {REFERENCE_BUDGET} tokens. Critério de "
-        "não-sobreposição: o limite inferior do IC95% de uma estratégia supera o "
-        "limite superior da outra na mesma categoria. ICs são bootstrap "
-        "determinístico (n_boot/seed fixos). Este sumário apresenta os dados; não "
-        "recomenda seguir, ajustar ou parar.",
-        "",
-    ]
-    if overall is not None:
-        lines.append(
-            f"## Geral: ours={overall.ours_rate:.3f} "
-            f"IC95 [{overall.ours_ci[0]:.3f}, {overall.ours_ci[1]:.3f}] | "
-            f"naive_rag={overall.rag_rate:.3f} "
-            f"IC95 [{overall.rag_ci[0]:.3f}, {overall.rag_ci[1]:.3f}] "
-            f"-> {overall.verdict}"
-        )
+    lines = [f"# `ours` vs `{baseline}`", ""]
+    if comparisons:
+        if overall is not None:
+            lines.append(
+                f"## Geral: ours={overall.ours_rate:.3f} "
+                f"IC95 [{overall.ours_ci[0]:.3f}, {overall.ours_ci[1]:.3f}] | "
+                f"{baseline}={overall.rag_rate:.3f} "
+                f"IC95 [{overall.rag_ci[0]:.3f}, {overall.rag_ci[1]:.3f}] "
+                f"-> {overall.verdict}"
+            )
+            lines.append("")
+    else:
+        lines.append(f"  - Sem linhas de `{baseline}` no orçamento de referência.")
         lines.append("")
+        return lines
 
     lines.append("## Onde `ours` vence (IC95 não sobrepõe)")
     if wins:
@@ -502,7 +521,7 @@ def _sumario_md(sweep_rows: Sequence[SweepRow]) -> str:
         lines.append("  - Nenhuma categoria com vitória de IC não sobreposto.")
     lines.append("")
 
-    lines.append("## Onde `ours` perde (IC95 do naive_rag não sobrepõe)")
+    lines.append(f"## Onde `ours` perde (IC95 do {baseline} não sobrepõe)")
     if losses:
         lines.extend(_fmt(c) for c in losses)
     else:
@@ -515,10 +534,32 @@ def _sumario_md(sweep_rows: Sequence[SweepRow]) -> str:
     else:
         lines.append("  - Nenhuma categoria em empate.")
     lines.append("")
+    return lines
 
-    # Context: cost per completed task + INSUFFICIENT rate for ours/naive_rag.
+
+def _sumario_md(sweep_rows: Sequence[SweepRow]) -> str:
+    """Render the one-page Portuguese summary for the human (presents data only)."""
+    ref_rows = _rows_at_budget(sweep_rows, REFERENCE_BUDGET)
+
+    lines = [
+        "# Sumário M8 Etapa 2 — `ours` vs baselines (split test)",
+        "",
+        "Pergunta central: em que categoria, se em alguma, o `ours` vence "
+        "`naive_rag` E `naive_rag_vector` com IC que não se sobrepõe?",
+        "",
+        f"Orçamento de referência: {REFERENCE_BUDGET} tokens. Critério de "
+        "não-sobreposição: o limite inferior do IC95% de uma estratégia supera o "
+        "limite superior da outra na mesma categoria. ICs são bootstrap "
+        "determinístico (n_boot/seed fixos). Este sumário apresenta os dados; não "
+        "recomenda seguir, ajustar ou parar.",
+        "",
+    ]
+    lines.extend(_sumario_baseline_block(ref_rows, baseline=_NAIVE_RAG))
+    lines.extend(_sumario_baseline_block(ref_rows, baseline=_NAIVE_RAG_VECTOR))
+
+    # Context: cost per completed task + INSUFFICIENT rate for ours + baselines.
     lines.append("## Contexto (orçamento de referência)")
-    for strat in (_OURS, _NAIVE_RAG):
+    for strat in (_OURS, _NAIVE_RAG, _NAIVE_RAG_VECTOR):
         srows = [r for r in ref_rows if r.strategy == strat]
         if not srows:
             continue
@@ -589,6 +630,7 @@ def write_report(
     settings_coverage_low: float,
     settings_coverage_high: float,
     settings_rrf_k: int,
+    settings_lexical_weight: float,
     retrieval_stats: dict[str, Any] | None = None,
 ) -> Path:
     """Write the four Stage 2 artifacts and return the output directory.
@@ -615,6 +657,7 @@ def write_report(
         settings_coverage_low=settings_coverage_low,
         settings_coverage_high=settings_coverage_high,
         settings_rrf_k=settings_rrf_k,
+        settings_lexical_weight=settings_lexical_weight,
     )
 
     write_results_csv(out_dir / "results.csv", validated)

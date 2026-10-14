@@ -360,9 +360,15 @@ def assemble_context(
         return result
 
     # (4) RRF fusion. Keys carry (document_id, ord) so the tie-break is stable.
+    # The lexical list is weighted by settings.lexical_weight (M8 precision
+    # knob; default 1.0 = identity) and the vector list by a fixed 1.0. Weights
+    # are aligned to the lists ACTUALLY fused so an ablation that drops a list
+    # (use_lexical/use_vector) still passes one weight per ranked list.
     lexical_ranked = _ranked_keys(lexical_rank_by_key)
     vector_ranked = _ranked_keys(vector_rank_by_key)
-    fused = rrf_fuse([lexical_ranked, vector_ranked], k=settings.rrf_k)
+    ranked_lists: list[list[Key]] = [lexical_ranked, vector_ranked]
+    weights: list[float] = [settings.lexical_weight, 1.0]
+    fused = rrf_fuse(ranked_lists, k=settings.rrf_k, weights=weights)
     rrf_by_key = dict(fused)
 
     # (5) Rerank the top-30 and derive each candidate's selection value.

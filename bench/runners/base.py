@@ -84,25 +84,36 @@ def _ensure_registered(
     reranker: RerankProvider | None = None,
     lambda_: float | None = None,
     min_value: float | None = None,
+    lexical_weight: float | None = None,
 ) -> None:
     """Populate the registry from the baseline modules (idempotent).
 
-    ``embeddings``/``reranker`` are injected ONLY into the ``ours*`` runners
-    (M8 Stage 2 real run); the default ``None`` keeps the deterministic fakes,
-    so every test and the fake-provider path are unchanged. ``lambda_``/
-    ``min_value`` override the ``ours*`` selection knobs (the Stage 2 run passes
-    the frozen config values); ``None`` keeps the ``make_ours_runners`` defaults.
+    ``embeddings`` is injected into the ``ours*`` runners AND the
+    ``naive_rag_vector`` baseline (M8 Stage 2 real run); the default ``None``
+    keeps the deterministic fakes, so every test and the fake-provider path are
+    unchanged. ``reranker`` is injected ONLY into the ``ours*`` runners.
+    ``lambda_``/``min_value``/``lexical_weight`` override the ``ours*`` knobs
+    (the Stage 2 run passes the frozen config values); ``None`` keeps the
+    ``make_ours_runners`` defaults (lexical_weight default 1.0 = identity).
     """
     if _REGISTRY:
         return
     from bench.runners.firecrawl import make_firecrawl_runner
     from bench.runners.naive_rag import NaiveRagRunner
+    from bench.runners.naive_rag_vector import NaiveRagVectorRunner
     from bench.runners.naive_text import NaiveTextRunner
     from bench.runners.ours import make_ours_runners
     from bench.runners.raw_html import RawHtmlRunner
 
     for runner in (RawHtmlRunner(), NaiveTextRunner(), NaiveRagRunner()):
         _REGISTRY[runner.name] = runner
+
+    # M8 vector/precision: a competent VECTOR RAG baseline (hybrid BM25+vector by
+    # default) for a fairer comparison than BM25-only naive_rag. It shares the
+    # EMBEDDINGS seam with the ours* runners: fake by default (offline tests),
+    # the real disk-cached OpenAI provider on the Stage 2 paid run.
+    vector_baseline = NaiveRagVectorRunner(embeddings=embeddings)
+    _REGISTRY[vector_baseline.name] = vector_baseline
 
     # M7: the full NINA pipeline (``ours``) plus its five ablation variants.
     # M8 Stage 2: the real retrieval providers + frozen selection knobs are
@@ -112,6 +123,8 @@ def _ensure_registered(
         ours_kwargs["lambda_"] = lambda_
     if min_value is not None:
         ours_kwargs["min_value"] = min_value
+    if lexical_weight is not None:
+        ours_kwargs["lexical_weight"] = lexical_weight
     for ours_runner in make_ours_runners(**ours_kwargs):  # type: ignore[arg-type]
         _REGISTRY[ours_runner.name] = ours_runner
 
@@ -128,14 +141,18 @@ def register_ours(
     reranker: RerankProvider | None = None,
     lambda_: float | None = None,
     min_value: float | None = None,
+    lexical_weight: float | None = None,
 ) -> None:
     """Rebuild the registry with REAL retrieval providers wired into ``ours*``.
 
     The M8 Stage 2 real run calls this once (``bench.run.run(real=True)``) so the
     ``ours``/``ours_*`` runners use the injected OpenAI embeddings + Jina
-    reranker and the FROZEN selection knobs instead of the fakes/defaults. Clears
-    the registry first so a previous fake-wired state is replaced. Tests never
-    call this (the default path builds the fakes), so no test touches the
+    reranker and the FROZEN selection knobs (``lambda_``/``min_value``/
+    ``lexical_weight``) instead of the fakes/defaults. The same disk-cached
+    OpenAI embeddings are also injected into the ``naive_rag_vector`` baseline so
+    its vector/hybrid retrieval runs on the real provider for a fair comparison.
+    Clears the registry first so a previous fake-wired state is replaced. Tests
+    never call this (the default path builds the fakes), so no test touches the
     network.
     """
     _REGISTRY.clear()
@@ -144,6 +161,7 @@ def register_ours(
         reranker=reranker,
         lambda_=lambda_,
         min_value=min_value,
+        lexical_weight=lexical_weight,
     )
 
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 
+import pytest
+
 from app.retrieve.rrf import rrf_fuse
 
 K = 60
@@ -63,3 +65,42 @@ def test_rrf_absent_doc_contributes_nothing() -> None:
     fused = rrf_fuse([["A"], ["A"]], k=K)
     # A appears at rank 1 in both -> 2 * 1/61.
     assert math.isclose(dict(fused)["A"], 2 / 61)
+
+
+def test_rrf_equal_and_omitted_weights_match_plain_rrf() -> None:
+    """weights=None and weights all 1.0 reproduce plain RRF byte-for-byte."""
+    lexical = ["A", "B"]
+    vector = ["B", "C"]
+
+    plain = rrf_fuse([lexical, vector], k=K)
+    omitted = rrf_fuse([lexical, vector], k=K, weights=None)
+    identity = rrf_fuse([lexical, vector], k=K, weights=[1.0, 1.0])
+
+    assert omitted == plain
+    assert identity == plain
+
+
+def test_rrf_higher_lexical_weight_raises_lexical_favored_rank() -> None:
+    """A heavier lexical weight lifts a lexical-only key above a vector-only key.
+
+    Lexical ranking: [A]. Vector ranking: [B]. At equal weights both score 1/61
+    and the tie-break orders A before B. Weighting the lexical list 2x makes A's
+    fused score strictly larger, so A leads on score (not just the tie-break),
+    and B's score is unchanged.
+    """
+    lexical = ["A"]
+    vector = ["B"]
+
+    weighted = rrf_fuse([lexical, vector], k=K, weights=[2.0, 1.0])
+    scores = dict(weighted)
+
+    assert math.isclose(scores["A"], 2 / 61)
+    assert math.isclose(scores["B"], 1 / 61)
+    assert scores["A"] > scores["B"]
+    assert [key for key, _ in weighted] == ["A", "B"]
+
+
+def test_rrf_weights_length_mismatch_raises() -> None:
+    """A weights length that does not match the ranked-list count is rejected."""
+    with pytest.raises(ValueError, match="weights length"):
+        rrf_fuse([["A"], ["B"]], k=K, weights=[1.0])
