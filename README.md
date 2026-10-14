@@ -193,16 +193,20 @@ operações do produto (`resolve` e `assemble`) já respondem por HTTP. Os marco
 segurança (M1, M4) passaram por revisão adversarial independente, sem findings
 HIGH/MEDIUM em aberto.
 
-**O benchmark (M8) rodou de ponta a ponta e sustenta a tese.** Sobre um corpus
-congelado de 50 páginas (10 fontes, incluindo SPAs e PDFs) e 137 tarefas
-validadas por humano, o pipeline `ours` foi medido contra o `naive_rag` no split
-`test` reservado com parâmetros calibrados só no `dev`: **empate em qualidade**
-(0,780 vs 0,707, ICs sobrepostos) entregue com **~43% menos custo**, **citação
-verificável funcionando** (0,585 vs 0,512) e **0% de respostas INSUFFICIENT** (vs
-~10%). A tese validada é **eficiência + evidência rastreável a paridade de
-qualidade** — e a decisão do projeto foi **seguir** com esse posicionamento (ver
-"O que o benchmark provou" acima e [`DECISIONS.md`](DECISIONS.md)). O detalhe por
-marco está em [`PROGRESS.md`](PROGRESS.md).
+**O benchmark (M8) rodou de ponta a ponta e sustenta a tese — inclusive contra
+um RAG vetorial.** Sobre um corpus congelado de 50 páginas (10 fontes, incluindo
+SPAs e PDFs) e 137 tarefas validadas por humano, o pipeline `ours` foi medido no
+split `test` reservado (parâmetros calibrados só no `dev`) contra DOIS baselines:
+o `naive_rag` (BM25) e o `naive_rag_vector` (híbrido BM25+embeddings). No
+orçamento 4000: **empate em qualidade** com ambos (`ours` 0,805 vs `naive_rag`
+0,756 vs `naive_rag_vector` 0,683, ICs sobrepostos), entregue com **~43–47% menos
+custo**, **citação verificável funcionando** (0,585 vs 0,512) e **0% de respostas
+INSUFFICIENT** (vs ~10%). O RAG vetorial, o baseline "mais forte", teve a menor
+qualidade e o maior custo dos três neste corpus técnico. A tese validada é
+**eficiência + evidência rastreável a paridade de qualidade** — e a decisão do
+projeto foi **seguir** com esse posicionamento (ver "O que o benchmark provou"
+acima e [`DECISIONS.md`](DECISIONS.md)). O detalhe por marco está em
+[`PROGRESS.md`](PROGRESS.md).
 
 ---
 
@@ -509,14 +513,16 @@ instrução.
 ### Por que o piloto escolhe o NINA: eficiência + evidência
 
 O M9 empacota exatamente a tese validada no M8 (ver "O que o benchmark provou"
-acima): **à paridade de qualidade com um RAG competente, o NINA entrega o
-resultado por ~43% menos custo** (US$ 0,0051 vs US$ 0,0089 por tarefa concluída
-no split `test` reservado, orçamento 4000), com **~44% menos tokens de contexto**
-(1.495 vs 2.678), **citação verificável** (precisão 0,585) e **0% de respostas
-INSUFFICIENT** (vs ~10% do RAG). Em qualidade é **empate estatístico** (sucesso
-0,780 vs 0,707, ICs sobrepostos) — o posicionamento é "o mesmo resultado, por
-menos custo e com a prova anexada", não "mais preciso que RAG". Números completos
-e reprodutíveis em [`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md).
+acima): **à paridade de qualidade com RAGs competentes — BM25 E vetorial — o
+NINA entrega o resultado por ~43–47% menos custo** (US$ 0,0049/tarefa concluída
+vs US$ 0,0084 do BM25 e US$ 0,0092 do vetorial, split `test` reservado, orçamento
+4000), com **~44% menos tokens de contexto** (1.495 vs ~2.675), **citação
+verificável** (precisão 0,585 vs 0,512) e **0% de respostas INSUFFICIENT** (vs
+~10% dos RAGs). Em qualidade é **empate estatístico** (sucesso `ours` 0,805 vs
+`naive_rag` 0,756 vs `naive_rag_vector` 0,683, ICs sobrepostos) — o
+posicionamento é "o mesmo resultado, por menos custo e com a prova anexada", não
+"mais preciso que RAG". Números completos e reprodutíveis em
+[`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md).
 
 ---
 
@@ -624,6 +630,21 @@ pilotos). Números completos em
 [`PROGRESS.md`](PROGRESS.md), em
 [`.agents/tasks/m8-test-remeasure.md`](.agents/tasks/m8-test-remeasure.md) e nos
 artefatos de `bench/results/m8-test-2026-10-13/`.
+
+**Reforço posterior — confronto com um RAG vetorial (split test, orçamentos 2000
+e 4000).** Para responder à objeção de que o `naive_rag` BM25-puro é um baseline
+fraco, foi adicionado o `naive_rag_vector` (híbrido BM25+embeddings, baseline
+justo revisado por honestidade) e o `lexical_weight` foi congelado em 1.0
+(identidade; sem calibração especulativa — ver [`DECISIONS.md`](DECISIONS.md)). No
+orçamento 4000: `ours` 0,805 [0,683–0,927] vs `naive_rag` 0,756 [0,634–0,878] vs
+`naive_rag_vector` 0,683 [0,537–0,829] — empate estatístico com ambos, `ours`
+numericamente à frente. O RAG vetorial teve a MENOR qualidade e o MAIOR custo
+(US$ 0,0092/concluída vs 0,0049 do `ours`) neste corpus técnico — embeddings de
+propósito geral não batem BM25 em busca de termo exato. O `ours` é o único que
+melhora com orçamento (0,707→0,805 de 2000 para 4000) enquanto os baselines
+estagnam/pioram. A tese sai REFORÇADA: eficiência + evidência a paridade de
+qualidade vale mesmo contra o RAG mais forte. Artefatos em
+`bench/results/m8-vector-test/`.
 
 ---
 
