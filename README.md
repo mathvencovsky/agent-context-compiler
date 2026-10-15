@@ -1,538 +1,143 @@
-# NINA
+# NINA — context compiler for AI agents
 
-**Compilador de contexto para agentes.** NINA transforma documentação técnica
-pública (HTML e PDF) em pacotes de contexto otimizados para agentes de IA, com
-proveniência e evidência rastreável em cada fragmento retornado.
+NINA turns public technical documentation (HTML and PDF) into token-budgeted
+context for AI agents. Every fragment it returns carries its provenance and a
+literal quote from the source, so an agent can cite what it read.
 
-Agentes que leem documentação ao vivo gastam tokens com navegação, rodapés e
-HTML irrelevante, e frequentemente citam trechos que não existem. NINA resolve
-isso em duas operações:
-
-| Operação | Entrada | Saída |
+| Operation | Input | Output |
 |---|---|---|
-| **`resolve`** | uma URL | documento estruturado (árvore de blocos) com proveniência, em Markdown e JSON |
-| **`assemble`** | pergunta + URLs + orçamento de tokens | os fragmentos mais úteis, cada um com evidência citável |
+| `resolve` | a URL | a structured document (block tree) with provenance, as Markdown and JSON |
+| `assemble` | a question, 1–20 URLs, a token budget | the most useful fragments within the budget, each with citable evidence |
 
-A API é consumível por **HTTP**, por um **SDK Python** e por um **servidor MCP**.
+Interfaces: HTTP API (FastAPI), Python SDK (`nina-client`), MCP server.
 
-> **Codinome e nomes.** "NINA" é o codinome do projeto; o pacote de distribuição
-> é `nina` e o código da aplicação vive em `app/`, conforme a estrutura fixada em
-> [`docs/SPEC.md`](docs/SPEC.md) §2.
+**Status:** private MVP. Milestones M0–M9 are done; M10, a pre-registered
+end-to-end agent evaluation, is in progress ([status](#status)).
 
----
+## Design guarantees
 
-## Por que NINA é diferente
+- **Deterministic.** No LLM in extraction or selection: the same URLs and query
+  give the same output. LLMs appear only in the benchmark, to answer and judge.
+- **Provenance on every output.** Blocks and fragments carry `document_id`,
+  `version_id`, `block_id`, `source_url` and, for PDFs, `page`.
+- **SSRF-safe fetching.** Every outbound request, from httpx and from headless
+  Chromium, goes through one guard (`app/fetch/guard.py`). It validates every
+  resolved IP; blocks loopback, private, link-local, CGNAT and cloud-metadata
+  addresses; connects to the validated IP; and respects `robots.txt`.
+- **Untrusted content stays data.** Extracted text is returned with
+  `trust: "untrusted_source"`.
+- **Explicit failure.** Partial or empty extraction is reported in `warnings`;
+  the API never returns an empty 200 silently.
 
-- **Determinístico, sem LLM no caminho crítico.** Extração e seleção não usam
-  modelos de linguagem — o resultado é reproduzível e auditável. LLMs aparecem
-  apenas no benchmark (para responder e julgar).
-- **Proveniência obrigatória.** Todo bloco e todo fragmento carrega
-  `document_id`, `version_id`, `block_id`, `source_url` e, em PDFs, `page`.
-  Nenhuma saída sem origem.
-- **Seguro por construção.** Toda requisição de saída — do cliente HTTP e do
-  navegador headless — passa por um guard único com proteção contra SSRF
-  (validação de todos os IPs resolvidos, bloqueio de endereços internos e de
-  metadados de nuvem, respeito a `robots.txt`).
-- **Conteúdo tratado como não confiável.** O texto extraído de páginas externas
-  é dado, nunca instrução; as respostas o marcam com `trust: "untrusted_source"`.
-- **A tese é mensurável.** Um harness de avaliação (`bench/`) compara NINA com
-  extratores existentes (incluindo um RAG ingênuo competente) em tarefas reais.
-  Se não houver vantagem demonstrável, o projeto não avança — a medição faz
-  parte do produto, não é acessório.
-
----
-
-## Posicionamento: NINA vs. extratores de Markdown (Firecrawl, Jina, etc.)
-
-Ferramentas como Firecrawl e Jina Reader resolvem **extração**: dada uma URL,
-devolvem Markdown limpo (e, no caso do Firecrawl, fazem crawling de sites
-inteiros). NINA faz extração também (`resolve`), mas o produto é a **segunda
-operação** — `assemble` — que esses extratores não têm: transformar uma pergunta
-e um orçamento de tokens nos fragmentos certos, com evidência rastreável.
-
-A diferença, em uma frase: um extrator entrega **a página limpa**; NINA entrega
-**a resposta montada, sob orçamento, com a prova**.
-
-### Onde NINA ganha vantagem
-
-| | Extrator de Markdown (Firecrawl / Jina) | **NINA** |
-|---|---|---|
-| **Seleção sob orçamento** | ❌ devolve a página inteira; você monta o RAG | ✅ `assemble` seleciona os fragmentos mais úteis para `max_tokens` |
-| **Evidência rastreável** | ❌ Markdown solto; rastreabilidade por sua conta | ✅ cada fragmento cita `block_id` + `quote` literal da IR |
-| **Determinismo** | ⚠️ varia; alguns usam LLM na limpeza | ✅ extração e seleção sem LLM — mesma URL, mesmo resultado |
-| **Proveniência completa** | ⚠️ URL de origem | ✅ `document_id` + `version_id` + `block_id` + `page` (PDF) |
-| **Versionamento + cache** | ⚠️ por chamada | ✅ versões por `content_hash`; reresolver inalterado não recria nada |
-| **Segurança SSRF auditada** | — (serviço hospedado) | ✅ guard único em HTTP e navegador, revisado por red-team |
-| **Integração nativa com agentes** | SDK / API | ✅ HTTP + SDK Python + **servidor MCP** |
-
-O ganho central é **eficiência de tokens com rastreabilidade**: entregar menos
-contexto, mais relevante e citável, em vez de despejar a página inteira no
-prompt do agente — o que reduz custo e alucinação de citação.
-
-### Onde um extrator maduro ainda leva vantagem
-
-Honestidade de escopo, para alinhar expectativas de piloto:
-
-- **Crawling e descoberta de URLs.** NINA é **sob demanda, sem crawler** (fora de
-  escopo do MVP). Firecrawl varre sites inteiros.
-- **Cobertura e maturidade.** Extratores comerciais lidam há mais tempo com
-  anti-bot, JS pesado e um universo maior de sites. NINA é um MVP.
-- **Disponibilidade.** São serviços hospedados que funcionam hoje; NINA está em
-  construção.
-
-### O que o benchmark provou (M8, split test reservado)
-
-O teste decisivo não é o Firecrawl: são dois RAGs que um bom dev montaria — o
-**`naive_rag`** (BM25) e o **`naive_rag_vector`** (híbrido BM25+embeddings, o
-"RAG competente de 2026"). O M8 rodou o benchmark no split `test` (41 tarefas,
-parâmetros calibrados só no `dev` e congelados antes de medir o `test`). No
-orçamento de referência de 4000 tokens:
-
-| Métrica (test, @4000) | **NINA (`ours`)** | `naive_rag` (BM25) | `naive_rag_vector` (híbrido) |
-|---|---|---|---|
-| Taxa de sucesso | **0,805** [0,683–0,927] | 0,756 [0,634–0,878] | 0,683 [0,537–0,829] |
-| Custo por tarefa concluída | **US$ 0,0049** | US$ 0,0084 | US$ 0,0092 |
-| Tokens de contexto (média) | **1.495** | 2.677 | 2.673 |
-| Precisão de citação | **0,585** | 0,512 | 0,512 |
-| Taxa INSUFFICIENT | **0,000** | 0,098 | 0,098 |
-
-**Leitura honesta:** em qualidade é **empate estatístico** com ambos os
-baselines (os ICs se sobrepõem; os `n` por categoria são pequenos — NINA não é
-"mais preciso que RAG"). Mas, à paridade de qualidade, NINA entrega o resultado
-com **~43% menos custo que o BM25 e ~47% menos que o RAG vetorial**, **~44%
-menos tokens de contexto**, **citação verificável funcionando** (acima dos
-baselines) e **sem desistir de tarefas** (0% INSUFFICIENT vs ~10%). Notável: o
-RAG vetorial — o baseline "mais forte" — teve a MENOR taxa de sucesso dos três e
-o maior custo neste corpus técnico (embeddings de propósito geral não batem BM25
-em busca de termo exato). E o NINA é o único que **melhora** com mais orçamento
-(0,707→0,805 de 2000 para 4000), enquanto os baselines estagnam ou pioram — a
-assinatura de "seleção, não despejo de texto".
-
-**A tese validada, portanto, é eficiência + evidência rastreável a PARIDADE de
-qualidade** — "o mesmo resultado de um RAG competente, por menos custo e com a
-prova anexada" —, não superioridade de qualidade. Decisão do projeto no M8:
-**seguir** com esse posicionamento (ver [`DECISIONS.md`](DECISIONS.md)).
-
-Ressalvas que acompanham o número: os `n` por categoria são pequenos (pdf n=3,
-`params_table` n=5, changelog n=4) com ICs largos — a conclusão geral (n=41) é
-mais sólida que as por-categoria; e a vantagem de custo depende dos preços
-atuais dos modelos. Números completos e reprodutíveis em
-[`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md).
-
-#### Reforço: contra um RAG NÃO-naive (`strong_rag`, split test, 2026-10-14)
-
-A objeção que faltava endereçar: o `naive_rag_vector`, mesmo vetorial, ainda é
-um RAG "naive". Então foi montado o **`strong_rag`** — um RAG INDEPENDENTE, sem
-nenhuma peça do NINA, feito para VENCER (não espantalho): **chunking com
-overlap** (janela deslizante ~400 tokens, ~25% de overlap), **híbrido
-BM25+vetorial fundido por RRF k=60**, **rerank cross-encoder Jina do top-30** e
-**seleção top-k por score de rerank sob orçamento**, com a mesma proveniência
-`[URL]`. A fronteira é honesta: o `strong_rag` NÃO usa reescrita de query nem
-compressão por LLM (isso quebraria a regra "nenhum LLM na recuperação" e viraria
-uma comparação LLM-vs-não-LLM) e NÃO usa a seleção MMR do NINA — essa é a
-variável isolada. O split `test` foi medido uma vez; `app/config.py` só foi
-lido. No orçamento de referência de 4000 tokens, com as quatro estratégias lado
-a lado:
-
-| Métrica (test, @4000) | **NINA (`ours`)** | `naive_rag` (BM25) | `naive_rag_vector` (híbrido) | `strong_rag` (não-naive) |
-|---|---|---|---|---|
-| Taxa de sucesso | **0,756** [0,610–0,878] | 0,732 [0,585–0,878] | 0,683 [0,537–0,829] | 0,683 [0,537–0,829] |
-| Custo por tarefa concluída | **US$ 0,0053** | US$ 0,0086 | US$ 0,0092 | US$ 0,0097 |
-| Tokens de contexto (média) | **1.495** | 2.677 | 2.673 | 2.823 |
-| Precisão de citação | **0,585** | 0,512 | 0,512 | 0,512 |
-| Taxa INSUFFICIENT | **0,000** | 0,098 | 0,098 | 0,098 |
-
-**Leitura honesta:** contra o `strong_rag` é **empate estatístico em qualidade
-em TODAS as categorias e no geral** (ICs sobrepostos; o `strong_rag` não venceu
-o `ours`, e o `ours` não venceu o `strong_rag`). Ou seja: nem mesmo um RAG
-não-naive, com rerank cross-encoder real e chunking com overlap, bateu o NINA em
-qualidade neste corpus. E à paridade de qualidade, o NINA entregou com **~53% do
-contexto do `strong_rag`** (1.495 vs 2.823 tokens) e **~54% do custo por tarefa
-concluída** (US$ 0,0053 vs US$ 0,0097 — o `strong_rag` custa ~1,84× por tarefa),
-além da maior precisão de citação e 0% de INSUFFICIENT. A tese de **eficiência +
-evidência rastreável à paridade de qualidade SOBREVIVE a um oponente forte** — o
-NINA entrega o mesmo resultado por ~metade do custo e do contexto, com a prova
-anexada, mesmo contra um RAG que não é mais "naive". Números completos em
-[`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md); artefato
-`bench/results/strong-rag-20261014T211154_582208/`.
-
----
-
-## Arquitetura
+## How it works
 
 ```
-                       ┌─────────────────── app/fetch (guard SSRF) ───────────────────┐
-   URL ───────────────▶│  guard → cliente HTTP (conecta no IP validado) → robots.txt  │
-                       └───────────────────────────────┬──────────────────────────────┘
-                                                        │ HTML / PDF
-                              ┌─────────────────────────┼─────────────────────────┐
-                              ▼                          ▼                         ▼
-                       HTML (readability           PDF (pdfplumber,          SPA → navegador
-                       + walker lxml)              página a página)          (Playwright, guard)
-                              └─────────────────────────┼─────────────────────────┘
-                                                        ▼
-                                          IR — árvore de blocos (app/extract)
-                                                        │
-                              ┌─────────────────────────┼─────────────────────────┐
-                              ▼                                                     ▼
-                       Markdown / JSON                                  chunks → índice léxico
-                       (resolve)                                        + vetorial (pgvector)
-                                                                                    │
-   pergunta + URLs + orçamento ──▶ busca híbrida (RRF) ──▶ rerank ──▶ seleção sob orçamento ──▶
-                                                              fragmentos + evidência (assemble)
+URL ──▶ fetch guard (SSRF, robots.txt) ──▶ HTML │ PDF │ SPA (Playwright)
+    ──▶ IR block tree (app/extract) ──▶ Markdown / JSON                    resolve
+    ──▶ chunks (≤ 800 tokens) ──▶ lexical (tsvector) + vector (pgvector) index
+
+question + URLs + budget ──▶ lexical + vector search ──▶ RRF fusion
+    ──▶ cross-encoder rerank (top 30) ──▶ redundancy-aware greedy selection
+    ──▶ fragments + evidence                                               assemble
 ```
 
-O MVP opera **sob demanda**: `assemble` resolve as URLs recebidas (usando cache
-quando possível), indexa e consulta. Não há crawler. Veja a especificação
-completa — contratos de API, esquemas da IR, modelo de dados e algoritmos de
-chunking/seleção — em [`docs/SPEC.md`](docs/SPEC.md).
+`assemble` works on demand: it resolves the URLs it receives (cache first),
+indexes them and queries. There is no crawler. Contracts and algorithms are
+specified in [`docs/SPEC.md`](docs/SPEC.md).
 
-### Stack
-
-Python 3.12 · FastAPI · Pydantic v2 · SQLAlchemy 2 + Alembic ·
-Postgres 16 + pgvector · httpx · lxml / readability-lxml / extruct ·
-Playwright (Chromium) · pdfplumber · tiktoken · S3 (SeaweedFS local, AWS em
-produção) · structlog · pytest · ruff · mypy (strict em `app/`) · Docker Compose.
-
-Todas as dependências são MIT/BSD/Apache-2.0. Provedores externos (embeddings,
-reranker, LLM do benchmark, Firecrawl) ficam atrás de interfaces em
-`app/providers/`, cada uma com uma implementação fake determinística; os testes
-nunca acessam a rede externa.
-
----
-
-## Status
-
-NINA é construído em marcos (M0–M10), um de cada vez. Cada marco fecha com o
-gate verde (`ruff` + `mypy` + `pytest`), critérios de aceite atendidos e CI
-verde no GitHub Actions.
-
-| Marco | Entrega | Status |
-|---|---|---|
-| **M0** | Fundação: repositório, infraestrutura, CI | ✅ Concluído |
-| **M1** | Fetcher seguro (SSRF, limites, robots.txt) | ✅ Concluído |
-| **M2** | Corpus congelado, harness e baselines | ✅ Concluído |
-| **M3** | IR e extração de HTML | ✅ Concluído |
-| **M4** | Renderização por navegador e extração de PDF | ✅ Concluído |
-| **M5** | Persistência e endpoint `resolve` | ✅ Concluído |
-| **M6** | Chunking e indexação | ✅ Concluído |
-| **M7** | Busca, seleção e endpoint `assemble` | ✅ Concluído |
-| **M8** | Benchmark completo e calibração | ✅ Concluído — tese validada no split `test` (paridade de qualidade, ~43% mais barato, citação 0,585); **decisão: seguir** (nicho eficiência + evidência) |
-| **M9** | Chaves de API, limites, MCP e SDK | ✅ Concluído — pronto para pilotos (auth Bearer, rate limit + uso, servidor MCP, SDK `nina-client`, [`QUICKSTART`](docs/QUICKSTART.md)) |
-| **M10** | Deploy e observabilidade | ◻️ Pendente (hospedagem) |
-
-**Pipeline completo de ponta a ponta (M1, M3, M4, M5, M6, M7) está implementado
-e verificado:** HTTP seguro → HTML/PDF → IR → Markdown/JSON → persistência +
-cache → `resolve`/`get-document` → chunks indexados (tsvector lexical +
-embeddings vetoriais `text-embedding-3-small` no pgvector) → busca híbrida (RRF)
-+ rerank (Jina) + seleção sob orçamento → `POST /v1/context/assemble`. As duas
-operações do produto (`resolve` e `assemble`) já respondem por HTTP. Os marcos de
-segurança (M1, M4) passaram por revisão adversarial independente, sem findings
-HIGH/MEDIUM em aberto.
-
-**O benchmark (M8) rodou de ponta a ponta e sustenta a tese — inclusive contra
-um RAG vetorial.** Sobre um corpus congelado de 50 páginas (10 fontes, incluindo
-SPAs e PDFs) e 137 tarefas validadas por humano, o pipeline `ours` foi medido no
-split `test` reservado (parâmetros calibrados só no `dev`) contra DOIS baselines:
-o `naive_rag` (BM25) e o `naive_rag_vector` (híbrido BM25+embeddings). No
-orçamento 4000: **empate em qualidade** com ambos (`ours` 0,805 vs `naive_rag`
-0,756 vs `naive_rag_vector` 0,683, ICs sobrepostos), entregue com **~43–47% menos
-custo**, **citação verificável funcionando** (0,585 vs 0,512) e **0% de respostas
-INSUFFICIENT** (vs ~10%). O RAG vetorial, o baseline "mais forte", teve a menor
-qualidade e o maior custo dos três neste corpus técnico. A tese validada é
-**eficiência + evidência rastreável a paridade de qualidade** — e a decisão do
-projeto foi **seguir** com esse posicionamento (ver "O que o benchmark provou"
-acima e [`DECISIONS.md`](DECISIONS.md)). O detalhe por marco está em
-[`PROGRESS.md`](PROGRESS.md).
-
-**E a tese sobrevive até contra um RAG NÃO-naive.** Um reforço posterior
-(2026-10-14) adicionou o `strong_rag` — RAG independente com chunking de overlap,
-híbrido BM25+vetorial por RRF, rerank cross-encoder Jina e seleção top-k, sem
-nenhuma peça do NINA e sem LLM na recuperação. Medido no split `test` @4000, o
-resultado é **empate em qualidade em todas as categorias e no geral** (`ours`
-0,756 vs `strong_rag` 0,683, ICs sobrepostos), com o NINA entregando por **~53%
-do contexto e ~54% do custo por tarefa concluída** do `strong_rag` (US$ 0,0053 vs
-US$ 0,0097), citação 0,585 vs 0,512 e 0% de INSUFFICIENT vs ~10%. Nem um RAG
-não-naive bateu o NINA em qualidade — e o NINA segue entregando o mesmo resultado
-por ~metade do custo e do contexto (ver "Reforço: contra um RAG NÃO-naive"
-acima).
-
----
-
-## Começando
-
-**Pré-requisitos:** Docker, [uv](https://docs.astral.sh/uv/) e Python 3.12
-(o uv instala e fixa a versão por projeto).
-
-```bash
-# 1. Dependências e configuração
-uv sync
-cp .env.example .env                   # .env fica fora do git
-
-# 2. Infraestrutura local (Postgres + pgvector, S3 via SeaweedFS, bucket)
-make up
-make migrate                           # habilita a extensão pgvector
-
-# 3. (Opcional) navegador para renderização de SPA e testes 'browser'
-uv run playwright install chromium     # --with-deps chromium no Linux/CI
-
-# 4. Rodar
-make check                             # ruff + mypy (strict) + pytest
-make dev                               # API local em http://localhost:8000
-make down                              # derruba a infraestrutura
-```
-
-Verifique a saúde do serviço:
-
-```bash
-curl http://localhost:8000/health
-# {"status":"ok","db":"ok","blobs":"ok"}  (HTTP 200)
-```
-
-O `/health` retorna **503** com o campo quebrado em `"error"` se Postgres ou o
-S3 estiverem indisponíveis — nunca 200 com uma dependência quebrada.
-
-### Comandos (`Makefile`)
-
-| Comando | Ação |
+| Path | Role |
 |---|---|
-| `make up` / `make down` | sobe / derruba Postgres e o S3 local |
-| `make migrate` | aplica as migrações do Alembic |
-| `make check` | `ruff` + `mypy` + `pytest` (gate completo) |
-| `make test` | somente `pytest` |
-| `make dev` | API local com reload |
-| `make bench ARGS="..."` | executa o benchmark |
+| `app/fetch` | guarded HTTP client, robots.txt, render decision, Playwright rendering |
+| `app/extract` | HTML/PDF → IR block tree, Markdown, metadata |
+| `app/index` | chunking, embeddings, lexical and vector indexing |
+| `app/retrieve` | search, RRF, rerank, selection, `assemble_context` |
+| `app/api`, `app/usage` | FastAPI routes, API keys, rate limits, usage events |
+| `app/mcp_server` | MCP server, a thin client of the HTTP API |
+| `app/providers` | embeddings, rerank and LLM interfaces, each with a deterministic fake |
+| `app/store`, `migrations/` | SQLAlchemy models, S3 blob store, Alembic migrations |
+| `sdk/python` | `nina-client`, a separate distribution |
+| `bench/` | evaluation harness (see [Benchmark](#benchmark)) |
 
-> **Windows / PowerShell.** `make` pode não estar disponível; rode os comandos
-> que cada alvo encapsula (ex.: `docker compose up -d`,
-> `uv run alembic upgrade head`,
-> `uv run ruff check . ; uv run mypy app ; uv run pytest`). O separador de
-> comandos é `;`, não `&&`.
+## Quickstart
 
-### Marcadores de teste
-
-- Gate padrão: `uv run pytest -m "not integration and not browser"` — rápido, sem
-  serviços nem navegador.
-- `integration`: exige Postgres e S3 reais (via `make up`).
-- `browser`: exige Chromium (`uv run playwright install chromium`); roda num
-  passo dedicado do CI.
-
----
-
-## API: `resolve` e `get-document` (M5)
-
-O primeiro endpoint público transforma uma URL em um documento estruturado com
-proveniência e o persiste com cache. É consumível por HTTP, pelo SDK Python e
-pelo servidor MCP (M9 — ver "Uso para pilotos" abaixo). A especificação completa
-dos contratos está em
-[`docs/SPEC.md`](docs/SPEC.md) §8; o schema OpenAPI vivo (com exemplos) fica em
-`http://localhost:8000/openapi.json` e a UI interativa em
-`http://localhost:8000/docs`.
-
-Autenticação está **desligada em `ENV=dev`** (o Bearer token é do M9).
-
-### `POST /v1/documents/resolve`
-
-Resolve uma URL: valida pelo guard SSRF, serve do cache quando há uma versão
-recente, senão busca (pelo cliente auditado), extrai para a IR, persiste o corpo
-bruto e a IR no S3 e devolve o envelope da SPEC §8.
-
-**Corpo da requisição**
-
-| Campo | Tipo | Default | Descrição |
-|---|---|---|---|
-| `url` | `string` | — (obrigatório) | URL pública http/https a resolver |
-| `formats` | `("markdown" \| "blocks")[]` | `["markdown","blocks"]` | quais representações incluir na resposta |
-| `force_refresh` | `boolean` | `false` | ignora o cache e força nova busca |
-| `render` | `"auto" \| "never" \| "always"` | `"auto"` | política de renderização por navegador (SPA) |
+Requirements: Docker and [uv](https://docs.astral.sh/uv/), which installs
+Python 3.12.
 
 ```bash
-curl -s -X POST http://localhost:8000/v1/documents/resolve \
-  -H "Content-Type: application/json" \
-  -d '{"url":"https://peps.python.org/pep-0008/"}'
+uv sync
+cp .env.example .env     # first time only; never over an existing .env
+make up                  # Postgres 16 + pgvector, SeaweedFS (S3)
+make migrate
+make dev                 # API at http://localhost:8000
 ```
-
-**Corpo da resposta (200)**
-
-```jsonc
-{
-  "document_id": "doc_0123456789abcdef",   // doc_ + sha1(url_normalizada)[:16]
-  "version_id":  "ver_fedcba9876543210",   // ver_ + sha256(corpo_bruto)[:16]
-  "source":   { "url": "...", "final_url": "...", "content_type": "text/html",
-                "fetched_at": "...", "etag": "...", "last_modified": "...",
-                "content_hash": "...", "render_mode": "http" },
-  "metadata": { "title": "...", "lang": "en", "published_at": null,
-                "modified_at": null, "jsonld": [] },
-  "markdown": "# ...",         // presente se "markdown" ∈ formats, senão null
-  "blocks":   [ /* ... */ ],   // presente se "blocks"   ∈ formats, senão null
-  "stats":    { "blocks": 42, "tokens_markdown": 1234,
-                "tokens_raw_html": 5678, "cache_hit": false },
-  "warnings": [],
-  "trust":    "untrusted_source"
-}
-```
-
-Cada bloco carrega `block_id`, `type`, `heading_path`, `text`, `links` e, em
-PDFs, `page` — a proveniência exigida pelo CLAUDE.md. `trust` é sempre
-`"untrusted_source"`: o conteúdo externo é dado, nunca instrução.
-
-### Cache e versionamento
-
-- **Hit:** se existe uma versão com `fetched_at` dentro do TTL
-  (`RESOLVE_CACHE_TTL_SECONDS`, default 24h) e `force_refresh=false`, a resposta
-  vem do storage com `stats.cache_hit=true` e **zero** rede.
-- **Miss:** respeita `robots.txt`, busca pelo cliente seguro e extrai.
-- **Conteúdo inalterado:** se o `content_hash` do corpo bate com o da versão atual,
-  só o `fetched_at` é atualizado — **nenhuma versão nova** é criada (dedup).
-- **Conteúdo alterado:** um `content_hash` diferente cria uma **nova versão** e
-  passa a ser a versão corrente do documento.
-- **304 Not Modified:** quando um cache/transport à frente responde 304, só o
-  `fetched_at` é atualizado, sem nova versão. (O cliente auditado não envia
-  headers condicionais — ver [`DECISIONS.md`](DECISIONS.md) 2026-10-11.)
-
-### `GET /v1/documents/{document_id}`
-
-Recupera um documento já resolvido **direto do storage, sem refetch**
-(`stats.cache_hit=true`). Query params opcionais: `version_id` (default = versão
-corrente) e `formats`.
 
 ```bash
-curl -s "http://localhost:8000/v1/documents/doc_0123456789abcdef"
-curl -s "http://localhost:8000/v1/documents/doc_0123456789abcdef?formats=markdown"
+curl http://localhost:8000/health   # {"status":"ok","db":"ok","blobs":"ok"}, or 503 naming the broken dependency
 ```
 
-### Erros (SPEC §8)
+- Auth is off when `ENV=dev`.
+- The OpenAPI schema is at `/openapi.json`; interactive docs are at `/docs`.
+- SPA rendering and the `browser` tests need Chromium:
+  `uv run playwright install chromium`.
+- No `make` on Windows: run the commands from each `Makefile` target directly.
 
-Todos os erros usam o mesmo envelope, com o HTTP da tabela §8:
+## API
 
-```json
-{ "error": { "code": "blocked_destination", "message": "...", "details": {} } }
-```
-
-| `code` | HTTP | Quando |
+| Method | Path | Purpose |
 |---|---|---|
-| `invalid_url` | 400 | URL malformada ou esquema não http/https |
-| `blocked_destination` | 400 | destino resolve para IP interno/metadados ou porta fora da allow-list |
-| `robots_disallowed` | 403 | `robots.txt` proíbe o caminho |
-| `robots_unavailable` | 503 | `robots.txt` indisponível (falha fechada) |
-| `too_large` | 413 | corpo excede o limite de tamanho |
-| `unsupported_content_type` | 415 | conteúdo não é HTML nem PDF |
-| `extraction_empty` | 422 | PDF sem texto extraível (OCR fora de escopo) |
-| `fetch_failed` | 502 | falha de transporte (DNS, conexão, redirects demais) |
-| `timeout` | 504 | timeout de conexão ou total |
-| `not_found` | 404 | GET de documento/versão inexistente |
-| `all_sources_failed` | 422 | `assemble`: todas as URLs falharam ao resolver |
-| `ablation_not_allowed` | 400 | `assemble`: flag de ablação enviada com `ENV=production` |
-
----
-
-## API: `assemble` + núcleo de busca e seleção (M7)
-
-O segundo endpoint público — e o produto de fato — transforma uma pergunta, um
-conjunto de URLs e um orçamento de tokens nos fragmentos mais úteis, cada um com
-evidência citável. O **núcleo matemático** da recuperação híbrida vive em
-`app/retrieve/`: toda a matemática (RRF e seleção) é determinística, sem LLM e
-sem rede; a busca em banco é coberta por teste de integração com o
-`FakeEmbeddingProvider` e o rerank pelo `FakeRerankProvider` (nenhum provider
-real é tocado em teste).
-
-### `POST /v1/context/assemble`
-
-Resolve 1–20 URLs (reusando o cache do `resolve`), indexa a versão corrente de
-cada uma, roda busca léxica + vetorial, funde por RRF, reranqueia e seleciona sob
-`max_tokens`, devolvendo os fragmentos com proveniência e evidência literal.
-
-**Corpo da requisição**
-
-| Campo | Tipo | Default | Descrição |
-|---|---|---|---|
-| `query` | `string` | — (obrigatório) | a pergunta a responder |
-| `urls` | `string[]` | — (1 a 20) | URLs públicas a montar o contexto |
-| `max_tokens` | `int` | `4000` | orçamento de tokens de saída (256–32000) |
-| `include_evidence` | `boolean` | `true` | inclui a `evidence` literal nos fragmentos |
-| `use_lexical` / `use_vector` / `use_rerank` | `boolean` | `true` | flags de ablação (SPEC §6) — **aceitas só fora de produção** |
-| `selection` | `"greedy" \| "truncate"` | `"greedy"` | estratégia de seleção (ablação) |
+| `POST` | `/v1/documents/resolve` | URL → structured document; cached, versioned by content hash |
+| `GET` | `/v1/documents/{document_id}` | stored document without refetching (`version_id`, `formats` query params) |
+| `POST` | `/v1/context/assemble` | question + URLs + budget → fragments with evidence |
+| `GET` | `/v1/usage` | per-key requests, tokens delivered, latency p50/p95 |
+| `GET` | `/health` | database and blob-store health; no auth |
 
 ```bash
 curl -s -X POST http://localhost:8000/v1/context/assemble \
-  -H "Content-Type: application/json" \
-  -d '{"query":"Qual header autentica as requisições?",
-       "urls":["https://docs.example.com/auth"],
-       "max_tokens":4000}'
-```
-
-**Corpo da resposta (200)** — `fragments[]` (cada um com `chunk_id`,
-`document_id`, `version_id`, `source_url`, `heading_path`, `md`, `tokens`,
-`scores{lexical_rank,vector_rank,rrf,rerank}` e `evidence[]{block_id,page,quote}`),
-`sources[]` (status por URL), `token_usage{output_tokens,budget_tokens,tokenizer}`,
-`coverage` (`insufficient`/`partial`/`sufficient` — heurística do maior rerank
-ABSOLUTO; limiares calibrados no M8: `coverage_low=0.6137`,
-`coverage_high=0.7746`), `warnings[]` e `trust: "untrusted_source"`.
-
-**Semântica de falha (SPEC §8):** se **uma** URL falha, a resposta continua
-**200** com o erro em `sources[].status` + `warnings` (nunca um 200 vazio e
-silencioso); se **todas** falham, a resposta é **422** `all_sources_failed`. Uma
-flag de ablação com valor não-default sob `ENV=production` → **400**
-`ablation_not_allowed`.
-
-### Núcleo (funções)
-
-| Função | Módulo | O que faz |
-|---|---|---|
-| `rrf_fuse(ranked_lists, *, k)` | `app/retrieve/rrf.py` | Fusão por reciprocal rank: `score(d) = Σ 1/(k + rank_j(d))`, `k=60` (SPEC §6), genérica na chave, com desempate determinístico pela chave. |
-| `lexical_search(session, *, query, version_ids, limit=50)` | `app/retrieve/lexical.py` | Top-50 por `ts_rank_cd` sobre o `tsvector` gerado (`'simple'`), restrito às versões, posições 1-based, desempate por `(version_id, ord)`. |
-| `vector_search(session, *, query_embedding, version_ids, limit=50)` | `app/retrieve/vector.py` | Top-50 por distância de cosseno pgvector (índice HNSW), restrito às versões, mesmo desempate. |
-| `rerank_candidates(query, fused, *, provider, use_rerank, documents, top_n=30)` | `app/retrieve/rerank.py` | Rerank dos 30 melhores: score do provedor clampado a `[0,1]`, ou — com rerank desligado — o RRF normalizado (min-max; único/empate → `1.0`). |
-| `select(candidates, *, budget_tokens, lambda_, min_value)` + `Candidate` | `app/retrieve/select.py` | Seleção gulosa sob orçamento: a cada passo maximiza `(V_i − λ·max_sim)/√t_i` (calibrado no M8: `λ=0.3`, `min_value=0.0`), penaliza quase-duplicatas, ordena a saída por `(document_id, ord)`. Inclui `cosine` numericamente seguro. |
-| `assemble_context(req, *, session_factory, blobs, robots, resolver, transport, embeddings, reranker, settings, now)` | `app/retrieve/assemble.py` | Orquestra os passos 1–7 da SPEC §6: resolve+indexa cada URL (falha independente), busca léxica+vetorial, RRF, rerank, seleção (ou ablação `truncate`), e monta `Fragment`s com proveniência completa e `evidence.quote` **literal** da IR (≤300 chars). Sem LLM. |
-| `assemble(req, ...)` (handler HTTP) | `app/api/assemble.py` | Handler `def` síncrono de `POST /v1/context/assemble`: seams `Depends` injetáveis (resolve + `provide_embeddings`/`provide_reranker`), rejeita ablação em produção (`AblationNotAllowed`/400), mapeia `AssembleResult` → `AssembleResponse`, 200 na falha parcial e `AllSourcesFailed`/422 quando todas as URLs falham. |
-
-### Provedor de rerank (`app/providers/rerank/`)
-
-O rerank fica atrás de uma interface, com um fake determinístico usado em TODOS
-os testes e o adaptador real nunca exercido em teste (igual ao padrão de
-embeddings/LLM).
-
-| Símbolo | Módulo | O que faz |
-|---|---|---|
-| `RerankProvider` (Protocol) | `base.py` | `model: str`; `rerank(query, documents) -> list[float]` com um score em `[0,1]` por documento **na ordem de entrada**. |
-| `FakeRerankProvider` | `fake.py` | Score determinístico por sobreposição Jaccard de tokens (disjunto → `0.0`, idêntico → `1.0`), zero rede. Usado em todos os testes. |
-| `JinaRerankProvider` | `jina.py` | Adaptador real da API Jina (`POST /v1/rerank`, Bearer, httpx próprio, min-max para `[0,1]`, `MissingAPIKey` sem chave). Nunca usado em testes. |
-
-Os schemas `AssembleRequest` / `AssembleResponse` (SPEC §8) estão em
-`app/api/schemas.py`. A rota aparece no OpenAPI vivo em
-`http://localhost:8000/openapi.json`. A partir do M9 o `assemble` é consumível
-também pelo **SDK Python** e pelo **servidor MCP** (ver a seção abaixo).
-
----
-
-## Uso para pilotos (M9): chaves, SDK e MCP
-
-O M9 deixa o NINA **pronto para pilotos**: autenticação por chave Bearer em
-todas as rotas /v1, rate limit por chave com cota diária, contabilização de uso
-(`GET /v1/usage`), um **SDK Python** tipado e um **servidor MCP**. O passo a
-passo copiável está em [`docs/QUICKSTART.md`](docs/QUICKSTART.md); o resumo:
-
-**1. Crie a chave (mostrada uma única vez).** O servidor guarda só o hash sha256.
-
-```bash
-python -m app.admin create-key --name piloto-x
-# imprime: nina_...   (copie agora — não será mostrada de novo)
-```
-
-A autenticação Bearer é **exigida** quando `ENV != dev` (no-op em `dev`);
-`/health` nunca exige chave. Sem chave / inválida / revogada → **401**
-`unauthorized`; acima do limite → **429** com header `Retry-After`.
-
-**2. HTTP com `Authorization: Bearer`.**
-
-```bash
-curl -s -X POST "$API_URL/v1/context/assemble" \
   -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{"query":"...","urls":["https://docs.example.com/auth"],"max_tokens":4000}'
+  -d '{"query": "Which header carries the API key?",
+       "urls": ["https://docs.example.com/auth"], "max_tokens": 4000}'
 ```
 
-**3. SDK Python (`nina-client`, distribuição separada em `sdk/python/`).**
+```jsonc
+{
+  "fragments": [{
+    "chunk_id": "…", "document_id": "doc_…", "version_id": "ver_…",
+    "source_url": "https://docs.example.com/auth", "heading_path": ["Authentication"],
+    "md": "…", "tokens": 182,
+    "scores": {"lexical_rank": 1, "vector_rank": 3, "rrf": 0.032, "rerank": 0.91},
+    "evidence": [{"block_id": "…", "page": null, "quote": "Send the key in the X-Api-Key header"}]
+  }],
+  "sources": [ /* per-URL status */ ],
+  "token_usage": {"output_tokens": 1495, "budget_tokens": 4000, "tokenizer": "cl100k_base (approximate)"},
+  "coverage": "sufficient",   // heuristic over the top rerank score
+  "warnings": [],
+  "trust": "untrusted_source"
+}
+```
+
+- **Request fields:** `max_tokens` is 256–32000 (default 4000);
+  `include_evidence` defaults to true. Ablation flags are rejected when
+  `ENV=production`.
+- **Partial failure:** if one URL fails, the response is still 200, with the
+  failure in `sources[].status` and `warnings`. If every URL fails, it is 422
+  `all_sources_failed`.
+- **Errors:** every error uses `{"error": {"code", "message", "details"}}`. The
+  full code table is in SPEC §8.
+
+### Auth, limits and usage
+
+```bash
+uv run python -m app.admin create-key --name pilot-x   # prints nina_… once; only its sha256 is stored
+uv run python -m app.admin revoke-key --name pilot-x
+```
+
+- When `ENV` is not `dev`, every `/v1` route requires
+  `Authorization: Bearer <key>`; a missing or bad key gets 401 `unauthorized`.
+- Each key has a token bucket and a daily render quota. Over the limit, the API
+  returns 429 with `Retry-After`. The bucket is in memory, one per process.
+- Every `/v1` request writes a usage event, and `GET /v1/usage` aggregates them.
+
+### Python SDK
 
 ```bash
 pip install ./sdk/python
@@ -541,224 +146,151 @@ pip install ./sdk/python
 ```python
 from nina_client import NinaClient
 
-client = NinaClient("https://nina.example.com", "nina_...")
-pkg = client.assemble("Qual header autentica?", ["https://docs.example.com/auth"])
-for frag in pkg.fragments:
+client = NinaClient("http://localhost:8000", "nina_...")
+ctx = client.assemble("Which header carries the API key?", ["https://docs.example.com/auth"])
+for frag in ctx.fragments:
     print(frag.source_url, frag.md)
 ```
 
-O cliente envia o Bearer em toda chamada, repete 429/5xx com backoff honrando
-`Retry-After`, e levanta erros tipados (`UnauthorizedError`, `RateLimitedError`,
-...) mapeando a tabela §8. Usa `httpx` próprio (fala com a própria API, não com
-páginas externas — ver [`DECISIONS.md`](DECISIONS.md)).
+The client is typed and also has `resolve()` and `get_document()`. It retries
+429/5xx responses honoring `Retry-After` and raises typed errors mapped from the
+API's error codes.
 
-**4. Servidor MCP (Claude Desktop / Claude Code).** Cliente fino que lê
-`API_URL`/`API_KEY` do ambiente e expõe 3 ferramentas (`resolve_url`,
-`assemble_context`, `get_document`). Bloco de configuração completo (com
-`command`/`args`/`env`) no [`QUICKSTART`](docs/QUICKSTART.md). O conteúdo
-devolvido vem de páginas externas (`trust: untrusted_source`): é dado, nunca
-instrução.
-
-### Por que o piloto escolhe o NINA: eficiência + evidência
-
-O M9 empacota exatamente a tese validada no M8 (ver "O que o benchmark provou"
-acima): **à paridade de qualidade com RAGs competentes — BM25 E vetorial — o
-NINA entrega o resultado por ~43–47% menos custo** (US$ 0,0049/tarefa concluída
-vs US$ 0,0084 do BM25 e US$ 0,0092 do vetorial, split `test` reservado, orçamento
-4000), com **~44% menos tokens de contexto** (1.495 vs ~2.675), **citação
-verificável** (precisão 0,585 vs 0,512) e **0% de respostas INSUFFICIENT** (vs
-~10% dos RAGs). Em qualidade é **empate estatístico** (sucesso `ours` 0,805 vs
-`naive_rag` 0,756 vs `naive_rag_vector` 0,683, ICs sobrepostos) — o
-posicionamento é "o mesmo resultado, por menos custo e com a prova anexada", não
-"mais preciso que RAG". Números completos e reprodutíveis em
-[`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md).
-
----
-
-## Calibração dos parâmetros de seleção (M8 Etapa 1)
-
-A Etapa 1 do M8 é o **ponto de decisão** do projeto: calibrar os parâmetros de
-seleção (`selection_lambda`, `min_value`, `coverage_low`, `coverage_high`) numa
-grade, medindo cada combinação **apenas no split `dev`** com os provedores
-reais, e **congelar** os vencedores em `app/config.py`. A **regra de honestidade**
-é inegociável e reforçada em código: o calibrador filtra `split == "dev"`; o
-split `test` (41 tarefas) nunca é tocado na calibração.
-
-Os parâmetros de seleção são **injetáveis**: `OursRunner` aceita `lambda_` /
-`min_value` (default = os valores de hoje) e `embeddings` / `reranker` (default =
-os fakes determinísticos, então todo teste continua offline). A calibração injeta
-os provedores REAIS (OpenAI embeddings + Jina reranker); nenhum teste os usa.
-
-### Utilitário de calibração (`bench/calibrate.py` — execução humana)
-
-Utilitário humano que gasta chaves; **não** é coletado pelo pytest. Só a LÓGICA
-PURA é unit-testada (`tests/unit/bench/test_calibrate.py`), sem rede.
-
-| Função | O que faz |
-|---|---|
-| `pick_best(results)` | Escolhe a combinação vencedora: taxa de sucesso (desc), desempate por menor custo/tarefa concluída, depois menor média de tokens de contexto, depois `(lambda_, min_value)` crescente — vencedor único e determinístico. |
-| `percentiles(scores, pcts)` | Percentis por posição (nearest-rank, mesma convenção de `report._percentile`), ex.: `p33`/`p66`. |
-| `coverage_from_scores(scores)` | Deriva `(coverage_low, coverage_high) = (p33, p66)` da distribuição do **máximo de rerank por tarefa** (score absoluto) observado no `dev` — a mesma grandeza que `assemble._coverage` classifica em runtime, então limiar e observável são a mesma coisa. Heurística honesta sobre o observável real, sem rótulos. |
-| `run_calibration(...)` | Carrega SÓ `split == "dev"`, mede as 9 combinações (λ ∈ {0.3,0.5,0.7} × min_value ∈ {0.0,0.05,0.1}) no orçamento 4000 com os provedores reais, escolhe o vencedor, deriva a cobertura do máximo-rerank por tarefa e escreve o artefato `bench/results/calibration_<ts>/` (inclui `coverage_scores.csv` para auditoria). |
-| `recompute_coverage(...)` | Recomputa SÓ os limiares de cobertura a partir da distribuição do máximo-rerank do `dev` (apenas Jina, via cache; sem OpenAI, sem a grade). CLI: `--coverage-only`. |
-
-Invocação (após subir a infra e com as chaves no `.env` real):
+### MCP server
 
 ```bash
-uv run python -m bench.calibrate --real
+API_URL=http://localhost:8000 API_KEY=nina_... uv run python -m app.mcp_server          # stdio
+API_URL=http://localhost:8000 API_KEY=nina_... uv run python -m app.mcp_server --http   # streamable HTTP
 ```
 
-### Economia de cota (cache persistente)
+It exposes three tools: `resolve_url`, `assemble_context` and `get_document`.
+Each tool description warns that returned content is untrusted. Configs for
+Claude Desktop and Claude Code are in [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
 
-`lambda_`/`min_value` afetam só a seleção gulosa final; a busca, o RRF e o rerank
-são invariantes a eles. Por isso o calibrador roda a parte cara (busca + rerank
-do top-30) **uma vez por tarefa** e aplica só a seleção pura por combinação,
-cortando as chamadas de rerank/embeddings de 9×96 para ~1×96. Um cache
-persistente content-addressed (`bench/provider_cache.py`, `bench/.cache/`,
-gitignored) guarda rerank e embeddings em disco: uma re-execução não re-chama a
-Jina para pares `(query, documents)` já vistos, e a **Etapa 2** (split `test`,
-vários orçamentos) reusa o mesmo cache (o rerank de uma tarefa é invariante ao
-orçamento), gastando zero cota de Jina para pares já computados.
+## Configuration
 
-### Resultado congelado (M8 Etapa 1)
+`.env.example` lists every variable. The main ones:
 
-A calibração real no `dev` (96 tarefas, orçamento 4000) elegeu **λ = 0.3,
-min_value = 0.0** (taxa de sucesso 0.8125 — no dev, a seleção vai melhor **sem**
-corte por valor mínimo). Os limiares de cobertura são o **p33/p66 do máximo
-ABSOLUTO de rerank por tarefa** no dev (96 tarefas) — a mesma grandeza que
-`assemble._coverage` observa: **coverage_low = 0.6137**, **coverage_high =
-0.7746**. Com eles (arredondados em config), as 96 tarefas dev se dividem via
-`assemble._coverage` em 32/31/33 (insufficient/partial/sufficient), ou seja, a
-cobertura não colapsa num único rótulo. Valores congelados em `app/config.py` / `.env.example`. A calibração foi
-feita **só no split `dev`**; o split `test` não foi tocado (regra de honestidade
-do M8). Detalhes e a tabela das 9 combinações em [`PROGRESS.md`](PROGRESS.md) e
-[`DECISIONS.md`](DECISIONS.md).
-
-> **Cobertura — score absoluto.** O `JinaRerankProvider` devolve o
-> `relevance_score` **absoluto** da Jina (comparável entre tarefas); a
-> normalização min-max usada pela **seleção** vive em `rerank_candidates` (não
-> afeta a cobertura). Assim `assemble._coverage` e os limiares congelados
-> comparam a **mesma grandeza** (o máximo absoluto por tarefa). Os números são
-> reproduzíveis a partir de
-> `bench/results/coverage_20261012T193038_322186/coverage_scores.csv`
-> (re-rodar `percentiles` sobre o CSV reproduz 0.6137/0.7746, sem gastar Jina).
-
-### Varredura e relatório (M8 Etapa 2 — `bench/sweep.py`, `bench/report_m8.py`)
-
-A Etapa 2 roda o benchmark completo no split `test` (41 tarefas × 9 estratégias
-× 3 orçamentos) com os parâmetros CONGELADOS, só MEDINDO. As funções novas (a
-lógica pura é unit-testada em `tests/unit/bench/test_run_sweep.py`, zero rede):
-
-| Função | Módulo | O que faz |
-|---|---|---|
-| `run_sweep(*, strategies, split, budgets, real, out_name, ...)` | `bench/sweep.py` | Driver da varredura: carrega o split uma vez, injeta os provedores REAIS de recuperação nos `ours*` (ou os fakes), mede todo `(tarefa, estratégia, orçamento)` e escreve os quatro artefatos. CLI: `python -m bench.sweep --strategies ... --split test --budgets 2000,4000,8000 --real`. |
-| `build_sweep_rows(...)` | `bench/sweep.py` | Função PURA de montagem das linhas: para os `ours*` prepara a recuperação uma vez por tarefa (`prepare_candidates`) e aplica só a seleção por orçamento (DS3); devolve uma `SweepRow` por `(tarefa, estratégia, orçamento)` + os `FailureProbe` do `ours` no orçamento de referência. |
-| `register_ours(*, embeddings, reranker, lambda_, min_value)` | `bench/runners/base.py` | Reconstrói o registry com os provedores de recuperação REAIS e os knobs congelados ligados aos runners `ours*` (default = fakes; nenhum teste chama isto). |
-| `write_report(out_dir, *, sweep_rows, probes, ...)` | `bench/report_m8.py` | Emite `report.md` (tabelas por estratégia e categoria com IC95%, custo/concluída e latência p50/p95 por orçamento; ablação; falhas), `results.csv` (coluna `budget`), `config.json` (parâmetros congelados + commit + versões) e `sumario.md`. |
-| `compare_ours_vs_rag(rows, ...)` | `bench/report_m8.py` | Compara `ours` × `naive_rag` por categoria + geral; vence quem tem o limite inferior do IC acima do superior do outro, senão EMPATE. |
-| `diagnose_failure(probe)` | `bench/report_m8.py` | Classificação DETERMINÍSTICA (sem LLM) de uma falha (`correct=0`) em `retrieval`/`selection`/`answer` (DS6). Correto-mas-sem-citação é SUCESSO (§10.4), não falha. |
-
-**Conclusão do módulo M8 (honesta, medição final no split `test`, orçamento de
-referência 4000, commit `6cfad7c`).** No split reservado, `ours` NÃO venceu o
-`naive_rag` com IC não sobreposto em NENHUMA categoria — é empate em todas
-(geral `ours`=0.780 [0.634, 0.902] vs `naive_rag`=0.707 [0.561, 0.854]), com
-`ours` numericamente à frente e sem derrota de IC não sobreposto. O que `ours`
-entrega nesse empate: **custo por tarefa concluída ~metade** (US$ 0.005100 vs
-US$ 0.008923, ~43% mais barato), **~44% menos tokens de contexto** (1495 vs
-2678), **INSUFFICIENT 0.000** (vs 0.098) e — depois da correção do bug de
-proveniência — **evidência rastreável: precisão de citação 0.585** (24/41
-tarefas com citação verificada), ANTES 0.000. O reranker AJUDA no test
-(`ours`=0.780 > `ours_no_rerank`=0.732), consistente com o dev. Em resumo: a
-tese "**menos custo pelo mesmo resultado, com evidência rastreável**" se
-sustenta nos dados do split reservado — qualidade em EMPATE (não superioridade
-estatística), mais barato, mais enxuto e agora com citações verificáveis.
-**Decisão do projeto (2026-10-13): seguir**, posicionando o produto no nicho
-"eficiência + evidência rastreável a paridade de qualidade" — não como "mais
-preciso que RAG" (ver [`DECISIONS.md`](DECISIONS.md)). Próximo: M9 (pronto para
-pilotos). Números completos em
-[`PROGRESS.md`](PROGRESS.md), em
-[`.agents/tasks/m8-test-remeasure.md`](.agents/tasks/m8-test-remeasure.md) e nos
-artefatos de `bench/results/m8-test-2026-10-13/`.
-
-**Reforço posterior — confronto com um RAG vetorial (split test, orçamentos 2000
-e 4000).** Para responder à objeção de que o `naive_rag` BM25-puro é um baseline
-fraco, foi adicionado o `naive_rag_vector` (híbrido BM25+embeddings, baseline
-justo revisado por honestidade) e o `lexical_weight` foi congelado em 1.0
-(identidade; sem calibração especulativa — ver [`DECISIONS.md`](DECISIONS.md)). No
-orçamento 4000: `ours` 0,805 [0,683–0,927] vs `naive_rag` 0,756 [0,634–0,878] vs
-`naive_rag_vector` 0,683 [0,537–0,829] — empate estatístico com ambos, `ours`
-numericamente à frente. O RAG vetorial teve a MENOR qualidade e o MAIOR custo
-(US$ 0,0092/concluída vs 0,0049 do `ours`) neste corpus técnico — embeddings de
-propósito geral não batem BM25 em busca de termo exato. O `ours` é o único que
-melhora com orçamento (0,707→0,805 de 2000 para 4000) enquanto os baselines
-estagnam/pioram. A tese sai REFORÇADA: eficiência + evidência a paridade de
-qualidade vale mesmo contra o RAG mais forte. Artefatos em
-`bench/results/m8-vector-test/`.
-
----
-
-## Benchmark: o que depende de você
-
-O harness de avaliação (M2) é o que prova a tese do produto. Ele exigiu insumos
-humanos — julgamento, contas pagas e decisões de produto — que já foram
-fornecidos:
-
-1. ✅ **Sites (`bench/sites.yaml`)** — 10 fontes de documentação pública com
-   estruturas variadas (referência de API com tabelas, guias, changelogs, 2 SPAs
-   e 3 PDFs), 5 URLs cada, congeladas sem bloqueios de `robots.txt`.
-2. ✅ **LLMs do benchmark** — respondedor OpenAI (`gpt-6.1-sol`) e juiz Anthropic
-   (`claude-sonnet-5-5`), modelos de fornecedores diferentes, com as chaves no
-   `.env`.
-3. ✅ **Preços (`bench/prices.yaml`)** — preço por milhão de tokens de cada
-   modelo, usado para o custo por tarefa concluída.
-4. ✅ **137 tarefas validadas** — rascunhadas a partir da IR limpa e revisadas
-   por humano; recategorizadas nas cinco categorias canônicas com split
-   estratificado (96 `dev` / 41 `test`). Este é o passo mais importante do
-   projeto: tarefas erradas tornam o benchmark sem sentido.
-5. ◻️ **(Opcional) chave do Firecrawl** — para o baseline comercial; sem ela,
-   esse runner é pulado.
-
-> **Reprodutibilidade (ver [`DECISIONS.md`](DECISIONS.md)):** a geração atual de
-> modelos OpenAI e Anthropic descontinuou o parâmetro de temperatura, então a
-> SPEC §10.3 ("temperatura 0") foi substituída por prompt fixo + `seed` fixo +
-> intervalos de confiança por bootstrap.
-
-Expandir o conjunto de tarefas no futuro: `bench/draft_tasks.py` rascunha novos
-candidatos a partir do corpus e `bench/review_tasks.py` os valida. Detalhes e
-checklist completo em [`docs/HUMANO.md`](docs/HUMANO.md).
-
----
-
-## Documentação do projeto
-
-| Arquivo | Conteúdo |
+| Variable | Purpose |
 |---|---|
-| [`docs/SPEC.md`](docs/SPEC.md) | Arquitetura, contratos de API, esquemas e algoritmos (fonte da verdade) |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Os 11 marcos (M0–M10) com tarefas e critérios de aceite |
-| [`docs/HUMANO.md`](docs/HUMANO.md) | O que depende de você e quando (bloqueios de marco) |
-| [`docs/PROMPTS.md`](docs/PROMPTS.md) | Prompts de condução do projeto |
-| [`PROGRESS.md`](PROGRESS.md) | Estado atual detalhado, atualizado a cada marco |
-| [`DECISIONS.md`](DECISIONS.md) | Registro de decisões técnicas não óbvias |
-| [`CLAUDE.md`](CLAUDE.md) | Regras permanentes de engenharia do projeto |
+| `ENV` | `dev` disables auth and allows ablation flags |
+| `POSTGRES_*` | database connection |
+| `EMBEDDINGS_API_KEY`, `EMBEDDING_MODEL`, `EMBEDDING_DIM` | embeddings provider |
+| `RERANKER_API_KEY`, `RERANKER_MODEL` | rerank provider (Jina) |
+| `RESOLVE_CACHE_TTL_SECONDS` | how long a resolved version is served from cache (default 24 h) |
+| `SELECTION_LAMBDA`, `MIN_VALUE`, `COVERAGE_LOW`, `COVERAGE_HIGH`, `RRF_K`, `LEXICAL_WEIGHT` | retrieval and selection parameters, frozen after calibration on the `dev` split |
+| `RATE_LIMIT_CAPACITY`, `RATE_LIMIT_REFILL_PER_SEC`, `RENDER_DAILY_QUOTA` | per-key limits |
+| `FETCHER_USER_AGENT`, `MAX_BODY_BYTES`, `ALLOWED_PORTS`, timeouts | fetcher behavior |
+| `BENCH_ANSWERER_API_KEY`, `BENCH_JUDGE_API_KEY` | benchmark only |
 
----
+## Benchmark
 
-## Segurança
+The harness in `bench/` is part of the product: NINA is only worth building if
+it beats existing approaches on measured cost at equal quality.
 
-- **SSRF:** toda saída de rede (httpx e Playwright) passa por `app/fetch/guard.py`,
-  que valida todos os IPs resolvidos e bloqueia loopback, redes privadas,
-  link-local, CGNAT e o endereço de metadados de nuvem (`169.254.169.254`). O
-  cliente HTTP conecta no IP já validado para fechar a janela de DNS rebinding.
-- **Segredos:** nunca no código nem nos testes — apenas em `.env` (fora do git);
-  `.env.example` documenta todas as variáveis.
-- **Licenças:** apenas MIT/BSD/Apache-2.0; GPL/AGPL são proibidas.
+### Single-call results (M8)
 
-Encontrou um problema de segurança? Abra uma issue privada ou contate o
-mantenedor; não divulgue publicamente antes da correção.
+- **Setup:** a frozen corpus of 50 pages from 10 documentation sites (including
+  SPAs and PDFs). One LLM answers from each strategy's context, and a different
+  LLM judges the answer.
+- **Results:** held-out `test` split, 41 tasks, budget 4,000 tokens.
 
----
+| Strategy | Success (95% CI) | Context tokens | Cost per correct answer | Citation precision | Gave up (`INSUFFICIENT`) |
+|---|---|---|---|---|---|
+| **`ours` (NINA)** | 0.756 [0.610, 0.878] | 1,495 | $0.00525 | 0.585 | 0.000 |
+| `naive_rag` (BM25) | 0.732 [0.585, 0.878] | 2,677 | $0.00862 | 0.512 | 0.098 |
+| `naive_rag_vector` (BM25 + embeddings) | 0.683 [0.537, 0.829] | 2,673 | $0.00923 | 0.512 | 0.098 |
+| `strong_rag` (overlap chunks, hybrid RRF, cross-encoder rerank) | 0.683 [0.537, 0.829] | 2,823 | $0.00968 | 0.512 | 0.098 |
 
-## Licença
+**What this shows:** NINA used about half the context (53% of `strong_rag`'s),
+and the RAG baselines cost 1.6–1.8× more per correct answer.
 
-Projeto privado durante o MVP. A licença será definida antes de qualquer
-distribuição pública.
+**What it does not show:**
+- **No quality difference is significant.** All CIs overlap, and paired
+  McNemar p for `ours` against each baseline ranges from 0.38 to 1.0.
+- **The sample is small and self-made.** There are only 41 tasks, drafted by an
+  LLM from NINA's own extraction, with one URL each.
+- **One run is noisy.** `naive_rag` got identical context in two runs, and 4
+  of its 41 verdicts still changed.
+- **It prices a single answer call,** not an agent session.
+
+### End-to-end agent evaluation (M10, in progress)
+
+Pre-registered in [`bench/PREREG.md`](bench/PREREG.md) and pushed to GitHub
+before any run:
+
+- **Tasks:** real Stack Overflow questions with accepted answers, from the
+  2023–2024 data dump (CC BY-SA), with 5 URLs per task.
+- **Arms:** the same agent (Claude Sonnet 5.5) answers each task once per arm:
+  no docs, full-page Markdown (the primary comparator), strong RAG, NINA through
+  its MCP server, built-in WebFetch, and Context7.
+- **Metrics:** success, with a 7.5-point non-inferiority margin, and billed USD
+  per correct task, with the judge checked against human labels.
+- **Reporting rule:** the headline is the lower 95% bound of the cost ratio,
+  whatever it turns out to be.
+
+```bash
+uv run python -m bench.run --strategies naive_rag,ours --split test --budget 4000   # add --real to use the paid providers
+uv run python -m bench.sweep --strategies naive_rag,strong_rag,ours --split test --budgets 2000,4000 --real
+uv run python -m bench.power --psi 0.25                                             # M10 sample size
+```
+
+## Development
+
+| Command | What it runs |
+|---|---|
+| `make up` / `make down` | start / stop Postgres and SeaweedFS |
+| `make migrate` | `alembic upgrade head` |
+| `make check` | `ruff check`, `ruff format --check`, `mypy app` (strict), `pytest -m "not browser"` |
+| `make test` | `pytest` only |
+| `make dev` | API with auto-reload |
+
+- **Test markers:**
+  - `integration` needs `make up`.
+  - `browser` needs Chromium.
+  - `allow_network` marks loopback-server tests.
+- **Fast offline gate:** `uv run pytest -m "not integration and not browser"`.
+- **CI** (GitHub Actions) starts the infrastructure, migrates, runs
+  `make check`, then the browser tests.
+- **Stack:** Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 + Alembic,
+  Postgres 16 + pgvector, httpx, lxml, readability-lxml, extruct, Playwright,
+  pdfplumber, tiktoken, boto3 (SeaweedFS locally, AWS S3 in production),
+  structlog, pytest + syrupy, ruff, mypy.
+- **Licenses:** dependencies are MIT, BSD or Apache-2.0 only.
+- **No network in tests:** external providers sit behind `app/providers/`
+  interfaces with deterministic fakes, so tests never call the network.
+
+## Status
+
+| Milestone | Scope | State |
+|---|---|---|
+| M0–M7 | repo and CI, secure fetcher, frozen corpus and baselines, HTML/PDF/SPA extraction, persistence and `resolve`, chunking and indexing, search and `assemble` | done |
+| M8 | full benchmark and calibration (on `dev` only) | done; decision: proceed |
+| M9 | API keys, rate limits, usage, MCP server, SDK | done |
+| M10 | pre-registered end-to-end agent evaluation | in progress |
+| M11 | deploy and observability | not started |
+
+Out of scope for the MVP: crawling and URL discovery, continuous indexing, OCR,
+a web UI, billing, and multi-tenancy beyond API keys.
+
+## Documentation
+
+| File | Content |
+|---|---|
+| [`docs/SPEC.md`](docs/SPEC.md) | architecture, API contracts, schemas, algorithms (source of truth) |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | milestones M0–M11 with acceptance criteria |
+| [`docs/QUICKSTART.md`](docs/QUICKSTART.md) | pilot setup: API key, curl, SDK, MCP config |
+| [`bench/PREREG.md`](bench/PREREG.md) | M10 pre-registration and amendments |
+| [`PROGRESS.md`](PROGRESS.md) | current state, per milestone |
+| [`DECISIONS.md`](DECISIONS.md) | log of non-obvious decisions |
+| [`docs/HUMANO.md`](docs/HUMANO.md) | steps that need a human |
+| [`CLAUDE.md`](CLAUDE.md) | engineering rules for contributors and agents |
+
+Everything except this README and `bench/PREREG.md` is written in Portuguese.
+
+## Security and license
+
+- Report vulnerabilities privately to the maintainer, not in a public issue.
+- Secrets live only in `.env`, which git ignores.
+- The project is private during the MVP; a license will be chosen before any
+  public release.
