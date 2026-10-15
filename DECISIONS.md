@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-15: M10 — análises secundárias por tamanho de página e para sessões longas (Emenda 4 do PREREG)
+Contexto: a estimativa de custo para sessões curtas, de uma pergunta só, previu que o NINA sai 1,4–1,8× mais barato que a página inteira, abaixo do "metade do custo". Duas coisas que o teste principal mantém fixas mudam essa conta: o tamanho das páginas (no corpus atual, mediana de 3,5 mil tokens e 10% acima de 15,6 mil) e a duração da sessão (numa sessão longa, o resultado de uma ferramenta é relido do cache a cada turno).
+Decisão (aprovada pelo humano em 2026-10-15): registrar, antes de qualquer resultado, duas análises secundárias. (1) Por tamanho das páginas citadas, em três faixas fixas (curta < 4.000 tokens; média 4.000–15.999; longa ≥ 16.000), com Δ e R por faixa e a previsão "R cresce com o tamanho". (2) Na calculadora, C(K) = C_sessão + K × (T × p_leitura + O), com R(K) para K = 0, 10, 30 e 100, calculado com O = 0 e com O = a mediana de uma sessão `no_docs` da triagem. Nenhuma das duas pode virar manchete.
+Alternativas: escolher as faixas depois de ver os dados (permitiria ajustar o corte ao resultado); medir sessões longas de verdade (exigiria tarefas com várias perguntas e multiplicaria o custo; fica como possibilidade futura).
+Consequências: a §12 do `bench/PREREG.md` ganha a Emenda 4; a análise (Fase 4) e a calculadora (Fase 5) implementam as duas. Nada do que já foi medido muda, e nenhum código mudou.
+
 ## 2026-10-15: count_tokens lê texto de token especial como texto comum (Emenda 3 do PREREG)
 Contexto: a mineração do dump encontrou perguntas reais com o texto literal `<|endoftext|>`. O `count_tokens` (`app/index/tokens.py`) usava o `encode()` padrão do tiktoken, que levanta erro nesse texto; qualquer página de documentação que o contivesse faria o `resolve` e a indexação falharem.
 Decisão (aprovada pelo humano em 2026-10-15): `encode(text, disallowed_special=())`, que conta o texto como tokens comuns. Para texto sem essas sequências a contagem é idêntica. Registrado como Emenda 3 do `bench/PREREG.md` antes de qualquer execução de agente; o `app/` congelado do M10 passa a ser o do commit desta emenda.

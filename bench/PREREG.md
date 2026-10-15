@@ -310,6 +310,61 @@ data had been seen.
   run had happened; the only data seen was the mining pass over the dump, which
   yields candidates, not outcomes.
 
+### Amendment 4 — 2026-10-15: two secondary analyses, fixed before any result
+
+- **What changed:** §7's secondary (exploratory) analyses gain the two entries
+  below. They are defined here so no result can shape them. Neither can become
+  the headline; both are reported with their intervals and the label
+  "secondary".
+  1. **By page length.**
+     - A task's page length is the total token count
+       (`app.index.tokens.count_tokens`) of its cited pages (at most 4) as
+       whole-page Markdown. The Markdown is extracted from the frozen snapshots
+       with trafilatura, exactly as the `full_page` arm does, so it depends on
+       no run.
+     - Bins, fixed from the existing frozen corpus (median page 3.5k tokens,
+       90th percentile 15.6k):
+       - short: < 4,000 tokens;
+       - medium: 4,000–15,999 tokens;
+       - long: ≥ 16,000 tokens.
+     - Reported per bin, each with the §6 paired bootstrap (10,000 resamples,
+       seed `20261015`):
+       - n, and success and CPT per arm;
+       - Δ = success(`nina`) − success(`full_page`);
+       - R = CPT(`full_page`) / CPT(`nina`).
+     - Prediction, recorded now: R grows from short to long pages.
+  2. **Long-session extrapolation in the ROI calculator.** This is a model built
+     from measured numbers, not a measurement.
+     - In a real session a tool result stays in the context and is re-read from
+       cache on every later turn. For K more turns after the lookup, each arm's
+       cost per task is
+
+       `C(K) = C_session + K × (T × p_read + O)`
+
+       where:
+       - `C_session` is the arm's measured mean USD per session;
+       - `T` is the arm's measured mean tool-result tokens per session;
+       - `p_read` is the cache-read price per token from `bench/prices.yaml`;
+       - `O` is the cost per turn of everything else in the session.
+     - R(K) = [C_full(K) / success(`full_page`)] / [C_nina(K) / success(`nina`)]
+       is reported for K = 0, 10, 30 and 100, with the paired bootstrap over
+       tasks (O held fixed). It is reported twice:
+       - with O = 0, the cost of the documentation alone;
+       - with O = the median USD of a `no_docs` screen session, as a stand-in
+         for one turn of other work.
+     - Stated assumptions: every later turn hits the cache (no expiry,
+       compaction or truncation), and success does not change with K.
+     - The calculator takes K, O, monthly task volume and the customer's model
+       prices as inputs.
+- **Why:** NINA's advantage depends on two things the primary test holds fixed:
+  how long the documentation is, and how long the agent keeps working after
+  reading it. Fixing both analyses before any outcome exists means the report
+  can say where the advantage grows or shrinks without picking the cut after
+  seeing the data.
+- **Data seen:** none from any arm. No agent session, screen, pilot or NINA
+  benchmark run had happened. The bins come from page sizes of the existing
+  frozen corpus, which are not outcomes.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
