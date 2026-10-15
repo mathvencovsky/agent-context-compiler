@@ -252,6 +252,7 @@ Tarefas (uma fase por vez, cada uma com plano aprovado):
 - Fase 0: `bench/PREREG.md` (hipóteses, métricas, margem, tamanho de amostra, análise, regra de parada) e `bench/power.py`, commitados antes de qualquer execução paga.
 - Fase 1: tarefas externas do Stack Overflow (SPEC §10.6), snapshot das páginas citadas, distratores e auditoria; as 137 tarefas `ai_draft` viram uma fatia sintética separada.
 - Fase 2: rotulagem humana cega com κ de Cohen, segundo juiz e autoconsistência do juiz.
+- M10a (antes do piloto): aprofundar o NINA medindo-o com as âncoras de seção das respostas aceitas, só na fatia `dev` (PREREG Emenda 6); uma emenda posterior congela o novo `app/` antes de qualquer sessão de agente.
 - Fase 3: harness de agente (Claude Agent SDK) com os braços da SPEC §10.6; piloto, depois rodada principal com teto; conciliação com o export de custo do provedor.
 - Fase 4: análise pareada (McNemar + bootstrap), curva qualidade × custo, resultados por tipo de tarefa e causas de falha do NINA.
 - Fase 5: tempo do `git clone` ao primeiro `assemble` no Claude Code numa máquina limpa; calculadora de ROI só com números medidos.

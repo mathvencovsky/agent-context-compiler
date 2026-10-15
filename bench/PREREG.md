@@ -398,6 +398,43 @@ data had been seen.
     Appendix B rubric does not fit it.
 - **Data seen:** none. No agent session, judge call or human label existed.
 
+### Amendment 6 — 2026-10-15: a development slice for product work, kept out of the evaluation
+
+- **What changed:**
+  1. **Development slice.**
+     - Every `holdout` task whose seeded hash falls in the lowest 25% becomes
+       `dev`: the first 8 bytes of sha256(`20261015:dev:<task id>`) below
+       0.25 · 2⁶⁴. That is 756 tasks, 328 of them with an accepted-answer link
+       to a section anchor that exists in the frozen page.
+     - The label is written into `bench/tasks/external.yaml`.
+     - The other 2,278 `holdout` tasks keep their random order and form the
+       evaluation pool. The screen (§2.2), the main run, the audit
+       (Amendment 2) and the human labels (§9, Amendment 5) draw only from it.
+     - The 20 `pilot` tasks do not change.
+  2. **Use of `dev`.**
+     - Development tasks may be read and used to tune anything: questions,
+       accepted answers, anchors and NINA's outputs.
+     - They never enter the screen, the main run or the human labels.
+     - Their numbers are reported separately, labelled "development", and are
+       never evidence for the claim in §1.
+  3. **Synthetic tasks.** Product tuning may also use the `dev` split of
+     `bench/tasks/tasks.yaml`, never its `test` split (the §2.3 bridge slice).
+  4. **`app/` may change** while NINA is improved on the development slice
+     (milestone M10a). A later amendment names the new frozen `app/` commit,
+     replacing the one named by Amendment 3. No M10 agent session (pilot, screen
+     or main run) starts before that amendment.
+- **Why:**
+  - NINA will be improved before the paid evaluation. Tuning it on the tasks the
+    evaluation measures would make the test confirm its own tuning.
+  - A uniform draw keeps the evaluation pool representative: MDN is 40.3% of it
+    against 40.4% of the holdout, and Python 28.2% against 28.5%.
+  - The screen still reaches n = 349 unless more than 85% of the pool is
+    answerable from memory, and n = 489 unless more than 79% is. Beyond that,
+    §5's achieved-margin rule applies.
+- **Data seen:** none from any arm. No agent session had run. Only task texts,
+  accepted-answer anchors and page sizes had been examined, and none of them are
+  outcomes.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

@@ -144,8 +144,9 @@ def dump_tasks(tasks: list[Task], path: str | Path) -> None:
 
 
 #: M10 external split (SPEC §10.6): ``pilot`` checks the harness and sizes n;
-#: ``holdout`` is never tuned on (PREREG §2.1).
-ExternalSplit = Literal["pilot", "holdout"]
+#: ``holdout`` is never tuned on (PREREG §2.1); ``dev`` is the product-tuning
+#: slice that never enters the evaluation (PREREG Amendment 6).
+ExternalSplit = Literal["pilot", "holdout", "dev"]
 
 #: PREREG §2.1 task type, assigned by rules (first match wins).
 TaskType = Literal["multi_doc", "version", "code", "fact"]

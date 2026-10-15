@@ -1,11 +1,23 @@
 # PROGRESS
 
-Marco atual: **M10 (Avaliação ponta a ponta com agente, pré-registrada) — Fase 3
-EM ANDAMENTO** (plano aprovado pelo humano em 2026-10-15). Prontas e testadas
-offline: custo por sessão a partir do uso faturado, tamanho de página (Emenda 4)
-e os arquivos de saída. Pausados, à espera de decisão do humano: o harness do
-agente e a ligação do braço `nina` ao corpus congelado. Nenhuma execução paga
-foi feita no M10.
+Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 0 CONCLUÍDA**.
+A Emenda 6 do PREREG separou a fatia `dev` (756 tarefas, 328 com âncora de
+seção) da avaliação (2.278 tarefas `holdout`), e o `external.yaml` foi
+reetiquetado. Próximo passo: plano da Fase 1 do M10a (o instrumento de medida
+com as âncoras). Da Fase 3 do M10 continuam prontos o custo por sessão, o
+tamanho de página e os arquivos de saída; o harness do agente e a ligação do
+braço `nina` seguem pausados. Nenhuma execução paga foi feita no M10.
+
+### M10a Fase 0 — o que foi feito
+
+- **Emenda 6 do PREREG:** 25% das tarefas `holdout` (hash com semente
+  `20261015:dev:<id>`) viram `dev`, só para ajustar o produto; triagem, rodada
+  principal, auditoria e rotulagem usam só as 2.278 `holdout`. O `app/` pode
+  mudar no M10a e será congelado de novo por emenda antes de qualquer sessão de
+  agente.
+- **Contrato:** SPEC §10.6 e `ExternalSplit` aceitam `dev`; o montador aplica
+  `in_dev_slice` (com teste); o `external.yaml` foi reetiquetado sem mudar a
+  ordem nem outro campo (piloto 20, `holdout` 2.278, `dev` 756).
 
 ### M10 Fase 3 (parcial) — o que foi feito
 

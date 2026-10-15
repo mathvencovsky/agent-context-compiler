@@ -369,7 +369,7 @@ Tarefas externas ficam em `bench/tasks/external.yaml` (CC BY-SA 4.0, com atribui
 
 ```yaml
 - id: so-77001234              # "so-" + id da pergunta no Stack Overflow
-  split: pilot                 # pilot | holdout
+  split: pilot                 # pilot | holdout | dev (dev: PREREG Emenda 6)
   site: python                 # chave de bench/sites.yaml
   task_type: version           # multi_doc | version | code | fact (regra em PREREG §2.1)
   urls: [...]                  # páginas citadas (máx. 4) + distratores do mesmo site; total 5, embaralhadas
@@ -392,6 +392,8 @@ Tarefas externas ficam em `bench/tasks/external.yaml` (CC BY-SA 4.0, com atribui
 ```
 
 Para tarefas externas, a regra "só `validated: true` entra nos relatórios" (§10.2) é substituída pela auditoria amostral de PREREG §2.1: entram todas, exceto as marcadas `invalid`.
+
+As tarefas `dev` (25% das `holdout`, por hash com semente; PREREG Emenda 6) servem para ajustar o produto e nunca entram na triagem, na rodada principal nem na rotulagem humana.
 
 - **Braços:** `no_docs`, `full_page`, `strong_rag`, `nina`, `webfetch_live` e `context7_live` (definidos em PREREG §3). Não há orçamento igualado entre braços: cada ferramenta usa o próprio padrão, e o que se mede é sucesso e custo faturado.
 - **Juízes:** o principal é de um provedor diferente do agente (`gpt-6.1-sol`). O segundo juiz (`claude-opus-5-5`) e os rótulos humanos (κ de Cohen) auditam o principal. A referência do juiz é a resposta aceita, literal.

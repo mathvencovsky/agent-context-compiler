@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import sys
@@ -48,6 +49,15 @@ PILOT_SIZE = 20
 #: PREREG §2.1: URLs per task, of which at most ``MAX_CITED`` are cited pages.
 URLS_PER_TASK = 5
 MAX_CITED = 4
+#: PREREG Amendment 6: share of the holdout reserved for product tuning.
+DEV_FRACTION = 0.25
+
+
+def in_dev_slice(task_id: str, seed: int = SEED) -> bool:
+    """Whether a non-pilot task belongs to the development slice (Amendment 6)."""
+    digest = hashlib.sha256(f"{seed}:dev:{task_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") < DEV_FRACTION * 2**64
+
 
 _TASKS_PATH = Path(__file__).resolve().parent / "tasks" / "external.yaml"
 #: Pages per snapshot call; the manifest is saved after each batch.
@@ -161,7 +171,13 @@ def build_tasks(
         tasks.append(
             ExternalTask(
                 id=task_id,
-                split="pilot" if i < PILOT_SIZE else "holdout",
+                split=(
+                    "pilot"
+                    if i < PILOT_SIZE
+                    else "dev"
+                    if in_dev_slice(task_id)
+                    else "holdout"
+                ),
                 site=c["site"],
                 task_type=c["task_type"],
                 urls=pick_urls(task_id, cited, pools[c["site"]], fallback[c["site"]]),

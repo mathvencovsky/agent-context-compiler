@@ -13,6 +13,7 @@ from bench.external_tasks import (
     build_tasks,
     cited_by_site,
     gold_evidence,
+    in_dev_slice,
     pick_urls,
     stratified_order,
 )
@@ -176,3 +177,11 @@ def test_cited_by_site_groups_distinct_urls_and_skips_excluded() -> None:
     mdn = "https://developer.mozilla.org/en-US/docs/X"
     ordered = [_candidate(1, "python", [a, mdn]), _candidate(2, "python", [old, a])]
     assert cited_by_site(ordered, {old}) == {"python": [a], "mdn": [mdn]}
+
+
+def test_dev_slice_is_seeded_and_about_a_quarter() -> None:
+    ids = [f"so-{n}" for n in range(4000)]
+    picks = [in_dev_slice(i) for i in ids]
+    assert 0.22 < sum(picks) / len(picks) < 0.28
+    assert picks == [in_dev_slice(i) for i in ids]
+    assert picks != [in_dev_slice(i, seed=1) for i in ids]
