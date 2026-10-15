@@ -1,12 +1,34 @@
 # PROGRESS
 
-Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 1 EM ANDAMENTO**.
-Pronto: o gabarito de seção pelas âncoras (315 tarefas `dev`) e a métrica de
-cobertura, testados offline. Falta: o comparador de sistemas (NINA, strong_rag,
-naive_rag, página inteira) e a rodada com provedores reais, que espera o OK do
-humano. Da Fase 3 do M10 continuam prontos o custo por sessão, o tamanho de
-página e os arquivos de saída; o harness do agente e a ligação do braço `nina`
-seguem pausados. Nenhuma execução paga foi feita no M10.
+Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 1 CONCLUÍDA**
+(exceto o peso do envelope, que precisa da API rodando). Próximo passo: plano
+da Fase 2 (diagnóstico das falhas do NINA). Da Fase 3 do M10 continuam prontos o
+custo por sessão, o tamanho de página e os arquivos de saída; o harness do
+agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
+foi feita no M10.
+
+### M10a Fase 1 — linha de base com provedores reais (2026-10-16)
+
+`uv run python -m bench.m10a_baseline --real` sobre as 315 tarefas `dev` com
+gabarito (embeddings OpenAI e rerank Jina, com cache em disco). Acerto =
+cobertura da seção ≥ 0,5. Números de desenvolvimento, não evidência da tese.
+
+| orçamento | NINA | strong_rag | naive_rag |
+|---|---|---|---|
+| 1k | 0,289 (938 tokens) | 0,244 (868) | 0,181 (981) |
+| 2k | 0,429 (1.881) | 0,406 (1.992) | 0,337 (1.999) |
+| 4k | 0,565 (3.491) | 0,565 (3.994) | 0,492 (3.999) |
+| 8k | 0,625 (5.366) | 0,721 (7.928) | 0,629 (7.850) |
+
+Página inteira: 0,978 com 44.823 tokens. Extração da página citada: NINA
+0,952, trafilatura 0,978. O NINA tem a maior cobertura por mil tokens em todos
+os orçamentos, mas no orçamento de 8k para em 5,4 mil tokens e perde para o
+strong_rag; entre ele e a página inteira há ~35 pontos, quase todos na busca e
+na seleção. Latência mediana com cache: NINA 1,1–1,6 s, strong_rag ~0,7 s.
+Ocorrências: o cache de provedores regravava 297 MB a cada vetor (corrigido em
+`bench/provider_cache.py`, agora um log `.jsonl` de uma linha por entrada); duas
+chaves da Jina esgotaram a cota no meio da rodada (403), sem perda graças ao
+cache. Saída local em `bench/results/m10a/baseline_real.{csv,md}`.
 
 ### M10a Fase 1 (parcial) — o que foi feito
 
