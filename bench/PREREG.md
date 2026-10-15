@@ -295,6 +295,21 @@ data had been seen.
 - **Data seen:** none. No screen or other agent session had run; the mining
   pass over the dump was in progress and yields candidates, not outcomes.
 
+### Amendment 3 — 2026-10-15: a token-counting fix in `app/` before any run
+
+- **What changed:** `app/index/tokens.count_tokens` now counts special-token
+  text such as `<|endoftext|>` as ordinary text instead of raising an error.
+  From this amendment on, every M10 run uses `app/` as of the commit that adds
+  this amendment, not the commit named in the Status line.
+- **Why:** mining the dump turned up real developer text containing
+  `<|endoftext|>`. With the old behavior NINA would fail to index any
+  documentation page containing it, and §10 would record that task as an
+  infrastructure failure in every arm. Text without such sequences gets
+  exactly the same count as before, so nothing measured so far changes.
+- **Data seen:** none from any arm. No agent session, pilot or NINA benchmark
+  run had happened; the only data seen was the mining pass over the dump, which
+  yields candidates, not outcomes.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

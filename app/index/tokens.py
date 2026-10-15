@@ -24,7 +24,9 @@ def count_tokens(text: str) -> int:
     """Return the number of ``cl100k_base`` tokens in ``text``.
 
     An empty string counts as zero. The count is deterministic across calls.
+    Special-token text such as ``<|endoftext|>`` is counted as ordinary text:
+    pages about LLMs contain it, and tiktoken's default rejects it with an error.
     """
     if not text:
         return 0
-    return len(_encoding().encode(text))
+    return len(_encoding().encode(text, disallowed_special=()))

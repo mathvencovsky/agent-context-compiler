@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-15: count_tokens lê texto de token especial como texto comum (Emenda 3 do PREREG)
+Contexto: a mineração do dump encontrou perguntas reais com o texto literal `<|endoftext|>`. O `count_tokens` (`app/index/tokens.py`) usava o `encode()` padrão do tiktoken, que levanta erro nesse texto; qualquer página de documentação que o contivesse faria o `resolve` e a indexação falharem.
+Decisão (aprovada pelo humano em 2026-10-15): `encode(text, disallowed_special=())`, que conta o texto como tokens comuns. Para texto sem essas sequências a contagem é idêntica. Registrado como Emenda 3 do `bench/PREREG.md` antes de qualquer execução de agente; o `app/` congelado do M10 passa a ser o do commit desta emenda.
+Alternativas: corrigir depois do M10 (deixaria a falha possível durante a medição, sem ganho nenhum, já que nada foi medido ainda).
+Consequências: teste novo em `tests/unit/index/test_tokens.py`; o minerador volta a usar o `count_tokens` do app em vez de uma cópia.
+
 ## 2026-10-15: M10 — auditoria depois da triagem (Emenda 2 do PREREG)
 Contexto: o plano auditava 20% de todo o pool minerado ao fim da Fase 1, mas boa parte desse pool será respondível de memória e nunca chega à rodada principal.
 Decisão (aprovada pelo humano em 2026-10-15): a auditoria roda depois da triagem sem documentação, sobre a população primária. Uma tarefa entra na amostra quando os 8 primeiros bytes de sha256("20261015:<id>") ficam abaixo de 0.2·2⁶⁴ (cerca de 20%); a seleção é por tarefa, então não muda quando entram tarefas de reposição. Tarefa inválida sai e a triagem continua na mesma ordem até completar n. Se mais de 10% das auditadas forem inválidas, toda a população primária é validada antes da rodada principal. `bench/audit_external.py` exige o arquivo com os ids da população.

@@ -44,8 +44,9 @@ from typing import IO, Any
 from urllib.parse import urlsplit, urlunsplit
 
 import lxml.html
-import tiktoken
 from lxml import etree
+
+from app.index.tokens import count_tokens
 
 #: PREREG §2.1 rule 1: first day of the question window.
 WINDOW_START = "2023-01-01"
@@ -231,20 +232,10 @@ def _question(row: Mapping[str, str]) -> _Question:
     # Bodies are only needed for questions that can still pass rules 3-4.
     if q.score >= 1 and not q.closed and not q.has_image:
         q.text = html_to_text(row.get("Body", ""))
-        q.tokens = _count_tokens(q.text)
+        q.tokens = count_tokens(q.text)
         if q.tokens <= MAX_QUESTION_TOKENS:
             q.html = row.get("Body", "")
     return q
-
-
-def _count_tokens(text: str) -> int:
-    """cl100k tokens like ``app.index.tokens.count_tokens``, special tokens as text.
-
-    Questions about LLMs contain literal ``<|endoftext|>``, which tiktoken's
-    default ``encode`` rejects.
-    """
-    encoding = tiktoken.get_encoding("cl100k_base")
-    return len(encoding.encode(text, disallowed_special=()))
 
 
 def _answer(row: Mapping[str, str]) -> _Answer | None:

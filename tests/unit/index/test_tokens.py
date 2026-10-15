@@ -22,3 +22,12 @@ def test_deterministic_across_calls() -> None:
 def test_known_stable_value() -> None:
     # "hello world" is a stable, well-known cl100k_base tokenization (2 tokens).
     assert count_tokens("hello world") == 2
+
+
+def test_special_token_text_counts_as_plain_text() -> None:
+    # Docs about LLMs quote "<|endoftext|>"; tiktoken's default encode() raises.
+    # As plain text it is several ordinary tokens, never the 1 special token.
+    assert (
+        count_tokens("the model printed <|endoftext|> early")
+        > count_tokens("the model printed early") + 1
+    )
