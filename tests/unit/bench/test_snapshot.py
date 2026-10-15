@@ -136,3 +136,44 @@ def test_snapshot_auto_renders_spa_without_render_always(tmp_path: Path) -> None
     entry = manifest["entries"][0]
     assert entry["rendered_path"] is not None
     assert rendered == ["https://auto.test/app"]
+
+
+def test_snapshot_append_keeps_frozen_entries_and_fetches_only_new_urls(
+    sites: list[SiteConfig], tmp_path: Path
+) -> None:
+    fetched: list[str] = []
+
+    def fake_fetch(url: str) -> FetchResult:
+        fetched.append(url)
+        if url.endswith("/blocked"):
+            raise RobotsDisallowed("robots.txt forbids this path", details={"url": url})
+        return _html_result(url, _RICH_HTML)
+
+    def fake_render(url: str) -> RenderResult:
+        return RenderResult(final_url=url, html="<html>rendered</html>", status=200)
+
+    corpus = tmp_path / "corpus"
+    first = snapshot(sites[:1], corpus, fetch_fn=fake_fetch, render_fn=fake_render)
+    fetched.clear()
+
+    more = SiteConfig(
+        site="Guide Site",
+        key="guide",
+        rich_categories=["guide"],
+        render="auto",
+        # ok/blocked are already frozen (blocked as skipped); only /new is fetched.
+        urls=[
+            "https://example.test/ok",
+            "https://example.test/blocked",
+            "https://example.test/new",
+        ],
+    )
+    second = snapshot(
+        [more], corpus, fetch_fn=fake_fetch, render_fn=fake_render, append=True
+    )
+
+    assert fetched == ["https://example.test/new"]
+    assert second["created_at"] == first["created_at"]
+    assert second["entries"][:2] == first["entries"]
+    assert second["entries"][2]["url"] == "https://example.test/new"
+    assert CorpusStore(corpus).content_type("https://example.test/new") == "text/html"

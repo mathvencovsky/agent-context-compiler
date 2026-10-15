@@ -141,3 +141,70 @@ def dump_tasks(tasks: list[Task], path: str | Path) -> None:
         allow_unicode=True,
     )
     path.write_text(text, encoding="utf-8")
+
+
+#: M10 external split (SPEC §10.6): ``pilot`` checks the harness and sizes n;
+#: ``holdout`` is never tuned on (PREREG §2.1).
+ExternalSplit = Literal["pilot", "holdout"]
+
+#: PREREG §2.1 task type, assigned by rules (first match wins).
+TaskType = Literal["multi_doc", "version", "code", "fact"]
+
+
+class Source(BaseModel):
+    """Where an external task came from, with CC BY-SA attribution (SPEC §10.6)."""
+
+    question_url: str
+    answer_url: str
+    question_author: str
+    answer_author: str
+    license: str
+    created: str
+
+
+class ExternalTask(BaseModel):
+    """One M10 task built from a real Stack Overflow question (SPEC §10.6).
+
+    ``reference_answer`` is the accepted answer verbatim: ground truth nobody on
+    the project writes. ``audit`` stays ``None`` outside the human audit sample.
+    """
+
+    id: str
+    split: ExternalSplit
+    site: str
+    task_type: TaskType
+    urls: list[str]
+    cited_urls: list[str]
+    question_title: str
+    question: str
+    reference_answer: str
+    expected_evidence: list[Evidence]
+    source: Source
+    author: Literal["external"] = "external"
+    audit: Literal["valid", "invalid"] | None = None
+
+
+#: Header of ``bench/tasks/external.yaml``: what the content is and its license.
+_EXTERNAL_HEADER = (
+    "# M10 external tasks (SPEC §10.6). Questions and accepted answers come from\n"
+    "# Stack Overflow (https://stackoverflow.com), archived 2024-04 data dump,\n"
+    "# licensed CC BY-SA; each task's `source` links the question, the answer and\n"
+    "# their authors.\n"
+)
+
+
+def load_external_tasks(path: str | Path) -> list[ExternalTask]:
+    """Load ``external.yaml`` (an invalid row raises a ``ValidationError``)."""
+    raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or []
+    return [ExternalTask.model_validate(row) for row in raw]
+
+
+def dump_external_tasks(tasks: list[ExternalTask], path: str | Path) -> None:
+    """Write ``external.yaml`` with the license header and a stable field order."""
+    text = yaml.safe_dump(
+        [task.model_dump() for task in tasks],
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+    )
+    Path(path).write_text(_EXTERNAL_HEADER + text, encoding="utf-8")

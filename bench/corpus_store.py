@@ -81,8 +81,11 @@ class CorpusStore:
     def __init__(self, corpus_dir: str | Path) -> None:
         self.corpus_dir = Path(corpus_dir)
         self.manifest = load_manifest(self.corpus_dir)
+        # Requested URLs win; a redirect's final URL also resolves (SPEC §10.6
+        # lists cited pages after redirect).
         self._by_url: dict[str, ManifestEntry] = {
-            entry.url: entry for entry in self.manifest.entries
+            **{e.final_url: e for e in self.manifest.entries if e.status == "ok"},
+            **{e.url: e for e in self.manifest.entries},
         }
 
     def entries(self) -> list[ManifestEntry]:

@@ -141,6 +141,7 @@ def snapshot(
     *,
     fetch_fn: FetchFn = fetch,
     render_fn: RenderFn = render_url,
+    append: bool = False,
 ) -> dict[str, Any]:
     """Freeze every site URL into ``corpus_dir`` and write ``manifest.json``.
 
@@ -151,17 +152,32 @@ def snapshot(
     ``should_render`` is also rendered through ``render_fn``; a render failure is
     non-fatal (the raw entry is still ``ok``, ``rendered_path`` stays ``None``).
 
+    With ``append=True`` an existing ``manifest.json`` is kept as is and only
+    URLs it does not list yet are fetched (M10 adds cited pages this way), so
+    the frozen corpus under earlier tasks never changes. A URL already listed,
+    even as ``skipped``, is not fetched again.
+
     Returns the manifest as a plain dict (also written to disk) so a caller/test
     can assert on it without re-reading the file.
     """
     corpus_dir = Path(corpus_dir)
     corpus_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = corpus_dir / "manifest.json"
 
-    entries: list[dict[str, Any]] = []
+    manifest: dict[str, Any] = {
+        "created_at": datetime.now(UTC).isoformat(),
+        "entries": [],
+    }
+    if append and manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    known = {entry["url"] for entry in manifest["entries"]}
     for site in sites:
         site_dir = corpus_dir / site.key
         for url in site.urls:
-            entries.append(
+            if url in known:
+                continue
+            known.add(url)
+            manifest["entries"].append(
                 _snapshot_url(
                     site=site,
                     url=url,
@@ -172,11 +188,7 @@ def snapshot(
                 )
             )
 
-    manifest = {
-        "created_at": datetime.now(UTC).isoformat(),
-        "entries": entries,
-    }
-    (corpus_dir / "manifest.json").write_text(
+    manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
