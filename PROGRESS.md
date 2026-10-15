@@ -1,11 +1,29 @@
 # PROGRESS
 
-Marco atual: **M10 (Avaliação ponta a ponta com agente, pré-registrada) — Fase 2
-CONCLUÍDA** (ROADMAP M10; SPEC §10.6; PREREG §9 e Emendas 1 a 5). As ferramentas
-de correção (juízes, cegamento, autoconsistência, rotulagem humana e κ) estão
-prontas e testadas offline; os rótulos humanos só existem depois da rodada
-principal da Fase 3. Nenhuma execução paga foi feita no M10. Próximo passo: plano
-da Fase 3.
+Marco atual: **M10 (Avaliação ponta a ponta com agente, pré-registrada) — Fase 3
+EM ANDAMENTO** (plano aprovado pelo humano em 2026-10-15). Prontas e testadas
+offline: custo por sessão a partir do uso faturado, tamanho de página (Emenda 4)
+e os arquivos de saída. Pausados, à espera de decisão do humano: o harness do
+agente e a ligação do braço `nina` ao corpus congelado. Nenhuma execução paga
+foi feita no M10.
+
+### M10 Fase 3 (parcial) — o que foi feito
+
+- **`bench/session_cost.py`:** custo de uma sessão a partir do uso por modelo
+  (entrada, escrita e leitura de cache, saída) com os preços do
+  `bench/prices.yaml`; falha explícita para modelo sem preço ou preço de cache
+  ausente; `reconcile` aplica a regra dos ±3% contra a fatura (PREREG §6).
+- **`bench/page_length.py`:** a página citada como Markdown do trafilatura
+  (`page_markdown`, o texto que o braço `full_page` vai servir), a soma das até
+  4 páginas citadas por tarefa e as faixas da Emenda 4. Rodado no corpus:
+  curtas 1.453, médias 927, longas 674 (piloto: 10, 6, 4). As longas se
+  concentram em Python (473 de 866), PostgreSQL (86 de 308) e RFC (64 de 101), e
+  quase não existem no MDN (6 de 1.228): na análise por faixa, faixa e site
+  andam juntos. Saída local em `bench/results/m10/page_lengths.csv`.
+- **`bench/m10_records.py`:** `results.csv` (uma linha por tarefa × braço,
+  gravada ao fim de cada sessão, com `done_pairs` para retomar) e
+  `answers.jsonl` (entrada da rotulagem cega). Sessão excluída fica com
+  `correct` vazio, e o `bench/power.py` passou a ignorá-la ao parear braços.
 
 ### M10 Fase 2 — o que foi feito
 
@@ -78,12 +96,16 @@ uv run pytest tests/unit/bench/test_judge_external.py tests/unit/bench/test_agre
 
 ### M10 — pendente e dívidas
 
-- Fases 3 a 5, uma por vez, cada uma com plano aprovado.
+- Fase 3: o harness do agente e a ligação do braço `nina` ao corpus congelado
+  estão pausados (duas respostas do agente foram interrompidas pelo sistema de
+  segurança nesse trabalho); o humano decide como seguir. Depois, as Fases 4 e
+  5, uma por vez, cada uma com plano aprovado.
 - Antes do piloto da Fase 3 (PREREG §6; a Emenda 4 usa `p_read`):
   `bench/prices.yaml` não tem `cache_write_usd_per_1m` nem
-  `cache_read_usd_per_1m` para nenhum modelo. O custo por sessão também não pode
-  usar `model_cost_usd` (`bench/report.py`), que só lê os preços de entrada e de
-  saída e custa 0 para modelo desconhecido.
+  `cache_read_usd_per_1m` para nenhum modelo; o humano confere os valores na
+  página de preços. O custo por sessão usa `bench/session_cost.py`, que falha se
+  esses preços faltarem (o `model_cost_usd` do M8 não serve: só lê entrada e
+  saída e custa 0 para modelo desconhecido).
 - O humano ainda vai indicar os 2 avaliadores da rotulagem cega (cerca de 2 a 3
   horas cada, depois da rodada principal da Fase 3).
 - O formato de entrada da rotulagem (`bench/results/m10/answers.jsonl`, uma

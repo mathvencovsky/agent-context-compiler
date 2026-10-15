@@ -87,6 +87,8 @@ def discordance(
             continue
         if budget is not None and row.get("budget") != budget:
             continue
+        if row["correct"] == "":  # excluded session (PREREG §10): no verdict
+            continue
         task = row["task_id"]
         if task in correct[strategy]:
             raise ValueError(

@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-15: M10 Fase 3 — custo por sessão, tamanho de página e arquivos de saída
+Contexto: a Fase 3 precisa medir custo faturado (PREREG §6), tamanho de página (Emenda 4) e gravar sessões para a análise e a rotulagem. O `model_cost_usd` do M8 só cobra entrada e saída e devolve 0 para modelo desconhecido.
+Decisão: `bench/session_cost.py` soma entrada, escrita e leitura de cache e saída por modelo, com os preços do `bench/prices.yaml`, e falha se faltar o preço de um modelo ou de cache usado (os preços de cache entram no `prices.yaml` depois de o humano conferir a página de preços). O tamanho de página usa `page_markdown` (trafilatura sobre o HTML congelado, renderizado quando existe; texto puro como está), a mesma função que o braço `full_page` vai servir. No `results.csv`, sessão excluída por falha de infraestrutura fica com `correct` vazio, e o `bench/power.py` ignora essas linhas ao parear braços (antes, vazio contaria como erro).
+Alternativas: estender o `model_cost_usd` (mudaria o comportamento dos relatórios do M8); extrair o texto da página de outro jeito para a medida (o tamanho deixaria de descrever o que o `full_page` lê).
+Consequências: `bench/session_cost.py`, `bench/page_length.py` e `bench/m10_records.py`, com testes; uma linha no `bench/power.py`. Nada em `app/` mudou.
+
 ## 2026-10-15: M10 — análises secundárias por tamanho de página e para sessões longas (Emenda 4 do PREREG)
 Contexto: a estimativa de custo para sessões curtas, de uma pergunta só, previu que o NINA sai 1,4–1,8× mais barato que a página inteira, abaixo do "metade do custo". Duas coisas que o teste principal mantém fixas mudam essa conta: o tamanho das páginas (no corpus atual, mediana de 3,5 mil tokens e 10% acima de 15,6 mil) e a duração da sessão (numa sessão longa, o resultado de uma ferramenta é relido do cache a cada turno).
 Decisão (aprovada pelo humano em 2026-10-15): registrar, antes de qualquer resultado, duas análises secundárias. (1) Por tamanho das páginas citadas, em três faixas fixas (curta < 4.000 tokens; média 4.000–15.999; longa ≥ 16.000), com Δ e R por faixa e a previsão "R cresce com o tamanho". (2) Na calculadora, C(K) = C_sessão + K × (T × p_leitura + O), com R(K) para K = 0, 10, 30 e 100, calculado com O = 0 e com O = a mediana de uma sessão `no_docs` da triagem. Nenhuma das duas pode virar manchete.
