@@ -97,6 +97,23 @@ def test_mine_posts_applies_rules_in_prereg_order() -> None:
     assert (c["question_owner_id"], c["answer_owner_id"]) == (7, 8)
 
 
+def test_mine_posts_matches_answers_that_come_before_their_question() -> None:
+    # The real dump is not sorted by Id, so an accepted answer can come first.
+    license_ = {"ContentLicense": "CC BY-SA 4.0"}
+    rows = [
+        _a(11, **license_),  # linked accepted answer, its question comes later
+        _a(21, "<p>no doc link here</p>"),  # unlinked accepted answer
+        _q(10, 11, **license_),
+        _q(20, 21),
+    ]
+    stats = MiningStats()
+    (c,) = list(mine_posts(iter_rows(_xml(rows)), stats))
+    assert (c["question_id"], c["answer_id"]) == (10, 11)
+    assert c["question_license"] == c["answer_license"] == "CC BY-SA 4.0"
+    assert (stats.rule1_kept, stats.removed_rule2_no_doc_link, stats.kept) == (2, 1, 1)
+    assert stats.accepted_answer_missing == 0
+
+
 def test_site_for_url_respects_hosts_and_path_prefixes() -> None:
     assert site_for_url("https://docs.python.org/3/library/re.html") == "python"
     assert site_for_url("https://www.postgresql.org/docs/16/sql-select.html") == (

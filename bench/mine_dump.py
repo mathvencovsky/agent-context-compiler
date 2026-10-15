@@ -15,9 +15,10 @@ counts how many candidates each rule removes:
 3. question score >= 1, accepted-answer score >= 1, question not closed;
 4. no image in the question and a question body of at most 2,000 tokens.
 
-Rows are sorted by Id, so a question always comes before its answers. Rule 5
-(the cited page snapshots) runs later, when the pages are frozen. A second pass
-over ``Users.xml`` fills in author names for attribution.
+The dump is not sorted by Id (the 2024-04 ``Posts.xml`` starts at Id 38779), so
+an accepted answer can come before its question; whichever arrives first waits
+for the other. Rule 5 (the cited page snapshots) runs later, when the pages are
+frozen. A second pass over ``Users.xml`` fills in author names for attribution.
 
 The output holds CC BY-SA content and stays out of git (``bench/results/`` is
 gitignored).
@@ -34,6 +35,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -107,9 +109,27 @@ class _Question:
     has_image: bool
     owner_id: int | None
     owner_name: str | None
+    license: str
     html: str | None = None  # kept only if the question passes rules 3-4
     text: str = ""
     tokens: int = 0
+
+
+@dataclass
+class _Answer:
+    """A window answer that links at least one allowlisted page."""
+
+    id: int
+    html: str
+    cited: list[tuple[str, str]]
+    score: int
+    owner_id: int | None
+    owner_name: str | None
+    license: str
+
+
+#: Cheap substring prefilter: an answer naming none of these hosts links none.
+_HOSTS = tuple({host for rules in ALLOWLIST.values() for host, _ in rules})
 
 
 def _fragment(html: str) -> Any | None:
@@ -205,6 +225,7 @@ def _question(row: Mapping[str, str]) -> _Question:
         has_image="<img" in row.get("Body", "").lower(),
         owner_id=_int_or_none(row.get("OwnerUserId")),
         owner_name=row.get("OwnerDisplayName") or None,
+        license=row.get("ContentLicense", ""),
     )
     # Bodies are only needed for questions that can still pass rules 3-4.
     if q.score >= 1 and not q.closed and not q.has_image:
@@ -215,72 +236,99 @@ def _question(row: Mapping[str, str]) -> _Question:
     return q
 
 
+def _answer(row: Mapping[str, str]) -> _Answer | None:
+    """The answer's rule 2-4 inputs, or ``None`` if it links no allowlisted page."""
+    html = row.get("Body", "")
+    cited = cited_doc_urls(html) if any(h in html for h in _HOSTS) else []
+    if not cited:
+        return None
+    return _Answer(
+        id=int(row["Id"]),
+        html=html,
+        cited=cited,
+        score=int(row.get("Score", "0")),
+        owner_id=_int_or_none(row.get("OwnerUserId")),
+        owner_name=row.get("OwnerDisplayName") or None,
+        license=row.get("ContentLicense", ""),
+    )
+
+
+def _judge(
+    q: _Question, a: _Answer | None, stats: MiningStats
+) -> dict[str, Any] | None:
+    """Apply rules 2-4 in order to a matched pair; the candidate, or ``None``."""
+    if a is None:
+        stats.removed_rule2_no_doc_link += 1
+        return None
+    if q.score < 1 or q.closed or a.score < 1:
+        stats.removed_rule3_score_or_closed += 1
+        return None
+    if q.has_image or q.html is None:
+        stats.removed_rule4_image_or_length += 1
+        return None
+    stats.kept += 1
+    answer_text = html_to_text(a.html)
+    return {
+        "question_id": q.id,
+        "answer_id": a.id,
+        "site": a.cited[0][0],
+        "cited_urls": [url for _, url in a.cited],
+        "task_type": task_type(
+            len(a.cited), f"{q.title}\n{q.text}", answer_text, a.html
+        ),
+        "question_title": q.title,
+        "question_html": q.html,
+        "question_text": q.text,
+        "question_tokens": q.tokens,
+        "question_score": q.score,
+        "question_created": q.created,
+        "answer_html": a.html,
+        "answer_text": answer_text,
+        "answer_score": a.score,
+        "answer_blockquotes": blockquotes(a.html),
+        "question_owner_id": q.owner_id,
+        "question_owner_name": q.owner_name,
+        "answer_owner_id": a.owner_id,
+        "answer_owner_name": a.owner_name,
+        "question_url": f"https://stackoverflow.com/q/{q.id}",
+        "answer_url": f"https://stackoverflow.com/a/{a.id}",
+        "question_license": q.license,
+        "answer_license": a.license,
+    }
+
+
 def mine_posts(
     rows: Iterable[Mapping[str, str]], stats: MiningStats
 ) -> Iterator[dict[str, Any]]:
     """Apply PREREG §2.1 rules 1-4 in order to dump rows; yield kept candidates."""
-    pending: dict[int, _Question] = {}  # accepted answer id -> its question
+    questions: dict[int, _Question] = {}  # accepted answer id -> waiting question
+    answers: dict[int, _Answer | None] = {}  # answer id -> answer waiting for it
     for row in rows:
         created = row.get("CreationDate", "")
         stats.newest_post = max(stats.newest_post, created)
         kind = row.get("PostTypeId")
         if kind == "1":
             stats.questions_seen += 1
-        # Answers come after their questions, so nothing older can matter.
+        # An answer is never older than its question, so nothing older can matter.
         if created < WINDOW_START:
             continue
-        if kind == "1":
-            accepted = row.get("AcceptedAnswerId")
-            if accepted:
-                stats.rule1_kept += 1
-                pending[int(accepted)] = _question(row)
-            continue
-        if kind != "2":
-            continue
-        q = pending.pop(int(row["Id"]), None)
-        if q is None:
-            continue
-        answer_html = row.get("Body", "")
-        cited = cited_doc_urls(answer_html)
-        if not cited:
-            stats.removed_rule2_no_doc_link += 1
-            continue
-        if q.score < 1 or q.closed or int(row.get("Score", "0")) < 1:
-            stats.removed_rule3_score_or_closed += 1
-            continue
-        if q.has_image or q.html is None:
-            stats.removed_rule4_image_or_length += 1
-            continue
-        stats.kept += 1
-        answer_text = html_to_text(answer_html)
-        answer_id = int(row["Id"])
-        yield {
-            "question_id": q.id,
-            "answer_id": answer_id,
-            "site": cited[0][0],
-            "cited_urls": [url for _, url in cited],
-            "task_type": task_type(
-                len(cited), f"{q.title}\n{q.text}", answer_text, answer_html
-            ),
-            "question_title": q.title,
-            "question_html": q.html,
-            "question_text": q.text,
-            "question_tokens": q.tokens,
-            "question_score": q.score,
-            "question_created": q.created,
-            "answer_html": answer_html,
-            "answer_text": answer_text,
-            "answer_score": int(row.get("Score", "0")),
-            "answer_blockquotes": blockquotes(answer_html),
-            "question_owner_id": q.owner_id,
-            "question_owner_name": q.owner_name,
-            "answer_owner_id": _int_or_none(row.get("OwnerUserId")),
-            "answer_owner_name": row.get("OwnerDisplayName") or None,
-            "question_url": f"https://stackoverflow.com/q/{q.id}",
-            "answer_url": f"https://stackoverflow.com/a/{answer_id}",
-            "license": "CC BY-SA 4.0",
-        }
-    stats.accepted_answer_missing = len(pending)
+        candidate = None
+        if kind == "1" and row.get("AcceptedAnswerId"):
+            stats.rule1_kept += 1
+            q, accepted = _question(row), int(row["AcceptedAnswerId"])
+            if accepted in answers:
+                candidate = _judge(q, answers.pop(accepted), stats)
+            else:
+                questions[accepted] = q
+        elif kind == "2":
+            answer_id, a = int(row["Id"]), _answer(row)
+            if answer_id in questions:
+                candidate = _judge(questions.pop(answer_id), a, stats)
+            else:
+                answers[answer_id] = a
+        if candidate is not None:
+            yield candidate
+    stats.accepted_answer_missing = len(questions)
 
 
 def user_names(rows: Iterable[Mapping[str, str]], ids: set[int]) -> dict[int, str]:
@@ -334,8 +382,16 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     stats = MiningStats()
+
+    def progress(rows: Iterable[Mapping[str, str]]) -> Iterator[Mapping[str, str]]:
+        # The Posts pass streams ~100 GB of XML; a line every 5M rows shows it is alive.
+        for i, row in enumerate(rows, 1):
+            if i % 5_000_000 == 0:
+                print(f"{i:,} rows, {stats.kept} kept", file=sys.stderr, flush=True)
+            yield row
+
     with _member_stream(args.tar, args.posts, "Posts.xml") as stream:
-        candidates = list(mine_posts(iter_rows(stream), stats))
+        candidates = list(mine_posts(progress(iter_rows(stream)), stats))
 
     ids = {
         c[key]
