@@ -10,6 +10,32 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-14: strong_rag — baseline forte e independente (não-naive) e medição no split test
+Contexto: o primo levantou a objeção de que o `naive_rag_vector` (híbrido BM25+embeddings), ainda que vetorial, segue sendo um RAG "naive" — faltava confrontar o NINA com um RAG NÃO-naive, "o melhor RAG que um bom engenheiro de produção monta hoje", para saber HONESTAMENTE se a vantagem do NINA (eficiência + evidência rastreável à paridade de qualidade) sobrevive a um oponente forte. Design pré-acordado com o humano; esta entrada registra a decisão e o resultado medido.
+Decisão (DESIGN do `strong_rag`): um pipeline INDEPENDENTE, com NENHUMA peça proprietária do NINA, montado para VENCER (não um espantalho):
+- **Chunking com overlap** — janela deslizante própria (~400 tokens, passo 300 = ~25% de overlap), NÃO o chunker estrutural do NINA nem o chunker cego fixo do `naive_rag`.
+- **Híbrido BM25 + vetorial fundido por RRF k=60** (`rrf_fuse` genérico, sem o knob `lexical_weight` do NINA — RRF puro).
+- **Rerank cross-encoder Jina do top-30** fundido (o mesmo `top_n=30` do produto), ordenando pelo score ABSOLUTO do rerank.
+- **Seleção top-k por score de rerank sob orçamento** (RAG padrão), re-emitindo em ordem `(url, order)` coerente.
+- **Proveniência `[URL]`** byte-idêntica à do `naive_rag`/`naive_rag_vector`/`ours` (header `[URL] <url>\n<texto>` por fragmento) para comparar precisão de citação de forma justa.
+FRONTEIRA SEM-LLM (explícita): o `strong_rag` NÃO tem reescrita de query nem compressão de contexto por LLM — isso quebraria a regra "nenhum LLM na recuperação/seleção" (CLAUDE.md) e transformaria uma comparação arquitetura-vs-arquitetura numa comparação LLM-vs-não-LLM, descaracterizando o teste. E ele OMITE deliberadamente a seleção MMR-sob-orçamento do `ours` (`app/retrieve/select.select`) — essa é a variável sendo ISOLADA, o diferencial do NINA; por isso o `strong_rag` usa top-k simples por score, nunca a MMR, e não importa o `OursRunner`.
+HONESTIDADE (regra ROADMAP M8, inegociável): `app/config.py` só foi LIDO (`git diff app/config.py` vazio), `lexical_weight` permanece 1.0, o split `test` foi medido UMA vez reusando o cache persistente `bench/.cache/`; nenhum parâmetro do `ours` foi ajustado olhando o test.
+RESULTADO HONESTO (split `test`, 41 tarefas, orçamento de referência 4000, IC95% bootstrap; fonte `bench/results/strong-rag-20261014T211154_582208/{results.csv,report.md,sumario.md}`, git_commit `a6b29bb`). Regra de não-sobreposição: uma estratégia só vence uma categoria se o limite inferior do seu IC95 superar o limite superior do outro. TODAS as comparações `ours` × `strong_rag` deram **EMPATE** (ICs se sobrepõem) — o `strong_rag` NÃO venceu o `ours` em nenhuma categoria, e o `ours` não venceu o `strong_rag`; o veredito geral é empate.
+
+| categoria | n | ours | ours IC95 | strong_rag | strong_rag IC95 | veredito |
+|---|---|---|---|---|---|---|
+| geral | 41 | 0.756 | [0.610, 0.878] | 0.683 | [0.537, 0.829] | empate |
+| api_reference | 17 | 0.706 | [0.471, 0.941] | 0.706 | [0.471, 0.882] | empate |
+| changelog | 4 | 1.000 | [1.000, 1.000] | 0.750 | [0.250, 1.000] | empate |
+| guide | 12 | 0.833 | [0.583, 1.000] | 0.750 | [0.500, 1.000] | empate |
+| params_table | 5 | 0.600 | [0.200, 1.000] | 0.600 | [0.200, 1.000] | empate |
+| pdf | 3 | 0.667 | [0.000, 1.000] | 0.333 | [0.000, 1.000] | empate |
+
+À paridade de qualidade, o `ours` entregou o resultado com MUITO menos recurso (orçamento 4000): **contexto 1495.0 vs 2823.4 tokens** (o `ours` usa ~53% do contexto do `strong_rag`), **custo/tarefa concluída US$ 0.005250 vs US$ 0.009675** (o `strong_rag` custa ~1.84× o do `ours`), **taxa INSUFFICIENT 0.000 vs 0.098** e **precisão de citação 0.585 vs 0.512**. No orçamento 2000 o quadro se mantém: `ours` 0.805 [0.683, 0.927] vs `strong_rag` 0.659 [0.512, 0.805] → empate, com o `ours` novamente gastando o menor contexto. Elevar o orçamento 2000→4000 NÃO melhorou o `ours` (0.805→0.756) e nudou o `strong_rag` para cima (0.659→0.683). (Nota de latência, excluída do veredito de qualidade: no orçamento 2000 o `strong_rag` teve latência enorme — p50 ≈ 58s, p95 ≈ 980s, pdf p95 ≈ 1.970s — artefato das chamadas reais de Jina para os chunks novos de overlap na primeira passagem; a passagem 4000 reusou o cache e normalizou — p50 ≈ 96ms.)
+Custo real da rodada: respondedor OpenAI `gpt-6.1-sol` **US$ 1.566** medidos exatamente do `results.csv` (675.872 tokens in + 21.434 out em 328 linhas; por estratégia: ours $0.291, naive_rag $0.419, naive_rag_vector $0.421, strong_rag $0.435). Recuperação ~96% servida do cache: Jina 41 chamadas reais / 82 hits; embeddings OpenAI 35 batches reais / 9371 hits (os chunks de overlap novos geram alguns embeddings, como esperado). Somando o juiz Anthropic (não gravado nos artefatos) + embeddings/rerank desprezíveis, o total real fica na faixa ~US$ 1.6–2.0, dentro da folga de ~US$ 8.
+Alternativas descartadas: dar ao `strong_rag` reescrita de query / compressão por LLM (quebraria a fronteira sem-LLM e descaracterizaria o teste); dar a ele a seleção MMR do NINA (apagaria a variável isolada); montar um espantalho fraco (seria desonesto — o objetivo é um oponente forte de verdade).
+Consequências: `bench/runners/strong_rag.py` (runner novo, independente), registro em `bench/runners/base.py` (injeção dos provedores reais embeddings+reranker), `tests/unit/bench/test_strong_rag.py`, bloco `ours vs strong_rag` em `bench/report_m8.py`; artefatos em `bench/results/strong-rag-20261014T211154_582208/` (gitignored); `PROGRESS.md`/`README.md` atualizados com os números acima. `app/config.py` NÃO tocado. Nada commitado neste fluxo (decisão humana). TESE SOBREVIVE: mesmo contra um RAG NÃO-naive, o NINA entrega a MESMA qualidade por ~metade do custo e do contexto, com citação verificável e sem desistir de tarefas.
+
 ## 2026-10-14: M9 — pronto para pilotos (chaves/auth, limites+uso, MCP, SDK e QUICKSTART)
 Contexto: o M9 (SPEC §7/§8/§9, ROADMAP M9) torna o NINA consumível por um piloto externo com segurança e observabilidade mínimas, sem crawler nem LLM no caminho crítico. Entregue em quatro features (FEAT-001 auth/chaves, FEAT-002 limites+uso, FEAT-003 servidor MCP, FEAT-004 SDK Python + e2e + QUICKSTART + docs). As decisões transversais do marco ficam registradas aqui (fonte da verdade: SPEC; onde a SPEC era ambígua, a escolha está documentada abaixo, não inventada em contrato).
 Decisões (todas do M9):

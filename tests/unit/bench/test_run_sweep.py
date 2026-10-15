@@ -38,6 +38,7 @@ _STRATEGIES = [
     "raw_html",
     "naive_rag",
     "naive_rag_vector",
+    "strong_rag",
     "ours",
     "ours_no_rerank",
 ]
@@ -249,15 +250,18 @@ def test_sweep_compares_ours_vs_both_baselines(tmp_path: Path) -> None:
     )
     report = (out / "report.md").read_text(encoding="utf-8")
     sumario = (out / "sumario.md").read_text(encoding="utf-8")
-    # Both baseline comparison blocks are present in the report.
+    # All baseline comparison blocks are present in the report.
     assert "ours vs naive_rag by category (reference budget)" in report
     assert "ours vs naive_rag_vector by category (reference budget)" in report
-    # The sumario covers both baselines and the extended central question.
+    assert "ours vs strong_rag by category (reference budget)" in report
+    # The sumario covers every baseline and the extended central question.
     assert "`ours` vs `naive_rag`" in sumario
     assert "`ours` vs `naive_rag_vector`" in sumario
-    assert "naive_rag` E `naive_rag_vector`" in sumario
+    assert "`ours` vs `strong_rag`" in sumario
+    assert "`strong_rag` (um RAG NÃO-naive)" in sumario
     # naive_rag_vector appears in the per-strategy table (iterates all strategies).
     assert "| naive_rag_vector |" in report
+    assert "| strong_rag |" in report
 
 
 def test_report_notes_ignored_unvalidated_task(tmp_path: Path) -> None:

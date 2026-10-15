@@ -50,6 +50,8 @@ _OURS = "ours"
 _NAIVE_RAG = "naive_rag"
 #: The competent vector RAG baseline (FEAT-002) — compared alongside naive_rag.
 _NAIVE_RAG_VECTOR = "naive_rag_vector"
+#: The STRONG, independent non-naive RAG baseline — the head-to-head opponent.
+_STRONG_RAG = "strong_rag"
 
 #: How many ``ours`` failures to list with a diagnosis (SPEC §10.5).
 _N_FAILURES = 10
@@ -474,6 +476,7 @@ def _report_md(
 
     lines.extend(_comparison_block(ref_rows, baseline=_NAIVE_RAG))
     lines.extend(_comparison_block(ref_rows, baseline=_NAIVE_RAG_VECTOR))
+    lines.extend(_comparison_block(ref_rows, baseline=_STRONG_RAG))
 
     lines.extend(_failures_section(probes))
     lines.extend(_citation_signal_section(probes))
@@ -545,7 +548,8 @@ def _sumario_md(sweep_rows: Sequence[SweepRow]) -> str:
         "# Sumário M8 Etapa 2 — `ours` vs baselines (split test)",
         "",
         "Pergunta central: em que categoria, se em alguma, o `ours` vence "
-        "`naive_rag` E `naive_rag_vector` com IC que não se sobrepõe?",
+        "`naive_rag`, `naive_rag_vector` E o `strong_rag` (um RAG NÃO-naive) com "
+        "IC que não se sobrepõe?",
         "",
         f"Orçamento de referência: {REFERENCE_BUDGET} tokens. Critério de "
         "não-sobreposição: o limite inferior do IC95% de uma estratégia supera o "
@@ -556,10 +560,11 @@ def _sumario_md(sweep_rows: Sequence[SweepRow]) -> str:
     ]
     lines.extend(_sumario_baseline_block(ref_rows, baseline=_NAIVE_RAG))
     lines.extend(_sumario_baseline_block(ref_rows, baseline=_NAIVE_RAG_VECTOR))
+    lines.extend(_sumario_baseline_block(ref_rows, baseline=_STRONG_RAG))
 
     # Context: cost per completed task + INSUFFICIENT rate for ours + baselines.
     lines.append("## Contexto (orçamento de referência)")
-    for strat in (_OURS, _NAIVE_RAG, _NAIVE_RAG_VECTOR):
+    for strat in (_OURS, _NAIVE_RAG, _NAIVE_RAG_VECTOR, _STRONG_RAG):
         srows = [r for r in ref_rows if r.strategy == strat]
         if not srows:
             continue

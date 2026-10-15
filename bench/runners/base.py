@@ -91,7 +91,9 @@ def _ensure_registered(
     ``embeddings`` is injected into the ``ours*`` runners AND the
     ``naive_rag_vector`` baseline (M8 Stage 2 real run); the default ``None``
     keeps the deterministic fakes, so every test and the fake-provider path are
-    unchanged. ``reranker`` is injected ONLY into the ``ours*`` runners.
+    unchanged. ``reranker`` is injected into the ``ours*`` runners AND the
+    ``strong_rag`` baseline (the real Jina cross-encoder is what makes that
+    baseline strong); the default ``None`` keeps the deterministic fake.
     ``lambda_``/``min_value``/``lexical_weight`` override the ``ours*`` knobs
     (the Stage 2 run passes the frozen config values); ``None`` keeps the
     ``make_ours_runners`` defaults (lexical_weight default 1.0 = identity).
@@ -104,6 +106,7 @@ def _ensure_registered(
     from bench.runners.naive_text import NaiveTextRunner
     from bench.runners.ours import make_ours_runners
     from bench.runners.raw_html import RawHtmlRunner
+    from bench.runners.strong_rag import StrongRagRunner
 
     for runner in (RawHtmlRunner(), NaiveTextRunner(), NaiveRagRunner()):
         _REGISTRY[runner.name] = runner
@@ -114,6 +117,16 @@ def _ensure_registered(
     # the real disk-cached OpenAI provider on the Stage 2 paid run.
     vector_baseline = NaiveRagVectorRunner(embeddings=embeddings)
     _REGISTRY[vector_baseline.name] = vector_baseline
+
+    # M8 non-naive baseline: a STRONG, INDEPENDENT RAG (sliding-window overlap
+    # chunking, hybrid BM25+vector RRF, cross-encoder rerank of the top-30,
+    # top-k-by-score selection) with NONE of NINA's pipeline. It shares BOTH
+    # seams with the ours* runners: fake embeddings + fake reranker by default
+    # (offline tests), the real disk-cached OpenAI embeddings + real Jina
+    # reranker on the Stage 2 paid run. This is the ONLY non-ours runner that
+    # also receives the reranker (the rerank is what makes it strong).
+    strong_baseline = StrongRagRunner(embeddings=embeddings, reranker=reranker)
+    _REGISTRY[strong_baseline.name] = strong_baseline
 
     # M7: the full NINA pipeline (``ours``) plus its five ablation variants.
     # M8 Stage 2: the real retrieval providers + frozen selection knobs are
@@ -150,7 +163,9 @@ def register_ours(
     reranker and the FROZEN selection knobs (``lambda_``/``min_value``/
     ``lexical_weight``) instead of the fakes/defaults. The same disk-cached
     OpenAI embeddings are also injected into the ``naive_rag_vector`` baseline so
-    its vector/hybrid retrieval runs on the real provider for a fair comparison.
+    its vector/hybrid retrieval runs on the real provider for a fair comparison;
+    the ``strong_rag`` baseline receives BOTH the real embeddings AND the real
+    Jina reranker, so the non-naive opponent runs at full strength.
     Clears the registry first so a previous fake-wired state is replaced. Tests
     never call this (the default path builds the fakes), so no test touches the
     network.

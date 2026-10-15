@@ -109,6 +109,84 @@ isolado passa `mypy --strict` (4 arquivos). Nenhum teste M0–M8 regrediu.
 
 ---
 
+### strong_rag — confronto com um RAG não-naive (split test, 2026-10-14)
+
+Reforço posterior ao M8, por pedido (objeção do primo): o `naive_rag_vector`,
+mesmo vetorial, ainda é "naive"; faltava medir o NINA contra um RAG NÃO-naive.
+Foi adicionado o baseline `strong_rag` — um pipeline INDEPENDENTE, sem nenhuma
+peça do NINA, montado para VENCER (não espantalho): chunking com overlap (janela
+deslizante ~400 tokens, passo 300 = ~25% overlap), híbrido BM25+vetorial fundido
+por RRF k=60, rerank cross-encoder Jina do top-30, seleção top-k por score de
+rerank sob orçamento, e proveniência `[URL]` byte-idêntica aos demais. FRONTEIRA
+SEM-LLM: sem reescrita de query nem compressão por LLM (quebraria a regra de
+"nenhum LLM na recuperação") e SEM a seleção MMR do NINA (a variável isolada). O
+split `test` foi medido UMA vez reusando o cache persistente; `app/config.py` só
+foi lido (`git diff` vazio), `lexical_weight`=1.0. Artefato:
+`bench/results/strong-rag-20261014T211154_582208/` (git_commit `a6b29bb`).
+
+Resultado honesto (orçamento de referência 4000, IC95% bootstrap). Nenhum IC não
+sobreposto em categoria alguma → **EMPATE em todas, inclusive geral**; o
+`strong_rag` NÃO venceu o `ours`, e o `ours` não venceu o `strong_rag`:
+
+| categoria | n | ours | ours IC95 | strong_rag | strong_rag IC95 | veredito |
+|---|---|---|---|---|---|---|
+| geral | 41 | 0.756 | [0.610, 0.878] | 0.683 | [0.537, 0.829] | empate |
+| api_reference | 17 | 0.706 | [0.471, 0.941] | 0.706 | [0.471, 0.882] | empate |
+| changelog | 4 | 1.000 | [1.000, 1.000] | 0.750 | [0.250, 1.000] | empate |
+| guide | 12 | 0.833 | [0.583, 1.000] | 0.750 | [0.500, 1.000] | empate |
+| params_table | 5 | 0.600 | [0.200, 1.000] | 0.600 | [0.200, 1.000] | empate |
+| pdf | 3 | 0.667 | [0.000, 1.000] | 0.333 | [0.000, 1.000] | empate |
+
+À paridade de qualidade, o `ours` entrega com MUITO menos recurso (orçamento
+4000): **contexto 1495.0 vs 2823.4 tokens** (~53% do contexto do `strong_rag`),
+**custo/tarefa concluída US$ 0.005250 vs US$ 0.009675** (o `strong_rag` custa
+~1.84×), **INSUFFICIENT 0.000 vs 0.098** e **citação 0.585 vs 0.512**. No
+orçamento 2000 o quadro se mantém: `ours` 0.805 [0.683, 0.927] vs `strong_rag`
+0.659 [0.512, 0.805] → empate, com o `ours` de novo no menor contexto; elevar
+2000→4000 não melhorou o `ours` (0.805→0.756) e nudou o `strong_rag`
+(0.659→0.683). (Latência, fora do veredito de qualidade: no orçamento 2000 o
+`strong_rag` teve p50 ≈ 58s / p95 ≈ 980s por chamar a Jina real para os chunks
+de overlap novos na primeira passagem; a passagem 4000 reusou o cache e
+normalizou para p50 ≈ 96ms.)
+
+Custo real: respondedor OpenAI `gpt-6.1-sol` **US$ 1.566** exatos do
+`results.csv` (ours $0.291, naive_rag $0.419, naive_rag_vector $0.421,
+strong_rag $0.435); recuperação ~96% do cache (Jina 41 reais / 82 hits;
+embeddings 35 batches / 9371 hits — os chunks de overlap geram alguns embeddings
+novos, como esperado); somando o juiz Anthropic + embeddings/rerank, total real
+~US$ 1.6–2.0, dentro da folga de ~US$ 8. **TESE SOBREVIVE:** mesmo contra um RAG
+NÃO-naive, o NINA entrega a MESMA qualidade por ~metade do custo e do contexto,
+com citação verificável e sem desistir de tarefas.
+
+### Como testar o strong_rag manualmente
+
+Gate rápido offline (sem serviços, sem rede), Windows/PowerShell (separador `;`):
+
+```
+uv run ruff check . ; uv run ruff format --check . ; uv run mypy app ; uv run pytest -m "not integration and not browser"
+```
+
+(inclui os testes offline do runner em `tests/unit/bench/test_strong_rag.py`:
+overlap da janela deslizante, seleção top-k por rerank — NÃO MMR —, proveniência
+`[URL]`, determinismo e registro no registry).
+
+Execução real da medição (humano, gasta chaves; split `test` medido UMA vez,
+reusa `bench/.cache/`). Subir a infra e confirmar as 4 chaves no `.env` real
+(`BENCH_ANSWERER_API_KEY` OpenAI, `BENCH_JUDGE_API_KEY` Anthropic,
+`RERANKER_API_KEY` Jina, `EMBEDDING_DIM=1536`) — NÃO rode `cp .env.example .env`
+por cima do `.env` real:
+
+```
+docker compose up -d --wait postgres seaweedfs ; docker compose up s3-init ; uv run alembic upgrade head
+uv run python -m bench.sweep --strategies naive_rag,naive_rag_vector,strong_rag,ours --split test --budgets 2000,4000 --real --out-name strong-rag-2026-10-14
+```
+
+Saída: `bench/results/strong-rag-2026-10-14/{results.csv,report.md,config.json,sumario.md}`
+(gitignored). HONESTIDADE: `app/config.py` só é LIDO; `git diff app/config.py`
+deve permanecer vazio; `lexical_weight`=1.0; o split `test` é medido UMA vez.
+
+---
+
 Marco anterior: M8 ETAPA 2 (benchmark completo no split `test`) — CONCLUÍDA. A
 Etapa 1 (calibração dos parâmetros de seleção no `dev` e congelamento) está
 concluída e commitada em `e75273e`; a Etapa 2 rodou o benchmark COMPLETO no

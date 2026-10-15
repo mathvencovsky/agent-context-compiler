@@ -119,6 +119,43 @@ mais sólida que as por-categoria; e a vantagem de custo depende dos preços
 atuais dos modelos. Números completos e reprodutíveis em
 [`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md).
 
+#### Reforço: contra um RAG NÃO-naive (`strong_rag`, split test, 2026-10-14)
+
+A objeção que faltava endereçar: o `naive_rag_vector`, mesmo vetorial, ainda é
+um RAG "naive". Então foi montado o **`strong_rag`** — um RAG INDEPENDENTE, sem
+nenhuma peça do NINA, feito para VENCER (não espantalho): **chunking com
+overlap** (janela deslizante ~400 tokens, ~25% de overlap), **híbrido
+BM25+vetorial fundido por RRF k=60**, **rerank cross-encoder Jina do top-30** e
+**seleção top-k por score de rerank sob orçamento**, com a mesma proveniência
+`[URL]`. A fronteira é honesta: o `strong_rag` NÃO usa reescrita de query nem
+compressão por LLM (isso quebraria a regra "nenhum LLM na recuperação" e viraria
+uma comparação LLM-vs-não-LLM) e NÃO usa a seleção MMR do NINA — essa é a
+variável isolada. O split `test` foi medido uma vez; `app/config.py` só foi
+lido. No orçamento de referência de 4000 tokens, com as quatro estratégias lado
+a lado:
+
+| Métrica (test, @4000) | **NINA (`ours`)** | `naive_rag` (BM25) | `naive_rag_vector` (híbrido) | `strong_rag` (não-naive) |
+|---|---|---|---|---|
+| Taxa de sucesso | **0,756** [0,610–0,878] | 0,732 [0,585–0,878] | 0,683 [0,537–0,829] | 0,683 [0,537–0,829] |
+| Custo por tarefa concluída | **US$ 0,0053** | US$ 0,0086 | US$ 0,0092 | US$ 0,0097 |
+| Tokens de contexto (média) | **1.495** | 2.677 | 2.673 | 2.823 |
+| Precisão de citação | **0,585** | 0,512 | 0,512 | 0,512 |
+| Taxa INSUFFICIENT | **0,000** | 0,098 | 0,098 | 0,098 |
+
+**Leitura honesta:** contra o `strong_rag` é **empate estatístico em qualidade
+em TODAS as categorias e no geral** (ICs sobrepostos; o `strong_rag` não venceu
+o `ours`, e o `ours` não venceu o `strong_rag`). Ou seja: nem mesmo um RAG
+não-naive, com rerank cross-encoder real e chunking com overlap, bateu o NINA em
+qualidade neste corpus. E à paridade de qualidade, o NINA entregou com **~53% do
+contexto do `strong_rag`** (1.495 vs 2.823 tokens) e **~54% do custo por tarefa
+concluída** (US$ 0,0053 vs US$ 0,0097 — o `strong_rag` custa ~1,84× por tarefa),
+além da maior precisão de citação e 0% de INSUFFICIENT. A tese de **eficiência +
+evidência rastreável à paridade de qualidade SOBREVIVE a um oponente forte** — o
+NINA entrega o mesmo resultado por ~metade do custo e do contexto, com a prova
+anexada, mesmo contra um RAG que não é mais "naive". Números completos em
+[`PROGRESS.md`](PROGRESS.md) / [`DECISIONS.md`](DECISIONS.md); artefato
+`bench/results/strong-rag-20261014T211154_582208/`.
+
 ---
 
 ## Arquitetura
@@ -207,6 +244,18 @@ qualidade e o maior custo dos três neste corpus técnico. A tese validada é
 projeto foi **seguir** com esse posicionamento (ver "O que o benchmark provou"
 acima e [`DECISIONS.md`](DECISIONS.md)). O detalhe por marco está em
 [`PROGRESS.md`](PROGRESS.md).
+
+**E a tese sobrevive até contra um RAG NÃO-naive.** Um reforço posterior
+(2026-10-14) adicionou o `strong_rag` — RAG independente com chunking de overlap,
+híbrido BM25+vetorial por RRF, rerank cross-encoder Jina e seleção top-k, sem
+nenhuma peça do NINA e sem LLM na recuperação. Medido no split `test` @4000, o
+resultado é **empate em qualidade em todas as categorias e no geral** (`ours`
+0,756 vs `strong_rag` 0,683, ICs sobrepostos), com o NINA entregando por **~53%
+do contexto e ~54% do custo por tarefa concluída** do `strong_rag` (US$ 0,0053 vs
+US$ 0,0097), citação 0,585 vs 0,512 e 0% de INSUFFICIENT vs ~10%. Nem um RAG
+não-naive bateu o NINA em qualidade — e o NINA segue entregando o mesmo resultado
+por ~metade do custo e do contexto (ver "Reforço: contra um RAG NÃO-naive"
+acima).
 
 ---
 
