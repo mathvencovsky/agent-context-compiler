@@ -37,9 +37,9 @@ A IA escreve o código. Estas etapas dependem de você, e várias bloqueiam marc
 ## No M10 (avaliação ponta a ponta)
 
 - [ ] Fase 0: revisar e aprovar `bench/PREREG.md` antes do commit (e autorizar o push, que dá um carimbo de data externo).
-- [ ] Fase 1: a fonte passou a ser o dump arquivado do Stack Overflow de 2024-04, porque a Acceptable Use Policy proíbe coletar pela API para benchmark de IA (DECISIONS 2026-10-15). Fica com você a decisão jurídica sobre usar esse conteúdo CC BY-SA num benchmark de produto comercial. Enviar transcrições de agente que possam ser compartilhadas (opcional) e auditar a amostra de 20% das tarefas.
+- [ ] Fase 1: a fonte passou a ser o dump arquivado do Stack Overflow de 2024-04, porque a Acceptable Use Policy proíbe coletar pela API para benchmark de IA (DECISIONS 2026-10-15). Fica com você a decisão jurídica sobre usar esse conteúdo CC BY-SA num benchmark de produto comercial. Enviar transcrições de agente que possam ser compartilhadas (opcional).
 - [ ] Fase 2: dois avaliadores humanos, cegos ao braço, por cerca de 2 a 3 horas cada (pelo menos 100 respostas).
-- [ ] Fase 3: chave Anthropic num workspace dedicado só ao benchmark (para conciliar a fatura) e chave OpenAI do juiz; teto de gasto do piloto (cerca de US$ 30) e, com a estimativa medida no piloto, o teto da rodada principal; exportar o custo do workspace na janela da rodada.
+- [ ] Fase 3: chave Anthropic num workspace dedicado só ao benchmark (para conciliar a fatura) e chave OpenAI do juiz; teto de gasto do piloto (cerca de US$ 30) e, com a estimativa medida no piloto, o teto da rodada principal; exportar o custo do workspace na janela da rodada. Depois da triagem e antes da rodada principal, auditar cerca de 20% da população primária (Emenda 2 do PREREG) com `uv run python -m bench.audit_external <arquivo de ids>`.
 - [ ] Fase 5: uma máquina limpa e alguém para cronometrar do `git clone` ao primeiro resultado no Claude Code.
 
 ## No M11

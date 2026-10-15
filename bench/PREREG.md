@@ -275,6 +275,26 @@ data had been seen.
   model is more likely to know them already. The doc-dependence screen (§2.2)
   removes those, so the mined pool has to be larger.
 
+### Amendment 2 — 2026-10-15: the audit covers the primary population, after the screen
+
+- **What changed:** the audit in §2.1 now runs after the doc-dependence screen
+  (§2.2), on the primary population, and no longer on the whole mined pool.
+  - The human audits each task of the primary population (the n tasks that
+    failed the screen) whose seeded hash falls in the lowest 20%: the first 8
+    bytes of sha256(`20261015:<task id>`) below 0.2 · 2⁶⁴. That is about 20% of
+    tasks, and the selection is per task, so it does not change when
+    replacement tasks join.
+  - An invalid task is removed, and screening continues down the same random
+    order until n tasks have both failed the screen and not been found invalid.
+    Replacement tasks go through the same audit selection.
+  - If more than 10% of audited tasks are invalid, every task in the primary
+    population is human-validated before the main run.
+- **Why:** many of the mined questions will be answerable from memory and never
+  reach the main run. Auditing after the screen checks exactly the tasks the
+  main run uses, at about a third of the human time.
+- **Data seen:** none. No screen or other agent session had run; the mining
+  pass over the dump was in progress and yields candidates, not outcomes.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

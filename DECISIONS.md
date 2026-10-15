@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-15: M10 — auditoria depois da triagem (Emenda 2 do PREREG)
+Contexto: o plano auditava 20% de todo o pool minerado ao fim da Fase 1, mas boa parte desse pool será respondível de memória e nunca chega à rodada principal.
+Decisão (aprovada pelo humano em 2026-10-15): a auditoria roda depois da triagem sem documentação, sobre a população primária. Uma tarefa entra na amostra quando os 8 primeiros bytes de sha256("20261015:<id>") ficam abaixo de 0.2·2⁶⁴ (cerca de 20%); a seleção é por tarefa, então não muda quando entram tarefas de reposição. Tarefa inválida sai e a triagem continua na mesma ordem até completar n. Se mais de 10% das auditadas forem inválidas, toda a população primária é validada antes da rodada principal. `bench/audit_external.py` exige o arquivo com os ids da população.
+Alternativas: 20% exatos, arredondados para cima (a amostra mudaria a cada reposição); auditar o pool inteiro na Fase 1 (cerca de 3× o tempo humano, gasto em tarefas que a triagem descarta).
+Consequências: Emenda 2 em `bench/PREREG.md`; a Fase 1 termina sem parada para auditoria; HUMANO.md move a auditoria para a Fase 3.
+
 ## 2026-10-15: M10 — fonte das tarefas externas: dump arquivado do Stack Overflow (2024-04), não a API
 Contexto: o plano aprovado minerava perguntas pela API do Stack Exchange. Antes de qualquer coleta, a leitura dos termos mostrou que a Acceptable Use Policy do Stack Overflow proíbe coleta automatizada pelos serviços dele, API incluída, com o propósito de testar ou fazer benchmark de ferramentas de IA generativa sem consentimento prévio por escrito. O M10 é exatamente isso.
 Decisão (aprovada pelo humano em 2026-10-15): usar o dump arquivado no archive.org (item `stackexchange`, `stackoverflow.com-Posts.7z` e `stackoverflow.com-Users.7z`, de 2024-04, verificados pelo sha1 publicado pelo archive.org), distribuído sob CC BY-SA com convite explícito ao reuso com atribuição no `license.txt`. Janela: de 2023-01-01 até o post mais recente do dump. Registrado como Emenda 1 do `bench/PREREG.md`, commitada antes de o dump ser lido. O dump fica fora do repositório (`C:\Users\Matheus\Downloads\so-dump-2024-04`), e o minerador recebe os caminhos por argumento, extraindo o 7z em streaming pelo `tar` do Windows (bsdtar/libarchive com liblzma), sem dependência nova; `py7zr` foi descartado por ser LGPL.
