@@ -114,6 +114,25 @@ def test_mine_posts_matches_answers_that_come_before_their_question() -> None:
     assert stats.accepted_answer_missing == 0
 
 
+def test_mine_posts_counts_special_token_text_as_plain_text() -> None:
+    # The real dump has LLM questions quoting <|endoftext|>; tiktoken's default
+    # encode() raises on it, which ended the first full mining pass.
+    body = "<p>Why does my model print &lt;|endoftext|&gt;?</p>"
+    stats = MiningStats()
+    (c,) = list(mine_posts(iter_rows(_xml([_q(10, 11, Body=body), _a(11)])), stats))
+    assert "<|endoftext|>" in c["question_text"]
+    assert c["question_tokens"] > 0
+
+
+def test_mine_posts_reports_a_failing_post_and_keeps_going() -> None:
+    rows = [_q(30, 31, Score="not-a-number"), _q(10, 11), _a(11)]
+    stats = MiningStats()
+    kept = list(mine_posts(iter_rows(_xml(rows)), stats))
+    assert [c["question_id"] for c in kept] == [10]
+    assert (stats.rows_failed, stats.failed_ids) == (1, ["30"])
+    assert stats.rule1_kept == 1
+
+
 def test_site_for_url_respects_hosts_and_path_prefixes() -> None:
     assert site_for_url("https://docs.python.org/3/library/re.html") == "python"
     assert site_for_url("https://www.postgresql.org/docs/16/sql-select.html") == (

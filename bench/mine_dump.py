@@ -38,15 +38,14 @@ import subprocess
 import sys
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import IO, Any
 from urllib.parse import urlsplit, urlunsplit
 
 import lxml.html
+import tiktoken
 from lxml import etree
-
-from app.index.tokens import count_tokens
 
 #: PREREG §2.1 rule 1: first day of the question window.
 WINDOW_START = "2023-01-01"
@@ -95,6 +94,8 @@ class MiningStats:
     accepted_answer_missing: int = 0
     kept: int = 0
     newest_post: str = ""
+    rows_failed: int = 0  # posts that raised; reported, never silently dropped
+    failed_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -230,10 +231,20 @@ def _question(row: Mapping[str, str]) -> _Question:
     # Bodies are only needed for questions that can still pass rules 3-4.
     if q.score >= 1 and not q.closed and not q.has_image:
         q.text = html_to_text(row.get("Body", ""))
-        q.tokens = count_tokens(q.text)
+        q.tokens = _count_tokens(q.text)
         if q.tokens <= MAX_QUESTION_TOKENS:
             q.html = row.get("Body", "")
     return q
+
+
+def _count_tokens(text: str) -> int:
+    """cl100k tokens like ``app.index.tokens.count_tokens``, special tokens as text.
+
+    Questions about LLMs contain literal ``<|endoftext|>``, which tiktoken's
+    default ``encode`` rejects.
+    """
+    encoding = tiktoken.get_encoding("cl100k_base")
+    return len(encoding.encode(text, disallowed_special=()))
 
 
 def _answer(row: Mapping[str, str]) -> _Answer | None:
@@ -266,9 +277,8 @@ def _judge(
     if q.has_image or q.html is None:
         stats.removed_rule4_image_or_length += 1
         return None
-    stats.kept += 1
     answer_text = html_to_text(a.html)
-    return {
+    candidate = {
         "question_id": q.id,
         "answer_id": a.id,
         "site": a.cited[0][0],
@@ -295,6 +305,8 @@ def _judge(
         "question_license": q.license,
         "answer_license": a.license,
     }
+    stats.kept += 1
+    return candidate
 
 
 def mine_posts(
@@ -313,19 +325,26 @@ def mine_posts(
         if created < WINDOW_START:
             continue
         candidate = None
-        if kind == "1" and row.get("AcceptedAnswerId"):
-            stats.rule1_kept += 1
-            q, accepted = _question(row), int(row["AcceptedAnswerId"])
-            if accepted in answers:
-                candidate = _judge(q, answers.pop(accepted), stats)
-            else:
-                questions[accepted] = q
-        elif kind == "2":
-            answer_id, a = int(row["Id"]), _answer(row)
-            if answer_id in questions:
-                candidate = _judge(questions.pop(answer_id), a, stats)
-            else:
-                answers[answer_id] = a
+        try:
+            if kind == "1" and row.get("AcceptedAnswerId"):
+                q, accepted = _question(row), int(row["AcceptedAnswerId"])
+                stats.rule1_kept += 1
+                if accepted in answers:
+                    candidate = _judge(q, answers.pop(accepted), stats)
+                else:
+                    questions[accepted] = q
+            elif kind == "2":
+                answer_id, a = int(row["Id"]), _answer(row)
+                if answer_id in questions:
+                    candidate = _judge(questions.pop(answer_id), a, stats)
+                else:
+                    answers[answer_id] = a
+        except Exception as exc:  # one odd post must not end a 30-minute pass
+            stats.rows_failed += 1
+            if len(stats.failed_ids) < 20:
+                stats.failed_ids.append(row.get("Id", "?"))
+                print(f"post {row.get('Id')} skipped: {exc!r}", file=sys.stderr)
+            continue
         if candidate is not None:
             yield candidate
     stats.accepted_answer_missing = len(questions)
