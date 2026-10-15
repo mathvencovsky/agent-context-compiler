@@ -1,6 +1,57 @@
 # PROGRESS
 
-Marco atual: **M9 (Pronto para pilotos) — CONCLUÍDO** (SPEC §7/§8/§9, ROADMAP
+Marco atual: **M10 (Avaliação ponta a ponta com agente, pré-registrada) — Fase 0
+CONCLUÍDA** (ROADMAP M10; SPEC §10.1 exceção e §10.6). O `bench/PREREG.md` foi
+revisado e aprovado pelo humano em 2026-10-15, commitado (commit `M10:
+pre-register ...`) e enviado ao GitHub, que registra a hora do push. O antigo
+M10 "Deploy e observabilidade" passou a M11. Nenhuma execução paga foi feita no
+M10. Próximo passo: plano da Fase 1.
+
+### M10 Fase 0 — o que foi feito
+
+- **`bench/PREREG.md`** (em inglês, para leitores de fora): afirmação testada,
+  população (Stack Overflow 2023+, resposta aceita citando página oficial dos 10
+  sites), triagem sem documentação, fatia sintética-ponte (41 tarefas `test`),
+  braços, harness, tamanho de amostra, H1 (não-inferioridade, margem 7.5 pts) e
+  H2 (custo por tarefa correta), regra de relato (a manchete usa o limite
+  inferior do IC), causas de falha, juízes + κ, protocolo e regra de parada,
+  emendas. Apêndices: evidências, textos congelados (prompts, rubrica,
+  checklist da auditoria) e domínios oficiais.
+- **`bench/power.py`** + `tests/unit/bench/test_power.py`: discordância pareada
+  a partir de qualquer `results.csv` e n para não-inferioridade. Reproduz a
+  tabela do PREREG (349 tarefas com ψ = 0.25 e margem 7.5 pts).
+- **Evidência medida nos artefatos existentes** (PREREG Apêndice A): piso de
+  ruído (o `naive_rag` trocou 4/41 veredictos com contexto byte-idêntico entre
+  duas rodadas), discordância 0.12–0.24 contra os RAGs, McNemar exato p de 0.11
+  a 1.0, e 1 URL por tarefa nas 137 tarefas.
+- **Verificado:** `claude-agent-sdk` 0.2.167 é MIT e embute o CLI do Claude
+  Code; a API do Stack Exchange responde sem chave (300 req/dia) e não tem
+  robots.txt (404, ou seja, sem Disallow).
+- **Docs:** SPEC §10.1 (exceção dos braços ao vivo) e §10.6 (trilha de agente),
+  DECISIONS 2026-10-15, ROADMAP (M10 novo, Deploy → M11), HUMANO.md ("No
+  M10"), CLAUDE.md (PREREG nos documentos de referência) e os comentários M10 →
+  M11 em `app/config.py` e `app/fetch/render.py`.
+- Antes da Fase 0, o trabalho pendente do `strong_rag` foi commitado sozinho
+  (`3c8bd49`), com o gate completo passando.
+
+### M10 — pendente
+
+- Fases 1 a 5, uma por vez, cada uma com plano aprovado (ROADMAP M10, HUMANO.md
+  "No M10").
+
+### Como verificar a Fase 0
+
+```
+uv run pytest tests/unit/bench/test_power.py -q
+uv run python -m bench.power --psi 0.25
+uv run python -m bench.power --results bench/results/strong-rag-20261014T211154_582208/results.csv --a ours --b strong_rag --budget 4000
+```
+
+O último comando lê um artefato local (gitignored).
+
+---
+
+Marco anterior: **M9 (Pronto para pilotos) — CONCLUÍDO** (SPEC §7/§8/§9, ROADMAP
 M9). O NINA agora é consumível com segurança por um piloto externo: chaves de
 API + autenticação Bearer em todas as rotas /v1, rate limit (token bucket em
 memória por processo) + cota diária, gravação de `usage_events` em toda

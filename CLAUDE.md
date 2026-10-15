@@ -14,7 +14,8 @@ A tese do produto só vale se o benchmark provar vantagem sobre extratores exist
 ## Documentos de referência (ler antes de agir)
 
 - `docs/SPEC.md`: arquitetura, contratos de API, esquemas e modelo de dados. É a fonte da verdade.
-- `docs/ROADMAP.md`: marcos M0 a M10, com tarefas e critérios de aceite.
+- `docs/ROADMAP.md`: marcos M0 a M11, com tarefas e critérios de aceite.
+- `bench/PREREG.md`: protocolo pré-registrado do M10. Não alterar fora da seção de emendas.
 - `PROGRESS.md`: estado atual do projeto. Ler no início de toda sessão e atualizar ao fim de cada marco.
 - `DECISIONS.md`: registro curto de decisões técnicas não óbvias.
 

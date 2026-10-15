@@ -1,6 +1,6 @@
 # ROADMAP do MVP
 
-Onze marcos. Cada marco termina com `make check` passando, os critérios de aceite atendidos, `PROGRESS.md` atualizado e aprovação do humano.
+Doze marcos. Cada marco termina com `make check` passando, os critérios de aceite atendidos, `PROGRESS.md` atualizado e aprovação do humano.
 
 Visão geral:
 
@@ -16,7 +16,8 @@ Visão geral:
 | M7 | Busca, seleção e `assemble` | **Sim:** chave do reranker |
 | M8 | Benchmark completo e calibração | **Sim:** decisão de seguir, ajustar ou parar |
 | M9 | Chaves de API, limites, MCP e SDK | Não |
-| M10 | Deploy e observabilidade | **Sim:** escolha de hospedagem e contas |
+| M10 | Avaliação ponta a ponta com agente (pré-registrada) | **Sim:** chaves, teto de gasto, auditoria de tarefas e avaliadores humanos |
+| M11 | Deploy e observabilidade | **Sim:** escolha de hospedagem e contas |
 
 ---
 
@@ -241,7 +242,30 @@ Modelo sugerido: Opus.
 
 ---
 
-## M10: Deploy e observabilidade
+## M10: Avaliação ponta a ponta com agente (pré-registrada)
+
+**Objetivo:** provar ou refutar, com evidência que não foi escrita por nós, que um agente usando o NINA conclui o mesmo trabalho dependente de documentação por cerca de metade dos tokens faturados. Medição primeiro: nenhuma feature de produto neste marco, salvo se uma falha medida exigir e o humano aprovar.
+
+Pré-requisito humano: chaves (Anthropic num workspace dedicado, OpenAI), teto de gasto do piloto e da rodada principal, auditoria de tarefas e dois avaliadores humanos (ver HUMANO.md).
+
+Tarefas (uma fase por vez, cada uma com plano aprovado):
+- Fase 0: `bench/PREREG.md` (hipóteses, métricas, margem, tamanho de amostra, análise, regra de parada) e `bench/power.py`, commitados antes de qualquer execução paga.
+- Fase 1: tarefas externas do Stack Overflow (SPEC §10.6), snapshot das páginas citadas, distratores e auditoria; as 137 tarefas `ai_draft` viram uma fatia sintética separada.
+- Fase 2: rotulagem humana cega com κ de Cohen, segundo juiz e autoconsistência do juiz.
+- Fase 3: harness de agente (Claude Agent SDK) com os braços da SPEC §10.6; piloto, depois rodada principal com teto; conciliação com o export de custo do provedor.
+- Fase 4: análise pareada (McNemar + bootstrap), curva qualidade × custo, resultados por tipo de tarefa e causas de falha do NINA.
+- Fase 5: tempo do `git clone` ao primeiro `assemble` no Claude Code numa máquina limpa; calculadora de ROI só com números medidos.
+
+Aceite:
+- `bench/PREREG.md` commitado antes da primeira execução paga, sem mudanças fora da seção de emendas.
+- `bench/results/m10/{results.csv, report.md, decision.md}` gerados, com o custo total conciliado com o export do provedor em ±3%.
+- κ entre o juiz principal e os rótulos humanos relatado; manchete conforme a regra de relato de PREREG §7, qualquer que seja o resultado.
+
+Modelo sugerido: Opus.
+
+---
+
+## M11: Deploy e observabilidade
 
 **Objetivo:** API acessível pela internet, com visibilidade de erro, custo e latência.
 

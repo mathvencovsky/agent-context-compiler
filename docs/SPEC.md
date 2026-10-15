@@ -312,6 +312,8 @@ As descrições das ferramentas avisam que o conteúdo retornado vem de páginas
 
 `bench/corpus/` guarda snapshots baixados uma vez (HTML bruto, HTML renderizado quando aplicável e PDFs) e um `manifest.json` com url, data, hash e categoria. **Todas as estratégias leem do snapshot**, e não da web ao vivo, para que as execuções sejam reproduzíveis. O pipeline próprio recebe os snapshots por um fetcher alternativo usado só no benchmark.
 
+Exceção (M10, §10.6): os braços `webfetch_live` e `context7_live` leem a web ao vivo. São sempre secundários, rotulados como não reprodutíveis, e o resultado de cada chamada de ferramenta fica na transcrição.
+
 ### 10.2 Formato das tarefas (`tasks.yaml`)
 
 ```yaml
@@ -358,3 +360,40 @@ Por estratégia e por categoria: taxa de sucesso (com IC de 95% por bootstrap so
 Saída em `bench/results/<timestamp>/`: `results.csv` (uma linha por tarefa x estratégia), `report.md` e `config.json` (versões, modelos, parâmetros, commit).
 
 CLI: `python -m bench.run --strategies naive_rag,ours --split test --budget 4000`.
+
+### 10.6 Trilha de agente (M10)
+
+Mede o produto como um cliente o usa: um agente (Claude Agent SDK, modelo `claude-sonnet-5-5`) responde perguntas reais de desenvolvedores chamando uma ferramenta de documentação, que muda por braço. O protocolo completo (população, braços, tamanho de amostra, hipóteses, regra de relato e de parada) está em `bench/PREREG.md`, congelado antes de qualquer execução paga. Esta seção fixa só os contratos.
+
+Tarefas externas ficam em `bench/tasks/external.yaml` (CC BY-SA 4.0, com atribuição), separadas de `tasks.yaml`:
+
+```yaml
+- id: so-77001234              # "so-" + id da pergunta no Stack Overflow
+  split: pilot                 # pilot | holdout
+  site: python                 # chave de bench/sites.yaml
+  task_type: version           # multi_doc | version | code | fact (regra em PREREG §2.1)
+  urls: [...]                  # páginas citadas (máx. 4) + distratores do mesmo site; total 5, embaralhadas
+  cited_urls: [...]            # páginas oficiais citadas na resposta aceita, após redirecionamento
+  question_title: "..."
+  question: "..."              # corpo da pergunta, texto puro, literal
+  reference_answer: "..."      # resposta aceita, texto puro, literal: é o gabarito
+  expected_evidence:           # blockquotes da resposta aceita que casam (razão >= 0.9) com o snapshot; pode ser vazio
+    - url: https://docs.python.org/3/library/functions.html
+      quote: "..."
+  source:
+    question_url: https://stackoverflow.com/q/77001234
+    answer_url: https://stackoverflow.com/a/77005678
+    question_author: "..."     # nome exibido + link do perfil
+    answer_author: "..."
+    license: CC BY-SA 4.0
+    created: 2024-03-02
+  author: external
+  audit: null                  # null (fora da amostra) | valid | invalid
+```
+
+Para tarefas externas, a regra "só `validated: true` entra nos relatórios" (§10.2) é substituída pela auditoria amostral de PREREG §2.1: entram todas, exceto as marcadas `invalid`.
+
+- **Braços:** `no_docs`, `full_page`, `strong_rag`, `nina`, `webfetch_live` e `context7_live` (definidos em PREREG §3). Não há orçamento igualado entre braços: cada ferramenta usa o próprio padrão, e o que se mede é sucesso e custo faturado.
+- **Juízes:** o principal é de um provedor diferente do agente (`gpt-6.1-sol`). O segundo juiz (`claude-opus-5-5`) e os rótulos humanos (κ de Cohen) auditam o principal. A referência do juiz é a resposta aceita, literal.
+- **Métricas:** além das de §10.5, tokens de cache (criação e leitura), turnos, chamadas de ferramenta, tokens devolvidos pelas ferramentas e custo por tarefa correta, conciliado com o export de custo do provedor (PREREG §6).
+- **Saída** em `bench/results/m10/`: `results.csv` (uma linha por tarefa x braço, com o id do braço na coluna `strategy`), `report.md`, `decision.md`, `config.json` e as transcrições completas (gitignored).

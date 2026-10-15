@@ -38,7 +38,7 @@ set ``SourceInfo.render_mode = "browser"`` and append a
 and the tests agree on the exact warning code string.
 
 See DECISIONS.md (2026-10-11, "M4 — janela de DNS rebinding no navegador") for
-the honest statement of the residual rebinding window and the M10 egress
+the honest statement of the residual rebinding window and the M11 egress
 mitigation.
 """
 

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     postgres_db: str = "nina"
 
     # S3 object storage. Local dev uses SeaweedFS (S3-compatible) on :8333;
-    # these credentials are ignored locally and only used against AWS (M10).
+    # these credentials are ignored locally and only used against AWS (M11).
     s3_endpoint_url: str = "http://localhost:8333"
     s3_access_key: str = "nina-dev-access-key"
     s3_secret_key: str = "nina-dev-secret-key"
