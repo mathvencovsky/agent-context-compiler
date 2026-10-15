@@ -1,12 +1,25 @@
 # PROGRESS
 
-Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 0 CONCLUÍDA**.
-A Emenda 6 do PREREG separou a fatia `dev` (756 tarefas, 328 com âncora de
-seção) da avaliação (2.278 tarefas `holdout`), e o `external.yaml` foi
-reetiquetado. Próximo passo: plano da Fase 1 do M10a (o instrumento de medida
-com as âncoras). Da Fase 3 do M10 continuam prontos o custo por sessão, o
-tamanho de página e os arquivos de saída; o harness do agente e a ligação do
-braço `nina` seguem pausados. Nenhuma execução paga foi feita no M10.
+Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 1 EM ANDAMENTO**.
+Pronto: o gabarito de seção pelas âncoras (315 tarefas `dev`) e a métrica de
+cobertura, testados offline. Falta: o comparador de sistemas (NINA, strong_rag,
+naive_rag, página inteira) e a rodada com provedores reais, que espera o OK do
+humano. Da Fase 3 do M10 continuam prontos o custo por sessão, o tamanho de
+página e os arquivos de saída; o harness do agente e a ligação do braço `nina`
+seguem pausados. Nenhuma execução paga foi feita no M10.
+
+### M10a Fase 1 (parcial) — o que foi feito
+
+- **`bench/anchor_qrels.py`:** a seção que cada âncora nomeia, tirada do HTML
+  congelado (sem depender da IR do NINA nem do trafilatura). Gabarito: 315 das
+  756 tarefas `dev`; sem chave: 376 sem link com âncora, 30 âncoras inexistentes,
+  26 seções sem frase mensurável, 9 seções acima de 4.000 tokens. Seções de 73
+  (p10) a 3.746 (p99) tokens, mediana 326. Por site: Python 175, MDN 50,
+  PostgreSQL 39, React 19, Docker 15, Kubernetes 9, Flask 4, SQLite 2, RFC 2.
+  `uv run python -m bench.anchor_qrels` grava `bench/results/m10a/qrels.jsonl`.
+- **`bench/section_recall.py`:** frases normalizadas da seção, cobertura (fração
+  presente num contexto), acerto com cobertura ≥ 0,5 e posição do primeiro
+  fragmento `[URL]` que traz a seção.
 
 ### M10a Fase 0 — o que foi feito
 
