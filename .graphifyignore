@@ -1,0 +1,4 @@
+# Third-party data kept out of the knowledge graph
+tests/fixtures/
+bench/tasks/external.yaml
+graphify-out/

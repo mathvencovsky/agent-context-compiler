@@ -55,3 +55,6 @@ test-results/
 
 # Workflow orchestration artifacts (plans, reviews, task specs) — not product
 .agents/
+
+# graphify knowledge graph (local, regenerated)
+graphify-out/

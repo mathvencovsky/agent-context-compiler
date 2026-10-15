@@ -1,1 +1,1 @@
-"""Integration tests (require real Postgres/MinIO services)."""
+"""Integration tests (require real Postgres/SeaweedFS services)."""

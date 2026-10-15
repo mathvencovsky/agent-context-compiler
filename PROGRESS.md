@@ -79,6 +79,11 @@ uv run pytest tests/unit/bench/test_judge_external.py tests/unit/bench/test_agre
 ### M10 — pendente e dívidas
 
 - Fases 3 a 5, uma por vez, cada uma com plano aprovado.
+- Antes do piloto da Fase 3 (PREREG §6; a Emenda 4 usa `p_read`):
+  `bench/prices.yaml` não tem `cache_write_usd_per_1m` nem
+  `cache_read_usd_per_1m` para nenhum modelo. O custo por sessão também não pode
+  usar `model_cost_usd` (`bench/report.py`), que só lê os preços de entrada e de
+  saída e custa 0 para modelo desconhecido.
 - O humano ainda vai indicar os 2 avaliadores da rotulagem cega (cerca de 2 a 3
   horas cada, depois da rodada principal da Fase 3).
 - O formato de entrada da rotulagem (`bench/results/m10/answers.jsonl`, uma

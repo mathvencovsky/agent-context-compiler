@@ -28,9 +28,9 @@ Visão geral:
 Tarefas:
 - `pyproject.toml` com uv, grupos de dependências `dev` e `bench`.
 - Estrutura de pastas da SPEC §2, com `__init__.py` e módulos vazios onde fizer sentido.
-- `docker-compose.yml` com Postgres 16 + pgvector e MinIO (bucket criado no startup).
+- `docker-compose.yml` com Postgres 16 + pgvector e SeaweedFS como S3 local (bucket criado no startup; ver DECISIONS.md 2026-10-11).
 - `app/config.py` com pydantic-settings; `.env.example` completo.
-- `app/main.py` com `GET /health` checando Postgres e MinIO.
+- `app/main.py` com `GET /health` checando Postgres e o S3 local (SeaweedFS).
 - Alembic configurado, com a primeira migração habilitando a extensão `vector`.
 - structlog com logs JSON e `request_id` por requisição.
 - `Makefile` com os comandos do CLAUDE.md.
@@ -140,7 +140,7 @@ Modelo sugerido: Opus.
 
 Tarefas:
 - Modelos SQLAlchemy e migração para `sources` e `document_versions`.
-- `blobs.py` gravando bruto e IR no MinIO.
+- `blobs.py` gravando bruto e IR no S3 local (SeaweedFS).
 - Cache: se a última versão tem menos de 24 h e `force_refresh` é falso, devolve do armazenamento. Caso contrário, faz requisição condicional (`If-None-Match` / `If-Modified-Since`); em 304, só atualiza `fetched_at`.
 - Mesmo `content_hash` não cria versão nova.
 - `POST /v1/documents/resolve` e `GET /v1/documents/{id}`.
