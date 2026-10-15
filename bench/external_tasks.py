@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -49,6 +50,20 @@ URLS_PER_TASK = 5
 MAX_CITED = 4
 
 _TASKS_PATH = Path(__file__).resolve().parent / "tasks" / "external.yaml"
+#: Pages per snapshot call; the manifest is saved after each batch.
+_BATCH = 50
+
+
+def cited_by_site(
+    ordered: Sequence[Mapping[str, Any]], exclude: set[str]
+) -> dict[str, list[str]]:
+    """Distinct cited URLs per site, first-seen order, minus ``exclude``."""
+    by_site: dict[str, dict[str, None]] = {}
+    for c in ordered:
+        for url in c["cited_urls"]:
+            if url not in exclude:
+                by_site.setdefault(site_for_url(url) or c["site"], {})[url] = None
+    return {site: list(urls) for site, urls in by_site.items()}
 
 
 def stratified_order(
@@ -176,30 +191,37 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - network
     parser.add_argument("--corpus", default=str(DEFAULT_CORPUS_DIR))
     parser.add_argument("--out", default=str(_TASKS_PATH))
     parser.add_argument("--limit", type=int, help="keep the first N of the order")
+    parser.add_argument("--exclude", help="file of URLs never to fetch (robots.txt)")
     args = parser.parse_args(argv)
 
     lines = Path(args.candidates).read_text(encoding="utf-8").splitlines()
     ordered = stratified_order([json.loads(line) for line in lines])[: args.limit]
+    exclude = set()
+    if args.exclude:
+        exclude = set(Path(args.exclude).read_text(encoding="utf-8").split())
 
     sites = {s.key: s for s in load_sites()}
-    cited_by_site: dict[str, list[str]] = {}
-    for c in ordered:
-        for url in c["cited_urls"]:
-            cited_by_site.setdefault(site_for_url(url) or c["site"], []).append(url)
-    snapshot(
-        [
-            SiteConfig(
-                site=sites[key].site,
-                key=key,
-                rich_categories=sites[key].rich_categories,
-                render=sites[key].render,
-                urls=list(dict.fromkeys(urls)),
+    for key, urls in cited_by_site(ordered, exclude).items():
+        site = sites[key]
+        # Small batches save the manifest often: a crash loses one batch, and a
+        # re-run skips every URL already frozen (append mode).
+        for start in range(0, len(urls), _BATCH):
+            batch = urls[start : start + _BATCH]
+            snapshot(
+                [
+                    SiteConfig(
+                        site=site.site,
+                        key=key,
+                        rich_categories=site.rich_categories,
+                        render=site.render,
+                        urls=batch,
+                    )
+                ],
+                args.corpus,
+                append=True,
             )
-            for key, urls in cited_by_site.items()
-        ],
-        args.corpus,
-        append=True,
-    )
+            done = start + len(batch)
+            print(f"{key}: {done}/{len(urls)} pages", file=sys.stderr, flush=True)
 
     store = CorpusStore(args.corpus)
     ok = {e.url: e.final_url for e in store.entries() if e.status == "ok"}
@@ -207,8 +229,10 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - network
     tasks, rule5_removed = build_tasks(ordered, store, fallback)
     dump_external_tasks(tasks, args.out)
 
+    cited = {url for c in ordered for url in c["cited_urls"]}
     stats = {
         "considered": len(ordered),
+        "excluded_pages_robots": len(cited & exclude),
         "removed_rule5_no_snapshot": rule5_removed,
         "tasks": len(tasks),
         "by_split": Counter(t.split for t in tasks),

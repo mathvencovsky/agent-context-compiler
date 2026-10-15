@@ -11,6 +11,7 @@ from app.fetch.render import RenderResult
 from bench.corpus_store import CorpusStore
 from bench.external_tasks import (
     build_tasks,
+    cited_by_site,
     gold_evidence,
     pick_urls,
     stratified_order,
@@ -168,3 +169,10 @@ def test_external_tasks_yaml_round_trip(tmp_path: Path) -> None:
     dump_external_tasks([task], path)
     assert path.read_text(encoding="utf-8").startswith("# M10 external tasks")
     assert load_external_tasks(path) == [task]
+
+
+def test_cited_by_site_groups_distinct_urls_and_skips_excluded() -> None:
+    a, old = "https://docs.python.org/3/a.html", "https://docs.python.org/3.8/b.html"
+    mdn = "https://developer.mozilla.org/en-US/docs/X"
+    ordered = [_candidate(1, "python", [a, mdn]), _candidate(2, "python", [old, a])]
+    assert cited_by_site(ordered, {old}) == {"python": [a], "mdn": [mdn]}
