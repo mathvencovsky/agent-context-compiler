@@ -60,32 +60,38 @@ def _digest(*parts: str) -> str:
 
 
 class _JsonFileCache:
-    """A tiny content-addressed JSON cache persisted to a single file.
+    """A tiny content-addressed JSON cache persisted next to ``path``.
 
-    Loaded once on construction and flushed after each new entry so an
-    interrupted run keeps every result computed so far. Keys are hex digests;
-    values are JSON-serializable. The file is created lazily on first write.
+    Loaded once on construction from ``path`` (the original single-file format)
+    plus ``path`` with a ``.jsonl`` suffix: each new entry is appended there as
+    one ``[key, value]`` line, so an interrupted run keeps every result computed
+    so far and a write costs one line, not a rewrite of the whole cache (the
+    embeddings file passed 290 MB, and rewriting it per vector stalled runs).
+    Keys are hex digests; values are JSON-serializable.
     """
 
     def __init__(self, path: Path) -> None:
         self._path = path
+        self._log = path.with_suffix(".jsonl")
         self._data: dict[str, object] = {}
         if path.exists():
             self._data = json.loads(path.read_text(encoding="utf-8"))
+        if self._log.exists():
+            for line in self._log.read_text(encoding="utf-8").splitlines():
+                try:
+                    key, value = json.loads(line)
+                except ValueError:  # a crash mid-append leaves a partial last line
+                    continue
+                self._data[key] = value
 
     def get(self, key: str) -> object | None:
         return self._data.get(key)
 
     def put(self, key: str, value: object) -> None:
         self._data[key] = value
-        self._flush()
-
-    def _flush(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps(self._data, ensure_ascii=False, sort_keys=True),
-            encoding="utf-8",
-        )
+        self._log.parent.mkdir(parents=True, exist_ok=True)
+        with self._log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps([key, value], ensure_ascii=False) + "\n")
 
     def __len__(self) -> int:
         return len(self._data)

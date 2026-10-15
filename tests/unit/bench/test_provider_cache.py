@@ -105,3 +105,21 @@ def test_embed_cache_persists_across_wrappers(tmp_path: Path) -> None:
     assert first == second
     assert fake2.calls == 0  # fully served from disk
     assert cache2.hits == 2
+
+
+def test_cache_appends_lines_and_skips_a_truncated_last_one(tmp_path: Path) -> None:
+    from bench.provider_cache import _JsonFileCache
+
+    path = tmp_path / "c.json"
+    path.write_text('{"old": 1}', encoding="utf-8")  # the original format still loads
+    cache = _JsonFileCache(path)
+    cache.put("new", [0.5])
+    with (tmp_path / "c.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write('["half", [')  # a crash mid-append
+    reloaded = _JsonFileCache(path)
+    assert (reloaded.get("old"), reloaded.get("new"), reloaded.get("half")) == (
+        1,
+        [0.5],
+        None,
+    )
+    assert path.read_text(encoding="utf-8") == '{"old": 1}'  # never rewritten
