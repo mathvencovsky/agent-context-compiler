@@ -1,10 +1,40 @@
 # PROGRESS
 
-Marco atual: **M10 (Avaliação ponta a ponta com agente, pré-registrada) — Fase 1
-CONCLUÍDA** (ROADMAP M10; SPEC §10.6; PREREG Emendas 1 a 4). O conjunto de
-tarefas externas está em `bench/tasks/external.yaml`: 3.054 perguntas reais do
-Stack Overflow, 20 `pilot` e 3.034 `holdout`. Nenhuma execução paga foi feita no
-M10. Próximo passo: plano da Fase 2.
+Marco atual: **M10 (Avaliação ponta a ponta com agente, pré-registrada) — Fase 2
+CONCLUÍDA** (ROADMAP M10; SPEC §10.6; PREREG §9 e Emendas 1 a 5). As ferramentas
+de correção (juízes, cegamento, autoconsistência, rotulagem humana e κ) estão
+prontas e testadas offline; os rótulos humanos só existem depois da rodada
+principal da Fase 3. Nenhuma execução paga foi feita no M10. Próximo passo: plano
+da Fase 3.
+
+### M10 Fase 2 — o que foi feito
+
+- **`bench/judge_external.py`:** a rubrica do PREREG Apêndice B literal (um
+  teste a compara com o `bench/PREREG.md`), preenchida numa passada só;
+  extração da resposta final pela regra do §4 (último JSON com `answer`, senão a
+  mensagem inteira); julgamento com até 2 novas tentativas e semente nova quando
+  a resposta do juiz não é JSON válido, e veredicto `None` (falha de
+  infraestrutura) se persistir; cegamento dos nomes de ferramentas e produtos
+  dos braços (`[tool]`); seleção por hash de ~10% das sessões para o segundo
+  julgamento e a taxa de troca de veredicto. Juízes: `gpt-6.1-sol` (principal)
+  e `claude-opus-5-5` (segundo), pelos provedores existentes em
+  `app/providers/llm`.
+- **`bench/agreement.py`:** κ de Cohen (NaN quando indefinido) e a trava de 0,6
+  do PREREG §9.
+- **`bench/label_answers.py`:** `sample` (100 respostas, cotas iguais por braço ×
+  veredicto, semente 20261015, sorteada uma vez), `label --grader A|B` (cego ao
+  braço e ao veredicto, pode parar e retomar), `settle` (só as divergências) e
+  `report` (κ entre avaliadores e entre o juiz e os rótulos finais, mais a trava).
+- **Emenda 5 do PREREG** e DECISIONS 2026-10-15: falha do juiz vira falha de
+  infraestrutura, cegamento, e amostra humana só da população primária.
+- A precisão de citação reaproveita `bench.grade._grade_citations`, que já
+  funciona com `ExternalTask` (há teste). Nada em `app/` mudou.
+
+### Como verificar a Fase 2
+
+```
+uv run pytest tests/unit/bench/test_judge_external.py tests/unit/bench/test_agreement.py tests/unit/bench/test_label_answers.py -q
+```
 
 ### M10 Fase 1 — o que foi feito
 
@@ -48,7 +78,12 @@ M10. Próximo passo: plano da Fase 2.
 
 ### M10 — pendente e dívidas
 
-- Fases 2 a 5, uma por vez, cada uma com plano aprovado.
+- Fases 3 a 5, uma por vez, cada uma com plano aprovado.
+- O humano ainda vai indicar os 2 avaliadores da rotulagem cega (cerca de 2 a 3
+  horas cada, depois da rodada principal da Fase 3).
+- O formato de entrada da rotulagem (`bench/results/m10/answers.jsonl`, uma
+  linha por tarefa × braço com `task_id`, `arm`, `answer`, `judge_correct`) está
+  descrito em `bench/label_answers.py`; a Fase 3 precisa gravá-lo assim.
 - Só 176 das 3.054 tarefas (5,8%) têm evidência-ouro: os blockquotes das
   respostas costumam citar outra versão da doc, mensagens de erro ou outras
   fontes. Nas demais, a taxonomia de falhas do PREREG §8 dá `unattributed`.

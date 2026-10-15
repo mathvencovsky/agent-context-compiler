@@ -365,6 +365,39 @@ data had been seen.
   benchmark run had happened. The bins come from page sizes of the existing
   frozen corpus, which are not outcomes.
 
+### Amendment 5 — 2026-10-15: judge failures, blinding and the human-label sample
+
+- **What changed:** three §9 grading rules, fixed before any judge call.
+  1. **Unparseable verdicts.**
+     - A judge reply that is not a JSON object with a boolean `correct` is
+       requested again, up to 2 more times, with a new seed each time.
+     - If it still fails, the session counts as an infrastructure failure under
+       §10 point 3: the task is excluded from every arm and counted. It is never
+       scored as incorrect.
+  2. **Blinding.** Before any judge or grader sees a candidate answer, every
+     name that would reveal its arm is replaced by `[tool]` (whole words, any
+     case):
+     - the arms' tool names: `fetch_page`, `search_docs`, `resolve_url`,
+       `assemble_context`, `get_document`, and Context7's `resolve-library-id`
+       and `get-library-docs`;
+     - the products NINA, WebFetch and Context7.
+  3. **Human-label sample.**
+     - It is drawn only from primary-population answers. The synthetic bridge
+       slice keeps its own rubric and is not labelled.
+     - It has 100 answers, with equal quotas per arm × primary-verdict stratum
+       (10 each for the five main-run arms). A short stratum's shortfall goes to
+       the others one item at a time. Seed `20261015`.
+     - Graders see the answers in shuffled order, without the arm or the
+       verdict.
+- **Why:**
+  - The earlier grader (`bench/grade.py`) scored an unparseable judge reply as
+    an incorrect answer, which would mix judge failures into success rates.
+  - Agents often name the tool they used in their final answer, which would
+    tell a grader or a judge which arm produced it.
+  - The bridge slice has expected answers, not an accepted answer, so the
+    Appendix B rubric does not fit it.
+- **Data seen:** none. No agent session, judge call or human label existed.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
