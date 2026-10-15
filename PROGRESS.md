@@ -1,11 +1,75 @@
 # PROGRESS
 
-Marco atual: **M10 (Avaliação ponta a ponta com agente, pré-registrada) — Fase 0
-CONCLUÍDA** (ROADMAP M10; SPEC §10.1 exceção e §10.6). O `bench/PREREG.md` foi
-revisado e aprovado pelo humano em 2026-10-15, commitado (commit `M10:
-pre-register ...`) e enviado ao GitHub, que registra a hora do push. O antigo
-M10 "Deploy e observabilidade" passou a M11. Nenhuma execução paga foi feita no
-M10. Próximo passo: plano da Fase 1.
+Marco atual: **M10 (Avaliação ponta a ponta com agente, pré-registrada) — Fase 1
+CONCLUÍDA** (ROADMAP M10; SPEC §10.6; PREREG Emendas 1 a 4). O conjunto de
+tarefas externas está em `bench/tasks/external.yaml`: 3.054 perguntas reais do
+Stack Overflow, 20 `pilot` e 3.034 `holdout`. Nenhuma execução paga foi feita no
+M10. Próximo passo: plano da Fase 2.
+
+### M10 Fase 1 — o que foi feito
+
+- **Fonte (Emenda 1):** dump arquivado do Stack Overflow de 2024-04 (archive.org,
+  item `stackexchange`): `stackoverflow.com-Posts.7z` (sha1 `ea0b89fe…`) e
+  `stackoverflow.com-Users.7z` (sha1 `0350c000…`), conferidos pelo sha1 que o
+  archive.org publica. A API foi descartada porque a Acceptable Use Policy do
+  Stack Overflow proíbe coleta automatizada para benchmark de IA. O dump fica
+  fora do repositório (`C:\Users\Matheus\Downloads\so-dump-2024-04`).
+- **Mineração (`bench/mine_dump.py`):** lê o 7z em streaming pelo `tar` do
+  Windows e aplica as regras 1 a 4 do PREREG §2.1 na ordem, sem depender da
+  ordem das linhas (o dump não vem ordenado por Id). Resultado
+  (`bench/results/m10/mining_stats.json`, gitignored): 24.101.803 perguntas;
+  335.514 de 2023-01-01 a 2024-03-31 com resposta aceita (regra 1); removidas
+  324.942 pela regra 2 (sem link para doc oficial), 6.727 pela regra 3 (placar
+  ou pergunta fechada) e 381 pela regra 4 (imagem ou tamanho); 391 sem a resposta
+  aceita no dump; **3.073 candidatas**, 0 posts com erro. As contagens fecham
+  exatamente.
+- **robots.txt:** conferido à mão pelo humano nos 15 hosts e cruzado com as
+  1.914 páginas citadas (DECISIONS 2026-10-15): 28 bloqueadas (27 de versões EOL
+  do Python e 1 do SQLite), listadas em `bench/tasks/robots_excluded.txt` e
+  nunca buscadas.
+- **Build (`bench/external_tasks.py`):** ordem aleatória estratificada por site
+  (semente 20261015), congelamento das páginas citadas em modo append e em lotes
+  (1.871 páginas novas, 0 falhas; as 50 originais intactas), regra 5 (19
+  candidatas ficaram sem página congelada), 5 URLs por tarefa (citadas mais
+  distratores do mesmo site) e evidência-ouro a partir dos blockquotes.
+  Resultado: **3.054 tarefas**, piloto com 2 por site. Por site: MDN 1.228,
+  Python 866, PostgreSQL 308, React 158, Docker 133, Angular 131, RFC 101,
+  Kubernetes 63, SQLite 50, Flask 16. Por tipo: code 1.827, multi_doc 724,
+  fact 332, version 171. Com evidência-ouro: 176 tarefas (193 citações).
+- **Emendas 2 e 3:** a auditoria cobre cerca de 20% da população primária,
+  depois da triagem, com seleção por hash por tarefa; o `count_tokens` lê
+  `<|endoftext|>` como texto comum, e o `app/` congelado do M10 passa a ser
+  `f1e9f2a`. A Emenda 4 (análises secundárias por tamanho de página e
+  extrapolação para sessões longas) veio da sessão principal.
+- **Ferramentas novas:** `bench/audit_external.py` (auditoria que pode parar e
+  retomar; exige o arquivo com os ids da população primária),
+  `snapshot(..., append=True)`, `CorpusStore` resolvendo também a URL final de
+  redirecionamentos, e o modelo `ExternalTask` em `bench/tasks_schema.py`.
+
+### M10 — pendente e dívidas
+
+- Fases 2 a 5, uma por vez, cada uma com plano aprovado.
+- Só 176 das 3.054 tarefas (5,8%) têm evidência-ouro: os blockquotes das
+  respostas costumam citar outra versão da doc, mensagens de erro ou outras
+  fontes. Nas demais, a taxonomia de falhas do PREREG §8 dá `unattributed`.
+- `bench/snapshot.py` não consulta robots.txt sozinho (no M10 a checagem foi
+  manual). Corrigir antes de qualquer snapshot novo.
+- O pool é desbalanceado (MDN e Python somam 68%). A ordem estratificada iguala
+  as cotas até os sites pequenos acabarem (Flask tem 16 tarefas).
+- Fora desta fase: o commit `b815b75` (README em inglês) faz o
+  `ruff format --check .` falhar por causa de um trecho de Python no README.
+
+### Como verificar a Fase 1
+
+```
+uv run pytest tests/unit/bench/test_mine_dump.py tests/unit/bench/test_external_tasks.py tests/unit/bench/test_audit_external.py tests/unit/bench/test_snapshot.py -q
+uv run python -c "from bench.tasks_schema import load_external_tasks as f; print(len(f('bench/tasks/external.yaml')))"
+```
+
+Reproduzir do zero leva horas e usa a rede: baixar o dump e conferir os sha1
+(PREREG Emenda 1), depois rodar
+`uv run python -m bench.mine_dump --posts <dir>/stackoverflow.com-Posts.7z --users <dir>/stackoverflow.com-Users.7z`
+e `uv run python -m bench.external_tasks --exclude bench/tasks/robots_excluded.txt`.
 
 ### M10 Fase 0 — o que foi feito
 
@@ -33,11 +97,6 @@ M10. Próximo passo: plano da Fase 1.
   M11 em `app/config.py` e `app/fetch/render.py`.
 - Antes da Fase 0, o trabalho pendente do `strong_rag` foi commitado sozinho
   (`3c8bd49`), com o gate completo passando.
-
-### M10 — pendente
-
-- Fases 1 a 5, uma por vez, cada uma com plano aprovado (ROADMAP M10, HUMANO.md
-  "No M10").
 
 ### Como verificar a Fase 0
 
