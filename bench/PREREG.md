@@ -246,8 +246,34 @@ The counts per cause rank the 1–3 changes that `decision.md` recommends.
 
 ## 12. Amendments
 
-None yet. Each entry gives the date, what changed, why, and a statement that no
-affected data had been seen.
+Each entry gives the date, what changed, why, and a statement that no affected
+data had been seen.
+
+### Amendment 1 — 2026-10-15: tasks come from the archived data dump, not the API
+
+- **What changed:** the source in §2.1 and the window in inclusion rule 1.
+  - Tasks come from the Stack Exchange data dump on archive.org (item
+    `stackexchange`):
+    - `stackoverflow.com-Posts.7z`: 23,026,928,274 bytes, sha1
+      `ea0b89fea1848593028a368b2bea046df9e835ef`.
+    - `stackoverflow.com-Users.7z`, for author names: 990,180,949 bytes, sha1
+      `0350c00079e9a3473d5aae863cbaa7e93408c735`.
+  - Rule 1 now reads: created on or after 2023-01-01, up to the newest post in
+    the dump (the miner records that date), with an accepted answer.
+  - Attribution follows the dump's `license.txt`: name the source site, link to
+    the question, and show author names linked to their profiles.
+  - The rest of §2.1 is unchanged.
+- **Why:** Stack Overflow's Acceptable Use Policy forbids automated collection
+  through its services, the API included, for testing or benchmarking AI tools
+  without written consent. The archived dump is distributed under CC BY-SA with
+  an explicit invitation to reuse it with attribution. Anyone can download the
+  same file and check it against the checksums above, so the task pool can be
+  reproduced.
+- **Data seen:** none. The dump was being downloaded and had not been parsed
+  when this amendment was committed.
+- **Expected effect:** the questions are older (2023 to early 2024), so the
+  model is more likely to know them already. The doc-dependence screen (§2.2)
+  removes those, so the mined pool has to be larger.
 
 ---
 
