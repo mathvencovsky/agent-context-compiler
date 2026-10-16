@@ -22,6 +22,16 @@ os orçamentos (8k de 0,691 para 0,669, −2,3 pts, IC [−5,7; +0,6]). O ganho 
 metade A não se repetiu. Nada mudou em `app/`. Detalhes em
 `bench/results/m10a/changes.md`.
 
+### M10a Fase 3 — item 3: seções picotadas entre pedaços (2026-10-16, rejeitado)
+
+Na metade A, das 29 tarefas sem um pedaço com metade da seção, 25 são seções
+picotadas (o chunker fecha o pedaço ao chegar em 200 tokens) e 4 são perdas de
+extração. `uv run python -m bench.m10a_expand --half A` testou puxar os vizinhos
+de cada pedaço escolhido: só a partir de 4k não perde nos orçamentos pequenos
+(+4,3 pts em 8k na metade A). Na metade B (`--half B --confirm adj_1_from_4k`)
+não se repetiu: +1,1 pts em 8k (IC [−3,4; +5,7]) e −3,4 pts em 4k. Rejeitado;
+nada mudou em `app/`. 0 chamadas pagas. Detalhes em `bench/results/m10a/changes.md`.
+
 ### M10a — busca léxica do produto alinhada ao benchmark (2026-10-16)
 
 O produto usava `websearch_to_tsquery`, que exige todas as palavras: uma
