@@ -405,8 +405,11 @@ def assemble_context(
             min_value=settings.min_value,
         )
 
-    # (7) Build fragments (already ordered by (document_id, ord)).
-    ir_by_version = _load_ir(blobs, version_ids)
+    # (7) Build fragments (already ordered by (document_id, ord)). Evidence is
+    # skipped when not asked for, except in the concise format, which needs it
+    # for PDF pages (SPEC §8).
+    with_evidence = req.include_evidence or req.response_format == "concise"
+    ir_by_version = _load_ir(blobs, version_ids) if with_evidence else {}
     fragments: list[Fragment] = []
     for candidate in selected:
         frag_key: Key = (candidate.document_id, candidate.ord)
@@ -426,7 +429,11 @@ def assemble_context(
                     rrf=rrf_by_key.get(frag_key, 0.0),
                     rerank=rerank_by_key.get(frag_key),
                 ),
-                evidence=[_best_quote(chunk, ir_by_version, req.query)],
+                evidence=(
+                    [_best_quote(chunk, ir_by_version, req.query)]
+                    if with_evidence
+                    else []
+                ),
             )
         )
 

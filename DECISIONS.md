@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-16: o `assemble` reaproveita o índice da versão; `include_evidence` passa a valer
+Contexto: cada `assemble` chamava `index_version` para cada URL, e o indexador apagava e reinseria os chunks e recalculava todos os embeddings (delete-then-insert, DECISIONS 2026-10-12): custo de embeddings e latência a cada chamada, mesmo com a página em cache, e `chunk_id` diferente entre chamadas iguais. `include_evidence` estava na SPEC e no request, mas nada o lia.
+Decisão (humano, 2026-10-16): migração `0005` adiciona `chunks.embedding_model`. `index_version` compara os chunks guardados com os novos campo a campo; se forem iguais e o modelo for o mesmo, não escreve nada (sem chamada ao provedor, ids estáveis). Se algo mudou (chunker, IR ou modelo), substitui as linhas e só calcula embeddings dos textos sem vetor guardado do mesmo modelo. Linhas antigas (`embedding_model` NULL) são recalculadas uma vez. `include_evidence: false` devolve `evidence: []` e não lê a IR; no formato conciso é ignorado.
+Alternativas: comparar só os textos, sem migração (troca de modelo com a mesma dimensão misturaria vetores sem aviso); cache de embeddings fora do banco (mais uma peça para operar).
+Consequências: a segunda chamada sobre a mesma versão não paga embeddings. A versão continua definida pelo hash do conteúdo bruto; a IR de uma versão só muda se for regravada.
+
 ## 2026-10-16: `response_format` conciso no `assemble`; padrão do MCP é conciso
 Contexto: medido na metade A do M10a (só cache), o JSON detalhado que o agente recebe pelo MCP custava +104% de tokens sobre o texto dos fragmentos em 4k e +77% em 8k (ids, quatro scores, um trecho de evidência que repete o texto, a pergunta ecoada, Markdown escapado em JSON). O SDK do MCP ainda mandava o mesmo JSON duas vezes (texto e `structuredContent`). O guia da Anthropic para ferramentas de agentes recomenda um `response_format` conciso/detalhado (docs/CONCORRENTES.md).
 Decisão (humano, 2026-10-16): `POST /v1/context/assemble` aceita `response_format` = `"detailed"` (padrão na API HTTP, sem mudança) ou `"concise"` (`context` em Markdown, `app/retrieve/render.py`). A ferramenta MCP `assemble_context` passa a ter `response_format="concise"` como padrão, devolve só texto e não manda `structuredContent`. O SDK ganha `assemble_concise`.

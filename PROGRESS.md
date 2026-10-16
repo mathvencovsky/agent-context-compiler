@@ -6,6 +6,14 @@ trilha 2 (qualidade da resposta). Da Fase 3 do M10 estão prontos o custo por
 sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 quatro braços do corpus congelado. Nenhuma sessão de agente foi feita no M10.
 
+### M10a — índice reaproveitado entre chamadas (2026-10-16)
+
+`assemble` não recalcula mais os embeddings a cada chamada: `index_version`
+mantém os chunks e os ids quando nada mudou e só calcula embeddings dos textos
+novos (migração `0005`, coluna `chunks.embedding_model`; rode `make migrate`).
+`include_evidence: false` agora omite a evidência. Testes em
+`tests/integration/test_indexer.py` e `test_assemble_api.py`.
+
 ### M10a — formato conciso para agentes (2026-10-16)
 
 Pesquisa de concorrentes em `docs/CONCORRENTES.md`. A lição mais cara: o JSON
