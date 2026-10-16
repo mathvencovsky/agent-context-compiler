@@ -10,6 +10,16 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-16: M10 Fase 3 — braços ao vivo e `EndConversation` (Emenda 8 do PREREG)
+Contexto: o PREREG §3 tem dois braços ao vivo, secundários e não reprodutíveis (exceção da SPEC §10.1). Com uma regra solta, o WebFetch lê qualquer domínio, inclusive o stackoverflow.com, onde está a resposta de referência. O Context7 mudou desde a Emenda 5: a ferramenta de documentação agora é `query-docs`, o endpoint hospedado exige chave e o plano gratuito tem 1.000 chamadas por mês, depois bloqueia. A documentação do Claude Code diz que o `--tools` não remove o `EndConversation` quando há outra ferramenta, o que faria a conferência do `init` do harness parar o piloto na primeira sessão com ferramenta.
+Decisão (plano aprovado pelo humano em 2026-10-16, com a condição de não pagar nada agora):
+- `webfetch_live`: `tools=["WebFetch"]`, sem servidor MCP, uma regra `WebFetch(domain:<host>)` por host do Apêndice C (`bench.mine_dump.ALLOWLIST`). O modelo que lê as páginas (`claude-haiku-5-5`) entra no custo; os preços de cache dele foram para o `bench/prices.yaml`, e o runner confere esse preço antes de pagar.
+- `context7_live`: servidor hospedado `https://mcp.context7.com/mcp` com `Authorization: Bearer <CONTEXT7_API_KEY>` (conta gratuita basta para o piloto). `query-docs` entrou no cegamento.
+- Falhas: checagem de domínio do WebFetch e API do Context7 (5xx, sem resposta) são de infraestrutura; página ao vivo inexistente é erro do agente; chave ou cota recusada pelo Context7 (texto simples, mesmo sem `is_error`, ou servidor em `needs-auth` no `init`) para a rodada depois de gravar o gasto da sessão.
+- A conferência do `init` aceita o `EndConversation` em todos os braços.
+Alternativas: WebFetch sem regras (o PREREG literal, que expõe a resposta de referência); servidor stdio do Context7 fixado por versão via npx (fixaria as descrições das ferramentas, mas baixa do npm a cada sessão nova e precisa de `cmd /c` no Windows); cota do Context7 como falha de infraestrutura (excluiria todas as tarefas restantes de todos os braços); plano Pro do Context7 (US$ 10 por mês mais excedente; o humano não quer gastar agora); tirar o `context7_live` já (a decisão pode esperar até antes do piloto, como o §3 prevê).
+Consequências: `bench/m10_agent.py`, `bench/prices.yaml`, `bench/judge_external.py`, `.env.example` (`CONTEXT7_API_KEY`), testes offline e a Emenda 8. Nada em `app/` mudou. Nada foi verificado no CLI real: o piloto confere o `EndConversation` no `init`, o modelo que o WebFetch cobra e o status do Context7 com chave recusada.
+
 ## 2026-10-16: M10 Fase 3 — harness do agente nos quatro braços do corpus congelado (Emenda 7 do PREREG)
 Contexto: a Fase 3 precisa de uma sessão do Claude Agent SDK por (tarefa, braço) em `no_docs`, `full_page`, `strong_rag` e `nina`, cumprindo o PREREG §4, com as ferramentas servidas pelo corpus congelado. Plano aprovado pelo humano em 2026-10-16, com quatro escolhas: API real em processo para o `nina`, render servido pelo corpus, saída das ferramentas inteira (com emenda) e juízes chamados ao fim de cada sessão.
 Decisão:
