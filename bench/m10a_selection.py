@@ -12,17 +12,21 @@ spend expected; the paid-call counts are printed) and every variant reuses them.
 
 Usage:
     uv run python -m bench.m10a_selection --half A
+    uv run python -m bench.m10a_selection --half B --confirm lambda_0
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import statistics
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from time import perf_counter
+from typing import Any
 
 import bench.runners.ours as ours_module
 from app.config import get_settings
@@ -30,6 +34,7 @@ from app.retrieve.select import Candidate, _adjusted_value
 from bench.anchor_qrels import in_tune_half
 from bench.corpus_store import CorpusStore
 from bench.m10a_baseline import BUDGETS, bench_task
+from bench.m10a_diagnose import paired
 from bench.runners.ours import OursRunner
 from bench.section_recall import HIT, coverage, units
 from bench.snapshot import DEFAULT_CORPUS_DIR
@@ -85,6 +90,65 @@ def select_variant(
     return selected
 
 
+def per_1k(rows: Mapping[str, Sequence[float]]) -> float:
+    """Coverage per thousand context tokens: mean coverage over mean tokens."""
+    return 1000 * statistics.mean(rows["coverage"]) / statistics.mean(rows["tokens"])
+
+
+def confirm(
+    candidate: Mapping[int, Mapping[str, Sequence[Any]]],
+    current: Mapping[int, Mapping[str, Sequence[Any]]],
+    strong: Mapping[int, Mapping[str, Sequence[float]]],
+    target: int = 8_000,
+) -> list[tuple[str, bool, str]]:
+    """The Phase 3 acceptance rule (DECISIONS 2026-10-16), one row per check.
+
+    Each mapping is budget -> per-task lists in the same task order: ``hit``,
+    ``coverage``, ``tokens`` and, for the NINA variants, ``ms``.
+    """
+    p = paired(candidate[target]["hit"], current[target]["hit"])
+    checks = [
+        (
+            f"hit gain at {target}: CI lower bound > 0",
+            p["lo"] > 0,
+            f"{p['diff']:+.3f} [{p['lo']:+.3f}, {p['hi']:+.3f}], p={p['p']:.4f}",
+        )
+    ]
+    for budget in candidate:
+        if budget == target:
+            continue
+        drop = statistics.mean(candidate[budget]["hit"]) - statistics.mean(
+            current[budget]["hit"]
+        )
+        checks.append((f"hit at {budget}: no drop over 2 pts", drop >= -0.02,
+                       f"{drop:+.3f}"))  # fmt: skip
+    for budget in candidate:
+        ours, theirs = per_1k(candidate[budget]), per_1k(strong[budget])
+        checks.append((f"coverage per 1k tokens at {budget} > strong_rag",
+                       ours > theirs, f"{ours:.3f} vs {theirs:.3f}"))  # fmt: skip
+    new = statistics.median(candidate[target]["ms"])
+    old = statistics.median(current[target]["ms"])
+    checks.append((f"median ms at {target}: at most +50%", new <= 1.5 * old,
+                   f"{new:.0f} vs {old:.0f}"))  # fmt: skip
+    return checks
+
+
+def _strong_rag(task_ids: Sequence[str]) -> dict[int, dict[str, list[float]]]:
+    """strong_rag's coverage and tokens per budget from the Phase 1 baseline."""
+    rows = {
+        (r["task_id"], int(r["budget"])): r
+        for r in csv.DictReader((_OUT / "baseline_real.csv").open(encoding="utf-8"))
+        if r["system"] == "strong_rag"
+    }
+    return {
+        b: {
+            "coverage": [float(rows[(t, b)]["coverage"]) for t in task_ids],
+            "tokens": [float(rows[(t, b)]["tokens"]) for t in task_ids],
+        }
+        for b in BUDGETS
+    }
+
+
 def _patched(gate: float, reasons: list[str]) -> Callable[..., list[Candidate]]:
     def select(candidates, *, budget_tokens, lambda_, min_value):  # type: ignore[no-untyped-def]
         return select_variant(
@@ -107,7 +171,10 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--half", choices=["A", "B"], default="A")
     parser.add_argument("--variants", default=",".join(VARIANTS))
+    parser.add_argument("--confirm", help="variant to test against current")
     args = parser.parse_args(argv)
+    if args.confirm:
+        args.variants = f"current,{args.confirm}"
 
     embeddings = CachingEmbeddingProvider(OpenAIEmbeddingProvider())
     reranker = CachingRerankProvider(JinaRerankProvider())
@@ -130,12 +197,9 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
     )
     prepared = []
     for i, key in enumerate(keys, 1):
-        prepared.append(
-            (
-                key,
-                base.prepare_candidates(bench_task(tasks[key["task_id"]]), store=store),
-            )
-        )
+        start = perf_counter()
+        prep = base.prepare_candidates(bench_task(tasks[key["task_id"]]), store=store)
+        prepared.append((key, prep, (perf_counter() - start) * 1000))
         if i % 25 == 0:
             print(f"prepared {i}/{len(keys)}", flush=True)
 
@@ -147,6 +211,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
     ]
     original = ours_module.select
     stop_counts: dict[str, Counter[str]] = {}
+    measured: dict[str, dict[int, dict[str, list[Any]]]] = {}
     try:
         for name in args.variants.split(","):
             lambda_, min_value, gate = VARIANTS[name]
@@ -161,11 +226,19 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
             for budget in BUDGETS:
                 reasons: list[str] = []
                 ours_module.select = _patched(gate, reasons)  # type: ignore[assignment]
-                hits, tokens = [], []
-                for key, prep in prepared:
+                cell: dict[str, list[Any]] = {
+                    "hit": [], "coverage": [], "tokens": [], "ms": []
+                }  # fmt: skip
+                for key, prep, prepare_ms in prepared:
+                    start = perf_counter()
                     result = runner.assemble_from_candidates(prep, budget_tokens=budget)
-                    hits.append(coverage(units(key["section"]), result.text) >= HIT)
-                    tokens.append(result.context_tokens)
+                    cov = coverage(units(key["section"]), result.text)
+                    cell["ms"].append(prepare_ms + (perf_counter() - start) * 1000)
+                    cell["hit"].append(cov >= HIT)
+                    cell["coverage"].append(cov)
+                    cell["tokens"].append(result.context_tokens)
+                measured.setdefault(name, {})[budget] = cell
+                hits, tokens = cell["hit"], cell["tokens"]
                 stop_counts[f"{name} {budget}"] = Counter(reasons)
                 cells.append(
                     f"{sum(hits) / len(hits):.3f} | {statistics.mean(tokens):,.0f}"
@@ -177,8 +250,20 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
     lines += [
         f"- {k}: {dict(v)}" for k, v in stop_counts.items() if k.startswith("current")
     ]
+    out = f"selection_{args.half}"
+    if args.confirm:
+        out = f"confirm_{args.confirm}_{args.half}"
+        strong = _strong_rag([key["task_id"] for key, _, _ in prepared])
+        checks = confirm(measured[args.confirm], measured["current"], strong)
+        lines += ["", f"## Acceptance: {args.confirm} vs current", ""]
+        lines += [
+            f"- {'PASS' if ok else 'FAIL'} {what}: {detail}"
+            for what, ok, detail in checks
+        ]
+        verdict = "ACCEPTED" if all(ok for _, ok, _ in checks) else "REJECTED"
+        lines += ["", f"**{verdict}**"]
     report = "\n".join(lines) + "\n"
-    (_OUT / f"selection_{args.half}.md").write_text(report, encoding="utf-8")
+    (_OUT / f"{out}.md").write_text(report, encoding="utf-8")
     print(report)
     print(f"paid calls: embeddings {embeddings.api_calls}, rerank {reranker.api_calls}")
 

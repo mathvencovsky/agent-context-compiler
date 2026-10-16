@@ -50,3 +50,30 @@ def test_a_gate_lets_the_penalty_order_but_not_stop() -> None:
         reasons=reasons,
     )  # fmt: skip
     assert [c.ord for c in got] == [0, 2] and reasons == ["gate"]
+
+
+def test_confirm_applies_every_acceptance_check() -> None:
+    from bench.m10a_selection import confirm
+
+    def cell(hits: list[bool], tokens: int, ms: float) -> dict[str, list]:  # type: ignore[type-arg]
+        return {
+            "hit": hits,
+            "coverage": [1.0 if h else 0.0 for h in hits],
+            "tokens": [tokens] * len(hits),
+            "ms": [ms] * len(hits),
+        }
+
+    current = {1_000: cell([True] * 50 + [False] * 50, 900, 100),
+               8_000: cell([True] * 50 + [False] * 50, 5_000, 100)}  # fmt: skip
+    better = {1_000: cell([True] * 49 + [False] * 51, 900, 120),
+              8_000: cell([True] * 80 + [False] * 20, 7_000, 120)}  # fmt: skip
+    strong = {1_000: cell([True] * 40 + [False] * 60, 1_000, 0),
+              8_000: cell([True] * 70 + [False] * 30, 8_000, 0)}  # fmt: skip
+    checks = confirm(better, current, strong)
+    assert [ok for _, ok, _ in checks] == [True, True, True, True, True]
+
+    worse = {**better, 1_000: cell([True] * 40 + [False] * 60, 900, 120)}
+    slow = {b: dict(c, ms=[200.0] * 100) for b, c in better.items()}
+    assert [ok for _, ok, _ in confirm(worse, current, strong)][1] is False
+    assert [ok for _, ok, _ in confirm(slow, current, strong)][-1] is False
+    assert [ok for _, ok, _ in confirm(current, current, strong)][0] is False
