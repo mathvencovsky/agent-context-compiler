@@ -36,7 +36,7 @@ top-50 lists, and no variant recovers more than 3: the bottleneck is the long
 question (title + body with code) as the query, not the lexical scorer. No
 change to `app/`; not taken to half B. 0 paid calls.
 
-## 3. Clean the question before searching (rejected on half A, 2026-10-16)
+## 3. Clean the question before searching (rejected on half B, 2026-10-16)
 
 `bench/m10a_query.py` drops code-like lines (indented, or at least 12% code
 symbols) and Stack Overflow filler from the body, keeping the title. Median
@@ -53,5 +53,15 @@ cleaned query for search, full question for the reranker, λ = 0): hit
 0.288 → 0.288 (1k), 0.475 → 0.504 (2k), 0.662 → 0.655 (4k), 0.719 → 0.748
 (8k), same tokens. 8k paired diff +2.9 pts, 95% CI [−0.7, +7.2], McNemar
 p = 0.29. Smaller than neighbor expansion on half A (+4.4 at 8k) and not
-distinguishable from zero; not taken to half B, no change to `app/`. Paid
-calls: 137 rerank, 0 embeddings.
+distinguishable from zero. Paid calls: 137 rerank, 0 embeddings.
+
+Half B at the human's request (`query_full_B.md`, 175 tasks under the answer
+key without inline script/style): **rejected**. Hit 0.291 → 0.269 (1k),
+0.440 → 0.423 (2k), 0.594 → 0.571 (4k), 0.691 → 0.669 (8k); 8k paired diff
+−2.3 pts, 95% CI [−5.7, +0.6], p = 0.29. Fails the 8k gain, the 1k and 4k
+drop limits and coverage per 1k tokens at 8k (0.088 vs strong_rag 0.089).
+The latency check also fails (6,144 vs 2,806 ms), but only because the strip
+pools were not cached and paid the vendor's latency. The half-A gain did not
+replicate: cleaning the question does not help. No change to `app/`. Paid
+calls: about 175 rerank and 175 embedding calls (one run cut by a Jina 429,
+resumed from the cache).

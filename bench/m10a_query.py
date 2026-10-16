@@ -18,6 +18,7 @@ import re
 import statistics
 from collections import Counter
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from app.config import get_settings
@@ -27,6 +28,7 @@ from bench.corpus_store import CorpusStore
 from bench.m10a_baseline import BUDGETS, bench_task
 from bench.m10a_diagnose import paired
 from bench.m10a_pool import pool_hits
+from bench.m10a_selection import _strong_rag, confirm
 from bench.runners.ours import _RRF_K, OursRunner, _lexical_ranks, _vector_ranks
 from bench.section_recall import HIT, coverage, units
 from bench.tasks_schema import load_external_tasks
@@ -85,6 +87,7 @@ def _full(
     store: CorpusStore,
     embeddings: Any,
     reranker: Any,
+    with_rule: bool = False,
 ) -> list[str]:  # pragma: no cover - real corpus
     """Full pipeline, current vs ``strip`` (cleaned query for search only).
 
@@ -106,25 +109,34 @@ def _full(
     ours_module._lexical_ranks = lambda indexed, query: original(
         indexed, swap.get(query, query)
     )
-    hits: dict[str, dict[int, list[bool]]] = {"current": {}, "strip": {}}
-    tokens: dict[str, dict[int, list[int]]] = {"current": {}, "strip": {}}
+    names = ("current", "strip")
+    measured: dict[str, dict[int, dict[str, list[Any]]]] = {
+        name: {b: {"hit": [], "coverage": [], "tokens": [], "ms": []} for b in BUDGETS}
+        for name in names
+    }
     try:
         for i, key in enumerate(keys, 1):
             ext = tasks[key["task_id"]]
             task = bench_task(ext)
             section_units = units(key["section"])
-            for name in hits:
+            for name in names:
                 swap.clear()
                 if name == "strip":
                     swap[task.question] = (
                         f"{ext.question_title}\n\n{clean_body(ext.question)}"
                     )
+                start = perf_counter()
                 prep = runner.prepare_candidates(task, store=store)
+                prepare_ms = (perf_counter() - start) * 1000
                 for budget in BUDGETS:
+                    start = perf_counter()
                     result = runner.assemble_from_candidates(prep, budget_tokens=budget)
                     cov = coverage(section_units, result.text)
-                    hits[name].setdefault(budget, []).append(cov >= HIT)
-                    tokens[name].setdefault(budget, []).append(result.context_tokens)
+                    cell = measured[name][budget]
+                    cell["ms"].append(prepare_ms + (perf_counter() - start) * 1000)
+                    cell["hit"].append(cov >= HIT)
+                    cell["coverage"].append(cov)
+                    cell["tokens"].append(result.context_tokens)
             if i % 25 == 0:
                 print(f"assembled {i}/{len(keys)}", flush=True)
     finally:
@@ -137,19 +149,29 @@ def _full(
         "| variant | " + " | ".join(f"hit {b} | tokens {b}" for b in BUDGETS) + " |",
         "|---" * (1 + 2 * len(BUDGETS)) + "|",
     ]
-    for name in hits:
+    for name in names:
         cells = [
-            f"{statistics.mean(hits[name][b]):.3f} | "
-            f"{statistics.mean(tokens[name][b]):,.0f}"
+            f"{statistics.mean(measured[name][b]['hit']):.3f} | "
+            f"{statistics.mean(measured[name][b]['tokens']):,.0f}"
             for b in BUDGETS
         ]
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
     lines += ["", "strip vs current, paired (diff [95% CI], McNemar p):", ""]
     for b in BUDGETS:
-        p = paired(hits["strip"][b], hits["current"][b])
+        p = paired(measured["strip"][b]["hit"], measured["current"][b]["hit"])
         lines.append(
             f"- {b}: {p['diff']:+.3f} [{p['lo']:+.3f}, {p['hi']:+.3f}], p={p['p']:.4f}"
         )
+    if with_rule:
+        strong = _strong_rag([key["task_id"] for key in keys])
+        checks = confirm(measured["strip"], measured["current"], strong)
+        lines += ["", "## Acceptance: strip vs current (DECISIONS 2026-10-16)", ""]
+        lines += [
+            f"- {'PASS' if ok else 'FAIL'} {what}: {detail}"
+            for what, ok, detail in checks
+        ]
+        verdict = "ACCEPTED" if all(ok for _, ok, _ in checks) else "REJECTED"
+        lines += ["", f"**{verdict}**"]
     return lines
 
 
@@ -187,7 +209,9 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
             JinaRerankProvider(), cache_dir=root / ".cache"
         )
         lines = [f"# M10a query cleaning, half {args.half} ({len(keys)} tasks)"]
-        lines += _full(keys, tasks, store, embeddings, reranker)
+        lines += _full(
+            keys, tasks, store, embeddings, reranker, with_rule=args.half == "B"
+        )
         report = "\n".join(lines) + "\n"
         (_OUT / f"query_full_{args.half}.md").write_text(report, encoding="utf-8")
         print(report)
