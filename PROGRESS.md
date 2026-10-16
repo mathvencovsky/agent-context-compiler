@@ -1,8 +1,8 @@
 # PROGRESS
 
 Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 2 CONCLUÍDA**
-(exceto o peso do envelope, que precisa da API rodando). Próximo passo: plano
-da Fase 2 (diagnóstico das falhas do NINA). Da Fase 3 do M10 continuam prontos o
+(a Fase 1 sem o peso do envelope, que precisa da API rodando). Próximo passo:
+plano da Fase 3 (correções em duas trilhas). Da Fase 3 do M10 continuam prontos o
 custo por sessão, o tamanho de página e os arquivos de saída; o harness do
 agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
 foi feita no M10.
