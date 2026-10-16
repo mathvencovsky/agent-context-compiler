@@ -7,15 +7,16 @@ web (the SPEC §10.1 exception). Every session:
 
 * runs ``claude-sonnet-5-5`` with the PREREG Appendix B system and task prompts,
   at most 15 turns, in a fresh empty directory with its own empty Claude
-  config directory, so no user or project settings, CLAUDE.md, memory or
-  stored login can load. The only credential is ``M10_AGENT_API_KEY``;
+  config directory and none of the runner's own ``ANTHROPIC_*``/``CLAUDE*``
+  variables (:func:`clean_environ`), so no user or project settings,
+  CLAUDE.md, memory or stored login can load. The only credential is
+  ``M10_AGENT_API_KEY``;
 * gets only its arm's documentation tools: a stdio MCP server from
   :mod:`bench.m10_tools` (frozen arms), Claude Code's built-in WebFetch limited
   to the PREREG Appendix C hosts (``webfetch_live``), or the hosted Context7
   server with ``CONTEXT7_API_KEY`` (``context7_live``; a free account is
   enough). Any other tool call is denied (``dontAsk``, never a permission
-  bypass). ``EndConversation``, which Claude Code keeps whenever another tool
-  exists, is the one exception (PREREG Amendment 8);
+  bypass);
 * is checked against its ``init`` message (tools, model, permission mode, API
   key auth): a mismatch stops the run, since every later session would break
   PREREG §4 the same way;
@@ -57,7 +58,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping, MutableMapping
 from contextlib import aclosing
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
@@ -123,8 +124,6 @@ ARM_TOOLS: dict[str, tuple[str, ...]] = {
 }
 #: Claude Code's own tools; every other arm tool comes from the arm's MCP server.
 BUILTIN_TOOLS = {"WebFetch"}
-#: Claude Code keeps this tool whenever another one exists (PREREG Amendment 8).
-END_CONVERSATION = "EndConversation"
 #: Amendment 8: WebFetch may fetch the PREREG Appendix C hosts without asking.
 WEBFETCH_RULES = [
     f"WebFetch(domain:{host})"
@@ -171,6 +170,9 @@ _INFRA_TOOL_ERRORS = (
 )
 #: Context7 refusing the run's key or quota, sent as plain text: stop the run.
 _STOP_TOOL_TEXTS = ("Invalid API key", "Rate limited or quota exceeded")
+#: The one inherited Claude variable kept: Claude Code on Windows may need it to
+#: find Git Bash, and it changes nothing the agent sees.
+_KEEP_ENV = {"CLAUDE_CODE_GIT_BASH_PATH"}
 
 QueryFn = Callable[..., AsyncIterator[Any]]
 
@@ -292,6 +294,18 @@ def session_options(
     )
 
 
+def clean_environ(environ: MutableMapping[str, str]) -> None:
+    """Drop the runner's own ``ANTHROPIC_*`` and ``CLAUDE*`` variables (PREREG §4).
+
+    The SDK hands its whole environment to the agent CLI, and ``env`` options
+    can only override. A run started from inside Claude Code would otherwise
+    pass on that session's effort, extra tools and account settings.
+    """
+    for name in [n for n in environ if n.upper().startswith(("ANTHROPIC", "CLAUDE"))]:
+        if name.upper() not in _KEEP_ENV:
+            del environ[name]
+
+
 def check_init(data: Mapping[str, Any], arm: str) -> None:
     """The session is set up as PREREG §4 requires, or raise."""
     servers = {s.get("name"): s.get("status") for s in data.get("mcp_servers") or []}
@@ -306,8 +320,7 @@ def check_init(data: Mapping[str, Any], arm: str) -> None:
         "permissionMode": "dontAsk",
         "apiKeySource": "ANTHROPIC_API_KEY",
     }
-    tools = [name for name in data.get("tools") or [] if name != END_CONVERSATION]
-    seen = {**data, "tools": sorted(tools)}
+    seen = {**data, "tools": sorted(data.get("tools") or [])}
     problems = [
         f"{key} is {seen.get(key)!r}, expected {want!r}"
         for key, want in expected.items()
@@ -652,6 +665,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         raise SystemExit(f"unknown arms: {sorted(unknown)}")
 
     os.chdir(args.data_root)
+    clean_environ(os.environ)
     keys = _AgentKey()
     api_key = keys.m10_agent_api_key
     settings = get_settings()

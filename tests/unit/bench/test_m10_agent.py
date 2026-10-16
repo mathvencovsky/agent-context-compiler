@@ -300,8 +300,26 @@ def test_context7_is_the_hosted_server_with_the_key() -> None:
 
 @pytest.mark.parametrize("arm", list(ARM_TOOLS))
 def test_init_check_passes_for_every_arm(arm: str) -> None:
-    # Claude Code keeps EndConversation whenever another tool exists (Amendment 8)
-    check_init(_init(arm, tools=[*tool_names(arm), "EndConversation"]).data, arm)
+    check_init(_init(arm).data, arm)  # as the real CLI 2.1.301 reports it
+
+
+def test_clean_environ_drops_the_runners_own_claude_variables() -> None:
+    environ = {
+        "CLAUDE_EFFORT": "max",
+        "CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES": "1",
+        "ANTHROPIC_BASE_URL": "https://proxy.example",
+        "CLAUDE_CODE_GIT_BASH_PATH": r"C:\Git\bin\bash.exe",
+        "PATH": r"C:\Windows",
+        "M10_AGENT_API_KEY": "k",
+    }
+
+    m10_agent.clean_environ(environ)
+
+    assert environ == {
+        "CLAUDE_CODE_GIT_BASH_PATH": r"C:\Git\bin\bash.exe",
+        "PATH": r"C:\Windows",
+        "M10_AGENT_API_KEY": "k",
+    }
 
 
 def test_arm_order_is_a_permutation_seeded_by_the_task_id() -> None:
