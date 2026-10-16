@@ -17,6 +17,16 @@ de cada pedaço escolhido: só a partir de 4k não perde nos orçamentos pequeno
 não se repetiu: +1,1 pts em 8k (IC [−3,4; +5,7]) e −3,4 pts em 4k. Rejeitado;
 nada mudou em `app/`. 0 chamadas pagas. Detalhes em `bench/results/m10a/changes.md`.
 
+### M10a — busca léxica do produto alinhada ao benchmark (2026-10-16)
+
+O produto usava `websearch_to_tsquery`, que exige todas as palavras: uma
+pergunta de 41 palavras voltava vazia. Agora `lexical_search` e o runner do
+benchmark usam a mesma função, `app/retrieve/lexical.overlap_ranks` (contagem de
+palavras da pergunta no pedaço), e os números medidos continuam valendo. Teste:
+`uv run pytest tests/integration/test_retrieve.py` (com `make up`). Dívida: a
+coluna `tsv` e o índice GIN ficaram sem uso; a busca pontua em Python todos os
+pedaços das versões pedidas. BM25 fica como experimento futuro (metades A/B).
+
 ### M10a Fase 3 — item 2: seção fora dos candidatos (2026-10-16, rejeitado)
 
 `uv run python -m bench.m10a_pool --half A` (só ranking, 0 chamadas pagas):

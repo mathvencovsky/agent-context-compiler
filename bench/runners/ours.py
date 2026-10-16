@@ -41,7 +41,6 @@ network and two runs over the same corpus produce byte-identical context
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -59,6 +58,7 @@ from app.index.chunker import Chunk, chunk_document
 from app.index.tokens import count_tokens
 from app.providers.embeddings.fake import FakeEmbeddingProvider
 from app.providers.rerank.fake import FakeRerankProvider
+from app.retrieve.lexical import overlap_ranks
 from app.retrieve.rerank import rerank_candidates
 from app.retrieve.rrf import rrf_fuse
 from app.retrieve.select import Candidate, cosine, select
@@ -76,9 +76,6 @@ _SEARCH_TOP_K = 50
 #: Fused ranking key: (document_id, ord) — deterministic RRF tie-break.
 _Key = tuple[str, int]
 
-#: Lowercase alphanumeric tokenizer for the in-memory lexical scorer.
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-
 #: Fixed chunk size (in cl100k_base tokens) for the ``ours_fixed_chunks`` ablation.
 _FIXED_CHUNK_TOKENS = 400
 
@@ -89,11 +86,6 @@ _SELECTION_LAMBDA = 0.5
 _MIN_VALUE = 0.05
 
 _PDF_CONTENT_TYPE = "application/pdf"
-
-
-def _tokenize(text: str) -> list[str]:
-    """Return lowercase alphanumeric tokens for ``text``."""
-    return _TOKEN_RE.findall(text.lower())
 
 
 @dataclass(frozen=True)
@@ -190,21 +182,9 @@ def _fixed_chunks(doc: Document) -> list[Chunk]:
 
 
 def _lexical_ranks(indexed: list[_IndexedChunk], query: str) -> list[_Key]:
-    """Deterministic in-memory lexical ranking (top-50) by token overlap.
-
-    Scores each chunk by the count of query tokens that occur in the chunk
-    (``ts``-like overlap), drops zero-overlap chunks, and breaks ties on the key
-    so the order is reproducible — the offline analogue of ``lexical_search``.
-    """
-    query_tokens = set(_tokenize(query))
-    scored: list[tuple[float, _Key]] = []
-    for item in indexed:
-        chunk_tokens = _tokenize(item.chunk.text)
-        overlap = sum(1 for t in chunk_tokens if t in query_tokens)
-        if overlap > 0:
-            scored.append((float(overlap), item.key))
-    scored.sort(key=lambda s: (-s[0], s[1]))
-    return [key for _, key in scored[:_SEARCH_TOP_K]]
+    """Lexical ranking (top-50): the product's ``overlap_ranks``, same keys."""
+    items = ((item.key, item.chunk.text) for item in indexed)
+    return overlap_ranks(items, query, _SEARCH_TOP_K)
 
 
 def _vector_ranks(
