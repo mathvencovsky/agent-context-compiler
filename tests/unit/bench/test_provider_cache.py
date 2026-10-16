@@ -15,7 +15,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bench.provider_cache import CachingEmbeddingProvider, CachingRerankProvider
+from bench.provider_cache import (
+    CachingEmbeddingProvider,
+    CachingRerankProvider,
+    SqliteStore,
+)
 
 
 class _FakeReranker:
@@ -123,3 +127,22 @@ def test_cache_appends_lines_and_skips_a_truncated_last_one(tmp_path: Path) -> N
         None,
     )
     assert path.read_text(encoding="utf-8") == '{"old": 1}'  # never rewritten
+
+
+def test_sqlite_store_serves_both_wrappers_without_loading_json(tmp_path: Path) -> None:
+    embedder, reranker = _FakeEmbedder(), _FakeReranker()
+    embed = CachingEmbeddingProvider(
+        embedder, store=SqliteStore(tmp_path / "embeddings.sqlite")
+    )
+    rerank = CachingRerankProvider(reranker, store=SqliteStore(tmp_path / "r.sqlite"))
+    embed.embed(["a", "bb"])
+    rerank.rerank("q", ["alpha"])
+
+    again = CachingEmbeddingProvider(
+        _FakeEmbedder(), store=SqliteStore(tmp_path / "embeddings.sqlite")
+    )
+    assert again.embed(["bb", "a"]) == [[2.0, 0.0, 1.0], [1.0, 0.0, 1.0]]
+    assert again.api_calls == 0
+    assert rerank.rerank("q", ["alpha"]) == [5.0] and reranker.calls == 1
+    assert len(SqliteStore(tmp_path / "embeddings.sqlite")) == 2
+    assert not list(tmp_path.glob("*.json*"))  # nothing written to the JSON cache

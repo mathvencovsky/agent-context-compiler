@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -97,6 +99,41 @@ class _JsonFileCache:
         return len(self._data)
 
 
+class SqliteStore:
+    """The same key -> JSON value cache in one SQLite file, read per key.
+
+    Nothing is loaded up front, so a process that starts once per agent session
+    (the M10 tool servers) does not parse a cache that has grown past a
+    gigabyte. One lock serializes access from the API's worker threads.
+    """
+
+    def __init__(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._db = sqlite3.connect(path, check_same_thread=False)
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS cache"
+            " (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+        self._lock = threading.Lock()
+
+    def get(self, key: str) -> object | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT value FROM cache WHERE key = ?", (key,)
+            ).fetchone()
+        return None if row is None else json.loads(row[0])
+
+    def put(self, key: str, value: object) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO cache VALUES (?, ?)", (key, json.dumps(value))
+            )
+
+    def __len__(self) -> int:
+        with self._lock:
+            return int(self._db.execute("SELECT count(*) FROM cache").fetchone()[0])
+
+
 class CachingRerankProvider:
     """Reranker wrapper that caches ``(query, documents) -> scores`` to disk.
 
@@ -123,10 +160,15 @@ class CachingRerankProvider:
         delegate: RerankProvider | _RerankLike,
         *,
         cache_dir: Path = DEFAULT_CACHE_DIR,
+        store: SqliteStore | None = None,
     ) -> None:
         self._delegate = delegate
         self.model = delegate.model
-        self._cache = _JsonFileCache(Path(cache_dir) / "rerank.json")
+        self._cache = (
+            store
+            if store is not None
+            else _JsonFileCache(Path(cache_dir) / "rerank.json")
+        )
         self.api_calls = 0
         self.hits = 0
 
@@ -158,11 +200,16 @@ class CachingEmbeddingProvider:
         delegate: EmbeddingProvider | _EmbedLike,
         *,
         cache_dir: Path = DEFAULT_CACHE_DIR,
+        store: SqliteStore | None = None,
     ) -> None:
         self._delegate = delegate
         self.model = delegate.model
         self.dim = delegate.dim
-        self._cache = _JsonFileCache(Path(cache_dir) / "embeddings.json")
+        self._cache = (
+            store
+            if store is not None
+            else _JsonFileCache(Path(cache_dir) / "embeddings.json")
+        )
         self.api_calls = 0
         self.hits = 0
 
