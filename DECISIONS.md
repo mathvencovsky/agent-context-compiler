@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-16: M10a Fase 3 — metades A/B e critério de aceite, antes de qualquer mudança
+Contexto: a Fase 3 vai ajustar o NINA na fatia `dev`; ajustar e medir nas mesmas tarefas premiaria decorar o gabarito.
+Decisão (plano aprovado pelo humano em 2026-10-16): as 315 tarefas com gabarito se dividem por hash com semente (`in_tune_half`: sha256 de `20261015:tune:<id>`, metade inferior) em A = 139 (ajuste) e B = 176 (confirmação). Uma mudança só entra se, na metade B: o IC 95% pareado (bootstrap) do acerto no orçamento-alvo ficar acima de zero; nenhum outro orçamento cair mais de 2 pontos; os tokens médios não subirem mais de 10%; a latência mediana não subir mais de 50%. Uma mudança por vez, cada uma com teste de regressão e uma linha em `bench/results/m10a/changes.md`; duas rodadas sem progresso numa causa, parar e reportar.
+Alternativas: medir tudo nas 315 (sem defesa contra sobreajuste); validação cruzada (mais complexa, sem ganho num gabarito deste tamanho).
+Consequências: `bench/anchor_qrels.in_tune_half`, com teste.
+
 ## 2026-10-15: M10a Fase 1 — gabarito de seção pelas âncoras e métrica de cobertura
 Contexto: o M10a mede o NINA sem LLM, pela seção que quem respondeu no Stack Overflow linkou (`página#âncora`). O gabarito não pode depender da extração do NINA nem do trafilatura, ou favoreceria um dos lados.
 Decisão (plano aprovado pelo humano em 2026-10-15): `bench/anchor_qrels.py` acha o elemento da âncora no HTML congelado e tira a seção do próprio HTML (wrapper com o id inteiro; cabeçalho até o próximo de mesmo nível ou maior, ou o wrapper que ele abre; `dt` do Sphinx com o seu `dl`; âncora vazia, o próximo elemento). Vale a primeira âncora da resposta que cai numa URL da tarefa, com seção de até 4.000 tokens (o orçamento padrão do `assemble`; acima disso é uma página, não um alvo) e ao menos uma frase de 4 palavras. `bench/section_recall.py` corta a seção em frases, normaliza (minúsculas, espaços, marcas de Markdown, escapes, `¶`) e mede a cobertura: a fração das frases presentes no contexto; acerto é cobertura ≥ 0,5. Os cortes de tamanho foram fixados olhando só os tamanhos do gabarito, antes de medir qualquer sistema.

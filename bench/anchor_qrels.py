@@ -27,6 +27,7 @@ Usage (local files only; no network):
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from collections import Counter
 from collections.abc import Sequence
@@ -38,6 +39,7 @@ import lxml.html
 
 from app.index.tokens import count_tokens
 from bench.corpus_store import CorpusStore
+from bench.external_tasks import SEED
 from bench.mine_dump import site_for_url
 from bench.section_recall import units
 from bench.snapshot import DEFAULT_CORPUS_DIR
@@ -54,6 +56,16 @@ _BREAKS = (
 _CELLS = ("td", "th")
 #: Larger "sections" are pages, not targets: the default ``assemble`` budget.
 MAX_SECTION_TOKENS = 4_000
+
+
+def in_tune_half(task_id: str, seed: int = SEED) -> bool:
+    """Half A (tune) of the keyed dev tasks; the rest is half B (confirm).
+
+    M10a Phase 3 tunes NINA on half A and accepts a change only if it also
+    holds on half B, so the dev slice is not simply memorized.
+    """
+    digest = hashlib.sha256(f"{seed}:tune:{task_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") < 2**63
 
 
 def anchor_links(answer_html: str) -> list[tuple[str, str]]:

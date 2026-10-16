@@ -154,3 +154,12 @@ def _task(urls: list[str]) -> ExternalTask:
             created="2023-01-02",
         ),
     )
+
+
+def test_tune_half_is_seeded_and_about_half() -> None:
+    from bench.anchor_qrels import in_tune_half
+
+    ids = [f"so-{n}" for n in range(4000)]
+    picks = [in_tune_half(i) for i in ids]
+    assert 0.47 < sum(picks) / len(picks) < 0.53
+    assert picks == [in_tune_half(i) for i in ids]
