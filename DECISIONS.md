@@ -16,6 +16,11 @@ Decisão (humano, 2026-10-16): `app/retrieve/lexical.overlap_ranks` faz a contag
 Alternativas: OR de lexemas no Postgres (sem IDF, palavras comuns dominam e ainda difere do benchmark); BM25 nos dois (na metade A empatou no pedaço único, 87 contra 87, e subiu no conjunto, 109 contra 105; fica como experimento futuro pela regra das metades A/B, que pode pedir chamadas pagas de rerank); as duas listas léxicas fundidas (correlacionadas, dobram o peso léxico, que na metade A ajuda menor).
 Consequências: SPEC §5 atualizada. `lexical_search` carrega todos os pedaços das versões pedidas e pontua em Python, sem índice (aceitável para poucas URLs por pedido). A coluna `tsv` e o índice GIN ficam sem uso; removê-los pede migração, fora deste passo. Pela Emenda 6 do PREREG, o `app/` precisa ser recongelado antes do piloto.
 
+## 2026-10-16: M10a Fase 3, item 4 — critério de aceite de extração (antes da metade B)
+Contexto: a correção de extração (contêiner dominante quando a página não tem `<main>`/`<article>`/`role="main"`) muda só as tarefas cujas páginas perdiam texto (11 na metade A, 28 na metade B). Com tão poucas tarefas mudando, o IC pareado em 8k da regra geral não teria poder.
+Decisão (humano, 2026-10-16, antes de qualquer medição de ponta a ponta): para o item 4, o IC em 8k é trocado por um critério de extração na metade B: a cobertura da seção na extração não cai em nenhuma tarefa, e a média das tarefas do PostgreSQL sobe. Continuam valendo: nenhum orçamento cai mais de 2 pts de acerto; cobertura por mil tokens acima da do strong_rag em todos os orçamentos; mediana de tempo em 8k no máximo +50%.
+Consequências: vale só para mudanças de extração; mudanças de busca e seleção seguem a regra geral.
+
 ## 2026-10-16: M10a — gabarito ignora `<script>`, `<style>` e `<template>`
 Contexto: no diagnóstico do item 4, 2 seções do gabarito ("Browser compatibility" do MDN) eram só CSS embutido: no HTML bruto a tabela de compatibilidade é montada no navegador.
 Decisão: `bench/anchor_qrels._text` descarta `<script>`, `<style>` e `<template>`. As 2 seções ficam sem unidades e saem do gabarito (`section_without_units`); nenhuma outra mudou. Gabarito: 313 tarefas (metade A 138, metade B 175).
