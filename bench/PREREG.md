@@ -455,6 +455,49 @@ data had been seen.
   from the page sizes of the frozen corpus (`bench/page_length.py`), which are
   not outcomes.
 
+### Amendment 8 — 2026-10-16: the live arms as built, and `EndConversation`
+
+- **What changed:** three rules for the live arms (§3) and one for every arm
+  (§4).
+  1. **`webfetch_live`** gets Claude Code's built-in WebFetch as its only tool.
+     It may fetch the Appendix C hosts, one `WebFetch(domain:<host>)` rule per
+     host, plus the documentation domains Claude Code preapproves in every
+     session. Any other host is denied. WebFetch reads each page with a second,
+     smaller model: Claude Code's `haiku` alias, expected to be
+     `claude-haiku-5-5` on the Anthropic API. Those tokens are billed, so they
+     count in the session's cost (§6).
+  2. **`context7_live`** gets the hosted Context7 server
+     (`https://mcp.context7.com/mcp`) with the human's Context7 API key; a free
+     account is enough for the pilot. Its tools are `resolve-library-id` and
+     `query-docs`. Version 2.0.0 of the server replaced `get-library-docs` with
+     `query-docs`, so `query-docs` joins the Amendment 5 blinding list. If the
+     human does not create the account, the arm is still dropped by amendment
+     before the pilot (§3).
+  3. **Live-service failures.**
+     - WebFetch's domain safety check failing, and Context7's API failing (a
+       5xx or no answer), are infrastructure failures (§10 point 3).
+     - A live page that no longer exists is the agent's failure: that is part
+       of what a live arm measures.
+     - Context7 refusing the key or the quota stops the run, with that
+       session's spend recorded. The run resumes once the key works again.
+  4. **`EndConversation`** is the one built-in tool §4 tolerates besides the
+     arm's tools. Claude Code keeps it in every session that has another tool,
+     and no option removes it. It only ends the session; a session it ends is
+     judged on its last message, as §4 says.
+- **Why:**
+  - WebFetch without rules can read stackoverflow.com, where the reference
+    answer lives, while the frozen arms only reach official documentation.
+  - Amendment 5 named the Context7 tools of an older server version.
+  - Context7's free plan allows 1,000 calls a month and then blocks the key. As
+    an infrastructure failure, a blocked key would exclude every remaining task
+    from every arm (§10 point 3). Stopping the run leaves that decision to the
+    human.
+  - The Claude Code tools reference says `--tools` cannot remove
+    `EndConversation` (CLI 2.1.213 or later; the SDK bundles 2.1.301). Without
+    this rule, no session with a tool could pass the §4 check.
+- **Data seen:** none. No agent session had run, and the Claude Code CLI had
+  never been launched.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
