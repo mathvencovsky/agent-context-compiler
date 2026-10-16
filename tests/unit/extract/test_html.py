@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from app.extract.html import extract_html
 from app.extract.ir import Block, Document, SourceInfo
 
@@ -212,3 +214,50 @@ def test_extraction_is_deterministic() -> None:
     first = extract_html(html, _source())
     second = extract_html(html, _source())
     assert first.model_dump() == second.model_dump()
+
+
+# A PostgreSQL-style page: no <main>/<article>/role="main", a header table of
+# links, then the content in a plain <div id="docContent">.
+_NO_MAIN = (
+    "<html><body><div class='navheader'><nav>Prev Up Next</nav></div>"
+    "<div id='docContent'>"
+    "<h2>9.4. String Functions</h2>"
+    "<p>This section describes functions for examining strings.</p>"
+    "<h3>9.4.1. format</h3>"
+    "<p>The function format produces output formatted like sprintf.</p>"
+    "<div class='table'><table><tr><th>Function</th></tr>"
+    "<tr><td>ascii ( text ) returns the numeric code of the first character.</td>"
+    "</tr></table></div></div>"
+    "<footer>Copyright</footer></body></html>"
+)
+
+
+def test_dominant_container_descends_to_the_content_div() -> None:
+    import lxml.html
+
+    from app.extract.html import _dominant_container
+
+    tree = lxml.html.fromstring(_NO_MAIN)
+    assert _dominant_container(tree, {}).get("id") == "docContent"
+
+
+def test_without_main_a_readability_pick_of_one_table_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import lxml.html
+
+    one_table = lxml.html.fromstring(
+        "<div><table><tr><td>ascii ( text ) returns the numeric code of the first "
+        "character.</td></tr></table></div>"
+    )
+    monkeypatch.setattr("app.extract.html._readability_subtree", lambda text: one_table)
+    doc = extract_html(_NO_MAIN, _source())
+    text = " ".join(b.text for b in doc.blocks)
+    assert "format produces output" in text and "Copyright" not in text
+    assert any(w.code == "readability_fallback" for w in doc.warnings)
+
+
+def test_without_main_a_complete_readability_pick_is_kept() -> None:
+    doc = extract_html(_NO_MAIN, _source())
+    assert "format produces output" in " ".join(b.text for b in doc.blocks)
+    assert not any(w.code == "readability_fallback" for w in doc.warnings)

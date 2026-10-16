@@ -157,7 +157,7 @@ class Document(BaseModel):
 
 **Regra do `block_id`:** `"b_" + sha1(" > ".join(heading_path) + "|" + type + "|" + text_normalizado)[:12]`. Se repetir dentro do documento, acrescente `_2`, `_3` e assim por diante, em ordem. Um bloco que não mudou entre versões mantém o mesmo id.
 
-**Extração HTML:** `readability-lxml` isola o conteúdo principal. Em seguida, um percorredor próprio sobre lxml converte o HTML principal em blocos. Se o readability descartar tabelas ou blocos de código que existiam no `<main>` ou `<article>` original, use o `<main>`/`<article>` diretamente e registre o warning `readability_fallback`. Remova `nav`, `footer`, `aside`, botões de "copiar" e âncoras de permalink (`¶`, `#`).
+**Extração HTML:** `readability-lxml` isola o conteúdo principal. Em seguida, um percorredor próprio sobre lxml converte o HTML principal em blocos. Se o readability descartar tabelas ou blocos de código que existiam no `<main>` ou `<article>` original, use o `<main>`/`<article>` diretamente e registre o warning `readability_fallback`. Se a página não tiver `<main>`, `<article>` nem `role="main"`, desça a partir do `<body>` enquanto um filho tiver pelo menos 80% do texto fora de chrome; se o readability guardar menos de 80% do texto desse contêiner, use o contêiner e registre o mesmo warning (DECISIONS.md 2026-10-16). Remova `nav`, `footer`, `aside`, botões de "copiar" e âncoras de permalink (`¶`, `#`).
 
 **Extração PDF:** pdfplumber, página a página. Títulos são inferidos por tamanho de fonte relativo (os 2 maiores tamanhos acima do corpo). Tabelas via `extract_tables`. Cabeçalhos e rodapés repetidos em mais de 50% das páginas são removidos. PDF sem texto extraível gera o erro `extraction_empty` com a observação de que OCR está fora do escopo.
 
