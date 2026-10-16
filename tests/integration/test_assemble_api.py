@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
@@ -276,3 +277,52 @@ def test_assemble_ablation_rejected_in_production(
     )
     assert response.status_code == 400, response.text
     assert response.json()["error"]["code"] == "ablation_not_allowed"
+
+
+# B5 (M10a track B): a page we may not or cannot read fails loudly, with the
+# reason per URL, never as a silent empty context (firecrawl/firecrawl#4241).
+
+
+def test_assemble_robots_disallowed_only_url_is_an_explicit_422(
+    assemble_harness: AssembleHarness,
+) -> None:
+    harness = assemble_harness
+    harness.transport.robots_body = b"User-agent: *\nDisallow: /\n"
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+
+    response = _post(harness, {"query": "q", "urls": [harness.url(_AUTH_PATH)]})
+
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "all_sources_failed"
+    assert error["details"]["sources"] == [
+        {"url": harness.url(_AUTH_PATH), "status": "robots_disallowed"}
+    ]
+
+
+def test_assemble_blocked_url_is_reported_next_to_a_good_one(
+    assemble_harness: AssembleHarness,
+) -> None:
+    harness = assemble_harness
+    blocked = "/blocked"
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+    harness.transport.set(blocked, lambda: httpx.Response(403, text="Forbidden"))
+    body = {
+        "query": "How are classes defined and used?",
+        "urls": [harness.url(_AUTH_PATH), harness.url(blocked)],
+        "selection": "truncate",
+    }
+
+    detailed = _post(harness, body)
+    concise = _post(harness, {**body, "response_format": "concise"})
+
+    assert detailed.status_code == 200, detailed.text
+    statuses = {s["url"]: s["status"] for s in detailed.json()["sources"]}
+    assert statuses[harness.url(_AUTH_PATH)] == "ok"
+    assert statuses[harness.url(blocked)] not in {"ok", ""}
+    assert any(
+        w.get("url") == harness.url(blocked) for w in detailed.json()["warnings"]
+    )
+    assert detailed.json()["fragments"]
+    status = statuses[harness.url(blocked)]
+    assert f"- source {harness.url(blocked)}: {status}" in concise.json()["context"]
