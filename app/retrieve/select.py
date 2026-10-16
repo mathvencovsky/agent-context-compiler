@@ -20,7 +20,9 @@ survivors are returned ordered by ``(document_id, ord)`` so a reader follows the
 documents in order (SPEC §6 step 6).
 
 Pure and deterministic: no I/O, no LLM. ``λ`` and ``min_value`` come from config
-(``selection_lambda = 0.5``, ``min_value = 0.05``; SPEC §6).
+(``selection_lambda = 0.0``, ``min_value = 0.0``; DECISIONS.md 2026-10-16). With
+``λ = 0`` the penalty is off: selection ranks by value per token and fills the
+budget, which is what the agent asked for.
 """
 
 from __future__ import annotations

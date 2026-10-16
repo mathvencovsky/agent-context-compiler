@@ -502,7 +502,7 @@ def make_ours_runners(
 
     ``lambda_``/``min_value`` default to the module constants (today's behavior);
     the Stage 2 real run passes the FROZEN selection knobs read from
-    ``app.config`` (λ=0.3, min_value=0.0) so the benchmark measures the frozen
+    ``app.config`` (λ=0, min_value=0.0) so the benchmark measures the frozen
     pipeline. ``lexical_weight`` is the M8 weighted-RRF precision knob (default
     1.0 = identity); the Stage 2 run passes the frozen config value so the fused
     ranking matches the product. These knobs are only READ here, never written,

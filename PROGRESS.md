@@ -1,11 +1,28 @@
 # PROGRESS
 
-Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 2 CONCLUÍDA**
-(a Fase 1 sem o peso do envelope, que precisa da API rodando). Próximo passo:
-plano da Fase 3 (correções em duas trilhas). Da Fase 3 do M10 continuam prontos o
+Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 3 em andamento**
+(item 1 da trilha 1 aceito: `selection_lambda` 0,3 → 0,0). Próximo passo: item 2
+da trilha 1 (seção fora dos candidatos). Da Fase 3 do M10 continuam prontos o
 custo por sessão, o tamanho de página e os arquivos de saída; o harness do
 agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
 foi feita no M10.
+
+### M10a Fase 3 — item 1: parada precoce da seleção (2026-10-16)
+
+As 315 tarefas com gabarito foram divididas por sorteio com semente em metade A
+(139, ajuste) e metade B (176, confirmação); `bench.anchor_qrels.in_tune_half`.
+Regra de aceite em DECISIONS.md (2026-10-16, com a troca da regra de tokens
+feita antes de ver a metade B). Na metade A, `uv run python -m
+bench.m10a_selection --half A` comparou λ, `min_value` e um portão por valor:
+λ = 0 foi o melhor. Na metade B, `uv run python -m bench.m10a_selection --half B
+--confirm lambda_0` aceitou: acerto em 8k de 0,608 para 0,688 (+8,0 pts, IC
+[+4,0; +12,5]), sem queda em 1k/2k/4k, cobertura por mil tokens acima da do
+strong_rag em todos os orçamentos. 0 chamadas pagas. `app/config.py` passou a
+λ = 0,0, com teste de regressão em `tests/unit/retrieve/test_select.py`.
+Detalhes em `bench/results/m10a/changes.md`. Como testar: os dois comandos
+acima (precisam do cache em `bench/.cache/`). Dívida: o `.env` local com
+`SELECTION_LAMBDA=0.3` sobrepõe o novo padrão; recongelar `app/` por emenda
+antes do piloto.
 
 ### M10a Fase 2 — diagnóstico das falhas do NINA (2026-10-16)
 

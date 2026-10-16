@@ -176,3 +176,28 @@ def test_output_is_ordered_by_document_then_ord() -> None:
         ("doc_a", 5),
         ("doc_b", 0),
     ]
+
+
+def test_frozen_config_fills_the_budget_with_related_chunks() -> None:
+    """M10a regression: the frozen λ must not end selection with budget left.
+
+    With λ=0.3 a lower-value chunk that resembles one already chosen scored
+    below ``min_value`` and stopped the loop; on real docs tasks that dropped
+    the answer section (DECISIONS.md 2026-10-16).
+    """
+    from app.config import Settings
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    pool = [
+        _cand(chunk_id=0, document_id="d", ord=0, value=1.0, tokens=100,
+              embedding=[1.0, 0.0]),
+        _cand(chunk_id=1, document_id="d", ord=1, value=0.2, tokens=100,
+              embedding=[1.0, 0.0]),
+    ]  # fmt: skip
+    got = select(
+        pool,
+        budget_tokens=1_000,
+        lambda_=settings.selection_lambda,
+        min_value=settings.min_value,
+    )
+    assert [c.chunk_id for c in got] == [0, 1]

@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-16: M10a Fase 3 — `selection_lambda` 0,3 → 0,0 (confirmado na metade B)
+Contexto: a penalidade de diversidade (λ = 0,3, calibrada no M8 em tarefas sintéticas de uma URL) encerrava a seleção com orçamento sobrando nas tarefas reais de documentação (em 8k, 145 de 176 tarefas da metade B pararam por valor ajustado abaixo de `min_value`).
+Decisão: `selection_lambda = 0.0` em `app/config.py` e `.env.example`. Ajustado na metade A; na metade B (176 tarefas, só cache, 0 chamadas pagas) passou em todas as regras: +8,0 pts em 8k (IC 95% pareado [+4,0; +12,5], p = 0,0001), +1,1/+1,7/+4,0 pts em 1k/2k/4k, cobertura por mil tokens acima da do strong_rag em todos os orçamentos (0,091 contra 0,088 em 8k), mediana de tempo +10%. Detalhes em `bench/results/m10a/changes.md`.
+Alternativas: portão por valor de rerank (gate_0.1: 70,5% em 8k na metade A, abaixo do λ = 0); λ = 0,1 ou 0,2 (ganhos menores).
+Consequências: com λ = 0 a seleção ordena por valor por token e enche o orçamento; `min_value = 0` só corta candidatos de valor negativo. A Amendment 6 do PREREG exige recongelar `app/` antes do piloto. Quem tem `SELECTION_LAMBDA` no `.env` local precisa trocar para 0.0, pois o `.env` tem precedência sobre o padrão.
+
 ## 2026-10-16: M10a Fase 3 — regra de tokens trocada por eficiência contra o strong_rag (antes da metade B)
 Contexto: na metade A, a seleção atual parou por "valor ajustado abaixo de `min_value`" em 116 de 139 tarefas em 8k, com orçamento sobrando: a penalidade de diversidade (λ = 0,3, calibrada no M8 em tarefas sintéticas de uma URL) encerrava a seleção. Sem ela (λ = 0) o acerto subiu 3,6 pts em 2k, 7,9 em 4k e 7,2 em 8k (−1,4 em 1k), mas com +11% de tokens em 4k e +35% em 8k, o que a regra "tokens médios no máximo +10%" barrava. Usar o orçamento que o agente pediu é a própria correção, não desperdício.
 Decisão (humano, 2026-10-16, depois da metade A e antes de qualquer número da metade B): no critério de aceite, a regra de tokens passa a ser "os tokens podem subir até o orçamento pedido, desde que a cobertura por mil tokens do NINA fique acima da do strong_rag no mesmo orçamento e na mesma metade". As outras regras não mudam.

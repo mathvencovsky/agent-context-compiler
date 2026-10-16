@@ -86,7 +86,10 @@ class Settings(BaseSettings):
     # assemble._coverage classifies on, so threshold and observable are the same
     # grandeza (32/31/33 insufficient/partial/sufficient over the 96 dev tasks,
     # via _coverage at runtime with the rounded thresholds).
-    selection_lambda: float = 0.3
+    # selection_lambda: M10a Phase 3 moved it 0.3 -> 0.0 (DECISIONS.md
+    # 2026-10-16): on multi-URL docs tasks the diversity penalty ended the
+    # selection with budget left; tuned on dev half A, confirmed on half B.
+    selection_lambda: float = 0.0
     min_value: float = 0.0
     coverage_low: float = 0.6137
     coverage_high: float = 0.7746
