@@ -98,9 +98,9 @@ bench.m10a_selection --half A` comparou λ, `min_value` e um portão por valor:
 strong_rag em todos os orçamentos. 0 chamadas pagas. `app/config.py` passou a
 λ = 0,0, com teste de regressão em `tests/unit/retrieve/test_select.py`.
 Detalhes em `bench/results/m10a/changes.md`. Como testar: os dois comandos
-acima (precisam do cache em `bench/.cache/`). Dívida: o `.env` local com
-`SELECTION_LAMBDA=0.3` sobrepõe o novo padrão; recongelar `app/` por emenda
-antes do piloto.
+acima (precisam do cache em `bench/.cache/`). Resolvido em 2026-10-17: o
+`.env` local passou a `SELECTION_LAMBDA=0.0`, e a Emenda 9 do PREREG recongelou
+`app/` no commit que a adiciona.
 
 ### M10a Fase 2 — diagnóstico das falhas do NINA (2026-10-16)
 

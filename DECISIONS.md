@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: M10 — `app/` recongelado depois do M10a (Emenda 9 do PREREG)
+Contexto: a Emenda 3 congelou o `app/` para as execuções do M10, e a Emenda 6 (ponto 4) permitiu mudá-lo durante o M10a, usando só a fatia de desenvolvimento, desde que uma emenda posterior nomeasse o novo commit. Cinco commits mudaram o `app/` desde a Emenda 3: λ de 0,3 para 0,0 (`3aa411d`), busca léxica por sobreposição de palavras (`8feaa2d`), contêiner dominante na extração (`6649b4a`), formato conciso no `assemble` e no MCP (`23b887f`), e índice reaproveitado com `include_evidence` funcionando (`666bdba`, migração `0005`). O `.env` local tinha `SELECTION_LAMBDA=0.3`, que anulava a mudança aceita.
+Decisão (aprovada pelo humano em 2026-10-17): a Emenda 9 recongela `app/` e `migrations/` no commit que a adiciona, para o piloto, a triagem e a rodada principal. O `.env` local passou a `SELECTION_LAMBDA=0.0`, e os valores efetivos de busca, seleção, modelos e TTL de cache foram conferidos contra os padrões do código: todos batem. Uma execução cujos valores efetivos difiram desses padrões é inválida.
+Alternativas: seguir com o congelamento da Emenda 3 (mediria um produto que já não existe); recongelar só depois do piloto (o piloto mediria código diferente da rodada principal).
+Consequências: `bench/PREREG.md` §12 ganha a Emenda 9; a migração `0005` já está aplicada no banco local (`alembic current` = head). Nenhum código mudou neste passo.
+
 ## 2026-10-16: M10 Fase 3 — braços ao vivo (Emenda 8 do PREREG) e ambiente limpo para o agente
 Contexto: o PREREG §3 tem dois braços ao vivo, secundários e não reprodutíveis (exceção da SPEC §10.1). Com uma regra solta, o WebFetch lê qualquer domínio, inclusive o stackoverflow.com, onde está a resposta de referência. O Context7 mudou desde a Emenda 5: a ferramenta de documentação agora é `query-docs`, o endpoint hospedado pede chave e o plano gratuito tem 1.000 chamadas por mês, depois bloqueia. Uma conferência gratuita no CLI real (2.1.301, chave inválida, parada na mensagem `init`) mostrou ainda que o SDK passa ao CLI do agente todo o ambiente do runner, inclusive as variáveis de uma sessão do Claude Code.
 Decisão (plano aprovado pelo humano em 2026-10-16, com a condição de não pagar nada agora; as duas correções da conferência, aprovadas depois):

@@ -491,6 +491,43 @@ data had been seen.
   been started with an invalid key, to read each arm's `init` message; no model
   call was made.
 
+### Amendment 9 — 2026-10-17: `app/` re-frozen after the M10a product work
+
+- **What changed:** from this amendment on, every M10 run (pilot, screen and
+  main run) uses `app/` and `migrations/` as of the commit that adds this
+  amendment. This replaces the freeze named by Amendment 3, as Amendment 6
+  point 4 provides. Five commits changed the code since then, all from milestone
+  M10a:
+  1. `3aa411d`: selection λ goes from 0.3 to 0.0.
+  2. `8feaa2d`: the product's lexical search uses the benchmark's word-overlap
+     ranking (`app/retrieve/lexical.overlap_ranks`) instead of
+     `websearch_to_tsquery`, which required every word of the query.
+  3. `6649b4a`: HTML extraction uses the page's dominant content container when
+     the page has no `<main>`, `<article>` or `role="main"` and readability
+     keeps less than 80% of that container's text.
+  4. `23b887f`: `assemble` accepts `response_format="concise"` (Markdown). The
+     MCP server uses it by default and no longer sends a second, structured
+     copy of each result.
+  5. `666bdba`: `assemble` reuses a version's index and embeddings between
+     calls (migration `0005`), and `include_evidence: false` now omits the
+     evidence.
+- **Effective settings:**
+  - Runs take NINA's retrieval and selection settings, and its provider models,
+    from `app/config.py` at the freeze commit. A run whose effective values
+    differ from those defaults is invalid.
+  - The project owner's local `.env` had `SELECTION_LAMBDA=0.3`, which would
+    have overridden the new default. It was changed to 0.0 on 2026-10-17.
+  - After that change, the effective values were checked against the code
+    defaults: λ, `min_value`, both coverage thresholds, RRF k, the lexical
+    weight, the embedding and rerank models, and the cache TTL. All match.
+- **Why:** the five changes were developed and accepted on the development slice
+  (Amendment 6), never on pilot, evaluation-pool or bridge tasks. Without a new
+  freeze, the code named by Amendment 3 would no longer be the product under
+  test.
+- **Data seen:** none from any arm. No agent session, screen, pilot or main-run
+  session had run. The M10a measurements used only the development slice, which
+  Amendment 6 keeps out of the evaluation.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
