@@ -14,6 +14,7 @@ rejected when ``ENV == "production"``.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 
@@ -377,3 +378,50 @@ def test_injected_page_text_stays_in_content_fields(
     # NINA's notice comes first, before any page text.
     first, second = concise["context"].splitlines()[:2]
     assert first.startswith("[untrusted_source]") and _INJECTION not in first + second
+
+
+# B4 (M10a track B): a page of ~500k tokens (the size one pilot task cites)
+# goes through assemble without error and within the budget. Synthetic, so no
+# pilot data is used.
+
+
+def _huge_page(sections: int = 600) -> bytes:
+    parts = []
+    for n in range(sections):
+        sentences = " ".join(
+            f"Section {n} sentence {k} explains option opt_{n}_{k} with value {n * k}."
+            for k in range(60)
+        )
+        parts.append(f"<h2>Option group {n}</h2><p>{sentences}</p>")
+    return (
+        "<html><head><title>Huge reference</title></head><body><main>"
+        f"<h1>Reference</h1>{''.join(parts)}</main></body></html>"
+    ).encode()
+
+
+def test_assemble_on_a_huge_page_stays_within_budget(
+    assemble_harness: AssembleHarness,
+) -> None:
+    from app.index.tokens import count_tokens
+
+    harness = assemble_harness
+    page = _huge_page()
+    assert count_tokens(page.decode()) > 450_000
+    harness.transport.set(_AUTH_PATH, lambda: html_response(page))
+
+    started = time.perf_counter()
+    response = _post(
+        harness,
+        {
+            "query": "What does option opt_417_3 do?",
+            "urls": [harness.url(_AUTH_PATH)],
+            "max_tokens": 4000,
+        },
+    )
+    elapsed = time.perf_counter() - started
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["fragments"]
+    assert body["token_usage"]["output_tokens"] <= 4000
+    assert elapsed < 300, f"assemble took {elapsed:.0f}s"
