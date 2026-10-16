@@ -35,3 +35,15 @@ Half A, answer chunk in the fused top-30 (ranking only, `pool_A.md`): current
 top-50 lists, and no variant recovers more than 3: the bottleneck is the long
 question (title + body with code) as the query, not the lexical scorer. No
 change to `app/`; not taken to half B. 0 paid calls.
+
+## 3. Clean the question before searching (rejected on half A, 2026-10-16)
+
+`bench/m10a_query.py` drops code-like lines (indented, or at least 12% code
+symbols) and Stack Overflow filler from the body, keeping the title. Median
+body keeps 80% of its words; 15 of 1,809 dropped lines look like prose. Half A,
+answer chunk in the fused top-30 (ranking only, `query_A.md`): current 87/139,
+cleaned on the lexical side 89, cleaned on both sides 89, title plus first 60
+cleaned words 84. The cleaned query embedding adds nothing over cleaning the
+lexical side alone. +2 tasks is within the spread of the lexical variants in
+item 2 (none taken to half B), so no rerank run and no change to `app/`. Paid
+calls: 139 batched OpenAI embedding calls (new query texts), 0 rerank.

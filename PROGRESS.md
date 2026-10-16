@@ -7,6 +7,16 @@ custo por sessão, o tamanho de página e os arquivos de saída; o harness do
 agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
 foi feita no M10.
 
+### M10a Fase 3 — item 2b: limpar a pergunta antes de buscar (2026-10-16, rejeitado)
+
+`uv run python -m bench.m10a_query --half A --data-root <checkout com os dados>`
+(só ranking): tirar do corpo as linhas de código e as frases de praxe do Stack
+Overflow leva o pedaço da resposta aos 30 candidatos em 89 de 139 tarefas,
+contra 87 hoje; só o título e as 60 primeiras palavras limpas, 84. Ganho de 2
+tarefas, do tamanho do ruído das variantes do item 2; não foi para o rerank nem
+para a metade B. Nada mudou em `app/`. 139 chamadas pagas de embedding, 0 de
+rerank. Detalhes em `bench/results/m10a/changes.md`.
+
 ### M10a — busca léxica do produto alinhada ao benchmark (2026-10-16)
 
 O produto usava `websearch_to_tsquery`, que exige todas as palavras: uma
