@@ -20,6 +20,21 @@ aceito pelo critério de extração (DECISIONS.md). O gabarito passou a ignorar
 chamadas de embedding e 39 de rerank. Dívida: o `angular.io` (casca de
 JavaScript no HTML bruto) segue vazio.
 
+### M10a Fase 3 — item 2b: limpar a pergunta antes de buscar (2026-10-16, rejeitado na metade B)
+
+`uv run python -m bench.m10a_query --half A --data-root <checkout com os dados>`
+(só ranking): tirar do corpo as linhas de código e as frases de praxe do Stack
+Overflow leva o pedaço da resposta aos 30 candidatos em 89 de 139 tarefas,
+contra 87 hoje; só o título e as 60 primeiras palavras limpas, 84. Ganho de 2
+tarefas, do tamanho do ruído das variantes do item 2. A pedido do humano, o
+pipeline completo na metade A (`--full`, 137 chamadas pagas de rerank): acerto
+em 8k de 0,719 para 0,748 (+2,9 pts, IC 95% [−0,7; +7,2], p = 0,29), 2k +2,9,
+4k −0,7, 1k igual, mesmos tokens. Na metade B (175 tarefas, também a pedido
+do humano, cerca de 175 chamadas pagas de rerank): **rejeitado**, pior em todos
+os orçamentos (8k de 0,691 para 0,669, −2,3 pts, IC [−5,7; +0,6]). O ganho da
+metade A não se repetiu. Nada mudou em `app/`. Detalhes em
+`bench/results/m10a/changes.md`.
+
 ### M10a Fase 3 — item 3: seções picotadas entre pedaços (2026-10-16, rejeitado)
 
 Na metade A, das 29 tarefas sem um pedaço com metade da seção, 25 são seções

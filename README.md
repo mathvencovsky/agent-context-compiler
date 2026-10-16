@@ -147,7 +147,9 @@ pip install ./sdk/python
 from nina_client import NinaClient
 
 client = NinaClient("http://localhost:8000", "nina_...")
-ctx = client.assemble("Which header carries the API key?", ["https://docs.example.com/auth"])
+ctx = client.assemble(
+    "Which header carries the API key?", ["https://docs.example.com/auth"]
+)
 for frag in ctx.fragments:
     print(frag.source_url, frag.md)
 ```
