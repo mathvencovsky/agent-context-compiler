@@ -20,14 +20,25 @@ from bench.corpus_store import CorpusStore
 
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fail any bench test that opens a real network connection."""
+    """Fail any bench test that opens a network connection beyond loopback.
+
+    Loopback stays open because asyncio's event loop on Windows builds its
+    self-pipe from a loopback socket pair.
+    """
 
     def _blocked(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("real network access attempted in a test")
 
+    connect = socket.socket.connect
+
+    def _loopback_only(sock: socket.socket, address: object) -> None:
+        if isinstance(address, tuple) and address[0] in ("127.0.0.1", "::1"):
+            return connect(sock, address)
+        raise AssertionError("real network access attempted in a test")
+
     monkeypatch.setattr(socket, "create_connection", _blocked)
     monkeypatch.setattr(socket, "getaddrinfo", _blocked)
-    monkeypatch.setattr(socket.socket, "connect", _blocked, raising=True)
+    monkeypatch.setattr(socket.socket, "connect", _loopback_only, raising=True)
 
 
 #: Two small self-contained HTML documents used as the frozen corpus. The quotes
