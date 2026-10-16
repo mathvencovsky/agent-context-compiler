@@ -28,13 +28,16 @@ from bench import m10_agent
 from bench.corpus_store import CorpusStore
 from bench.m10_agent import (
     ARM_TOOLS,
+    CONTEXT7_URL,
     DOCS_SYSTEM,
     MODEL,
     NO_DOCS_SYSTEM,
     PREREG_ARMS,
+    WEBFETCH_MODEL,
     HarnessError,
     RunContext,
     arm_order,
+    check_init,
     run,
     run_session,
     session_options,
@@ -54,9 +57,17 @@ _PRICES = {
             "cache_write_usd_per_1m": 2.5,
             "cache_read_usd_per_1m": 0.2,
             "output_usd_per_1m": 10.0,
-        }
+        },
+        WEBFETCH_MODEL: {
+            "input_usd_per_1m": 0.1,
+            "cache_write_usd_per_1m": 0.125,
+            "cache_read_usd_per_1m": 0.01,
+            "output_usd_per_1m": 0.5,
+        },
     }
 }
+#: The arms without an MCP server.
+_NO_SERVER = ("no_docs", "webfetch_live")
 _FINAL = 'abs() it is.\n{"answer": "Use abs(x).", "citations": []}'
 
 
@@ -105,9 +116,9 @@ _CORRECT = '{"correct": true, "reason": "same fix"}'
 def _init(arm: str, **extra: object) -> SystemMessage:
     data = {
         "tools": tool_names(arm),
-        "mcp_servers": [{"name": "docs", "status": "connected"}]
-        if ARM_TOOLS[arm]
-        else [],
+        "mcp_servers": []
+        if arm in _NO_SERVER
+        else [{"name": "docs", "status": "connected"}],
         "model": MODEL,
         "permissionMode": "dontAsk",
         "apiKeySource": "ANTHROPIC_API_KEY",
@@ -125,20 +136,22 @@ def _result(**extra: Any) -> ResultMessage:
         "num_turns": 2,
         "session_id": "s",
         "result": _FINAL,
-        "model_usage": {
-            MODEL: {
-                "inputTokens": 1_000,
-                "outputTokens": 200,
-                "cacheReadInputTokens": 5_000,
-                "cacheCreationInputTokens": 3_000,
-                "webSearchRequests": 0,
-                "costUSD": 0.0,
-                "contextWindow": 1_000_000,
-                "maxOutputTokens": 64_000,
-            }
-        },
+        "model_usage": {MODEL: _AGENT_USAGE},
     }
     return ResultMessage(**(fields | extra))
+
+
+_AGENT_USAGE = {
+    "inputTokens": 1_000,
+    "outputTokens": 200,
+    "cacheReadInputTokens": 5_000,
+    "cacheCreationInputTokens": 3_000,
+    "webSearchRequests": 0,
+    "costUSD": 0.0,
+    "contextWindow": 1_000_000,
+    "maxOutputTokens": 64_000,
+}
+_AGENT_USD = (1_000 * 2.0 + 3_000 * 2.5 + 5_000 * 0.2 + 200 * 10.0) / 1e6
 
 
 def _session(
@@ -242,8 +255,10 @@ def test_options_meet_prereg_section_4(arm: str, tmp_path: Path) -> None:
     assert options.system_prompt == (
         NO_DOCS_SYSTEM if arm == "no_docs" else DOCS_SYSTEM
     )
-    assert options.tools == []  # no built-in tool
-    assert options.allowed_tools == tool_names(arm)
+    # no built-in tool, except WebFetch in its own arm
+    assert options.tools == (["WebFetch"] if arm == "webfetch_live" else [])
+    if arm != "webfetch_live":
+        assert options.allowed_tools == tool_names(arm)
     assert options.permission_mode == "dontAsk"  # never a bypass
     assert options.setting_sources == []
     assert options.strict_mcp_config and options.verbatim_prompts
@@ -254,10 +269,39 @@ def test_options_meet_prereg_section_4(arm: str, tmp_path: Path) -> None:
         "CLAUDE_CONFIG_DIR": str(tmp_path / "c"),
         "MAX_MCP_OUTPUT_TOKENS": "1000000",
     }
-    if arm == "no_docs":
+    if arm in _NO_SERVER:
         assert options.mcp_servers == {}
+    elif arm == "context7_live":
+        assert options.mcp_servers["docs"]["url"] == CONTEXT7_URL  # type: ignore[index]
     else:
         assert options.mcp_servers["docs"]["args"][:3] == ["-m", "bench.m10_tools", arm]  # type: ignore[index]
+
+
+def test_webfetch_may_fetch_the_documentation_hosts_only(tmp_path: Path) -> None:
+    options = session_options(
+        "webfetch_live", workdir=tmp_path, config_dir=tmp_path, api_key="k", server=None
+    )
+    rules = options.allowed_tools
+    assert "WebFetch(domain:docs.python.org)" in rules
+    assert {"WebFetch(domain:reactjs.org)", "WebFetch(domain:react.dev)"} <= set(rules)
+    # a bare rule would allow every site, the reference answer's included
+    assert "WebFetch" not in rules
+    assert not any("stackoverflow" in rule for rule in rules)
+
+
+def test_context7_is_the_hosted_server_with_the_key() -> None:
+    server = m10_agent.tool_server("context7_live", Path("d"), Path("l"), "ctx7sk-1")
+    assert server == {
+        "type": "http",
+        "url": "https://mcp.context7.com/mcp",
+        "headers": {"Authorization": "Bearer ctx7sk-1"},
+    }
+
+
+@pytest.mark.parametrize("arm", list(ARM_TOOLS))
+def test_init_check_passes_for_every_arm(arm: str) -> None:
+    # Claude Code keeps EndConversation whenever another tool exists (Amendment 8)
+    check_init(_init(arm, tools=[*tool_names(arm), "EndConversation"]).data, arm)
 
 
 def test_arm_order_is_a_permutation_seeded_by_the_task_id() -> None:
@@ -279,8 +323,7 @@ def test_session_records_usage_cost_effort_and_verdict(
     assert (record.input_tokens, record.output_tokens) == (1_000, 200)
     assert record.cache_read_input_tokens == 5_000
     assert record.cache_creation_input_tokens == 3_000
-    expected_usd = (1_000 * 2.0 + 3_000 * 2.5 + 5_000 * 0.2 + 200 * 10.0) / 1e6
-    assert record.cost_usd == pytest.approx(expected_usd)
+    assert record.cost_usd == pytest.approx(_AGENT_USD)
     assert (record.turns, record.tool_calls) == (2, 1)
     assert record.tool_result_tokens > 0
     assert not record.hit_max_turns and not record.infra_error
@@ -290,7 +333,7 @@ def test_session_records_usage_cost_effort_and_verdict(
     assert [m["type"] for m in transcript][0] == "SystemMessage"
     assert transcript[-1]["type"] == "ResultMessage"
     spend = _lines(ctx.out / "spend.jsonl")
-    assert spend[0]["cost_usd"] == pytest.approx(expected_usd)
+    assert spend[0]["cost_usd"] == pytest.approx(_AGENT_USD)
     assert spend[0]["usage"][MODEL]["output_tokens"] == 200
     roles = [j["role"] for j in _lines(ctx.out / "judgments.jsonl")]
     assert roles[:2] == ["primary", "second"]
@@ -375,6 +418,101 @@ def test_an_agent_side_tool_error_is_not_infrastructure(
     record = run_session(_task(), "full_page", _ctx(tmp_path, store, query))
 
     assert not record.infra_error and len(query.options) == 1
+
+
+@pytest.mark.parametrize(
+    ("arm", "text"),
+    [
+        ("webfetch_live", "Unable to verify if domain react.dev is safe to fetch."),
+        ("webfetch_live", "The safety check for domain react.dev is rate-limited"),
+        ("context7_live", "Request failed with status 503. Please try again later."),
+        ("context7_live", "Error fetching library context. Please try again later."),
+    ],
+)
+def test_a_live_service_failure_is_infrastructure(
+    arm: str, text: str, tmp_path: Path, store: CorpusStore
+) -> None:
+    query = FakeQuery(_session(arm, tool_text=text, tool_error=True), _session(arm))
+
+    record = run_session(_task(), arm, _ctx(tmp_path, store, query))
+
+    assert not record.infra_error and len(query.options) == 2
+
+
+@pytest.mark.parametrize(
+    ("arm", "text"),
+    [
+        ("webfetch_live", "Request failed with status code 404"),
+        (
+            "context7_live",
+            "The library you are trying to access does not exist. Please try with a "
+            "different library ID.",
+        ),
+    ],
+)
+def test_a_missing_live_page_is_the_agents_failure(
+    arm: str, text: str, tmp_path: Path, store: CorpusStore
+) -> None:
+    query = FakeQuery(_session(arm, tool_text=text, tool_error=True))
+
+    record = run_session(_task(), arm, _ctx(tmp_path, store, query))
+
+    assert not record.infra_error and len(query.options) == 1
+
+
+def test_context7_refusing_the_quota_stops_the_run_with_its_spend_kept(
+    tmp_path: Path, store: CorpusStore
+) -> None:
+    # resolve-library-id sends Context7's refusal as plain text, not as an error
+    refused = _session(
+        "context7_live",
+        tool_text="Rate limited or quota exceeded. Upgrade your plan at "
+        "https://context7.com/plans for higher limits.",
+    )
+    ctx = _ctx(tmp_path, store, FakeQuery(refused))
+
+    with pytest.raises(HarnessError, match="Context7"):
+        run([_task()], ["context7_live"], ctx, cap_usd=100.0)
+
+    (spend,) = _lines(ctx.out / "spend.jsonl")
+    assert spend["cost_usd"] == pytest.approx(_AGENT_USD)
+    assert not (ctx.out / "results.csv").exists()  # a resumed run redoes it
+
+
+def test_context7_refusing_the_key_at_connect_stops_the_run(
+    tmp_path: Path, store: CorpusStore
+) -> None:
+    servers = [{"name": "docs", "status": "needs-auth"}]
+    query = FakeQuery([_init("context7_live", mcp_servers=servers), _result()])
+
+    with pytest.raises(HarnessError):
+        run_session(_task(), "context7_live", _ctx(tmp_path, store, query))
+    assert len(query.options) == 1  # not retried
+
+
+def test_only_context7_can_stop_the_run(tmp_path: Path, store: CorpusStore) -> None:
+    page = _session("full_page", tool_text="Invalid API key: what HTTP 401 means")
+
+    record = run_session(_task(), "full_page", _ctx(tmp_path, store, FakeQuery(page)))
+
+    assert record.correct is True
+
+
+def test_a_webfetch_session_bills_the_page_reading_model_too(
+    tmp_path: Path, store: CorpusStore
+) -> None:
+    reader = {"inputTokens": 20_000, "outputTokens": 300}
+    usage = {MODEL: _AGENT_USAGE, WEBFETCH_MODEL: reader}
+    query = FakeQuery(_session("webfetch_live", result=_result(model_usage=usage)))
+    ctx = _ctx(tmp_path, store, query)
+
+    record = run_session(_task(), "webfetch_live", ctx)
+
+    reader_usd = (20_000 * 0.1 + 300 * 0.5) / 1e6
+    assert record.cost_usd == pytest.approx(_AGENT_USD + reader_usd)
+    assert record.input_tokens == 21_000
+    (spend,) = _lines(ctx.out / "spend.jsonl")
+    assert set(spend["usage"]) == {MODEL, WEBFETCH_MODEL}
 
 
 def test_turn_limit_counts_as_incorrect_without_a_judge(

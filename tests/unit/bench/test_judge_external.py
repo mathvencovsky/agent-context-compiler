@@ -151,9 +151,10 @@ def test_spec_citation_check_works_for_external_tasks(tmp_path: Path) -> None:
 
 
 def test_blind_masks_arm_revealing_names_in_the_candidate() -> None:
-    text = "Per assemble_context and WebFetch (NINA, Context7, web_fetch): use end=''"
+    text = "Per assemble_context and WebFetch (NINA, Context7, query-docs): use end=''"
     assert blind(text) == "Per [tool] and [tool] ([tool], [tool], [tool]): use end=''"
     assert judge_prompt(_task(), text).endswith(
         "CANDIDATE:\nPer [tool] and [tool] ([tool], [tool], [tool]): use end=''"
     )
+    assert blind("via web_fetch") == "via [tool]"
     assert blind("the pagination API") == "the pagination API"  # whole words only

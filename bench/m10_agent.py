@@ -1,16 +1,21 @@
 # ruff: noqa: E501 - the PREREG Appendix B prompts must stay byte-identical.
 """M10 agent sessions: one Claude Agent SDK session per (task, arm) (PREREG §3-§6, §10).
 
-The arms here are the four that read the frozen corpus: ``no_docs``,
-``full_page``, ``strong_rag`` and ``nina``. Every session:
+The six PREREG §3 arms: ``no_docs``, ``full_page``, ``strong_rag`` and ``nina``
+read the frozen corpus; ``webfetch_live`` and ``context7_live`` read the live
+web (the SPEC §10.1 exception). Every session:
 
 * runs ``claude-sonnet-5-5`` with the PREREG Appendix B system and task prompts,
   at most 15 turns, in a fresh empty directory with its own empty Claude
   config directory, so no user or project settings, CLAUDE.md, memory or
   stored login can load. The only credential is ``M10_AGENT_API_KEY``;
-* gets no built-in tool, only its arm's documentation tools (a stdio MCP server
-  from :mod:`bench.m10_tools`); any other tool call is denied (``dontAsk``,
-  never a permission bypass);
+* gets only its arm's documentation tools: a stdio MCP server from
+  :mod:`bench.m10_tools` (frozen arms), Claude Code's built-in WebFetch limited
+  to the PREREG Appendix C hosts (``webfetch_live``), or the hosted Context7
+  server with ``CONTEXT7_API_KEY`` (``context7_live``; a free account is
+  enough). Any other tool call is denied (``dontAsk``, never a permission
+  bypass). ``EndConversation``, which Claude Code keeps whenever another tool
+  exists, is the one exception (PREREG Amendment 8);
 * is checked against its ``init`` message (tools, model, permission mode, API
   key auth): a mismatch stops the run, since every later session would break
   PREREG §4 the same way;
@@ -18,9 +23,10 @@ The arms here are the four that read the frozen corpus: ``no_docs``,
   context for every arm (PREREG Amendment 7).
 
 Each session becomes one ``results.csv`` row (:mod:`bench.m10_records`) with
-billed usage, cost (:mod:`bench.session_cost`), turns, tool calls, tool-result
-tokens (cl100k), wall time and the turn-limit and infrastructure flags. Every
-SDK message goes to ``transcripts/``, each attempt's per-model usage and cost to
+billed usage (WebFetch also bills its page-reading model,
+:data:`WEBFETCH_MODEL`), cost (:mod:`bench.session_cost`), turns, tool calls,
+tool-result tokens (cl100k), wall time and the turn-limit and infrastructure
+flags. Every SDK message goes to ``transcripts/``, each attempt's per-model usage and cost to
 ``spend.jsonl`` (the run total for the spending cap and the ±3% check), every
 judge ruling to ``judgments.jsonl``.
 
@@ -29,10 +35,13 @@ and is judged as the session ends: primary and second judge, the ~10% recheck
 and citation precision. Hitting the turn limit, or an API refusal such as a
 prompt over the context window, counts as incorrect with no judge call. An
 infrastructure failure (a crash, an API 5xx or rate limit after the CLI's
-retries, a tool server that is down or failing) is retried up to 2 times; a
-session still failing keeps ``infra_error`` and no verdict (PREREG §10).
+retries, a tool server that is down or failing, WebFetch's domain safety check
+or Context7's API failing) is retried up to 2 times; a session still failing
+keeps ``infra_error`` and no verdict (PREREG §10). A live service refusing the
+run's key or quota stops the run once that session's spend is recorded.
 
-Usage (paid: needs M10_AGENT_API_KEY, the judge keys and cache prices):
+Usage (paid: needs M10_AGENT_API_KEY, the judge keys, CONTEXT7_API_KEY for
+context7_live and cache prices):
     uv run python -m bench.m10_agent --cap-usd 30 [--split pilot] [--arms nina,full_page] [--limit N] [--data-root DIR]
 """
 
@@ -72,6 +81,7 @@ from bench.grade import _grade_citations
 from bench.judge_external import Verdict, final_answer, in_recheck_sample, judge
 from bench.m10_records import SessionRecord, append_answer, append_record, done_pairs
 from bench.m10_tools import INFRA_ERROR
+from bench.mine_dump import ALLOWLIST
 from bench.session_cost import session_cost_usd
 from bench.tasks_schema import ExternalTask
 
@@ -108,7 +118,21 @@ ARM_TOOLS: dict[str, tuple[str, ...]] = {
     "full_page": ("fetch_page",),
     "strong_rag": ("search_docs",),
     "nina": ("resolve_url", "assemble_context", "get_document"),
+    "webfetch_live": ("WebFetch",),
+    "context7_live": ("resolve-library-id", "query-docs"),
 }
+#: Claude Code's own tools; every other arm tool comes from the arm's MCP server.
+BUILTIN_TOOLS = {"WebFetch"}
+#: Claude Code keeps this tool whenever another one exists (PREREG Amendment 8).
+END_CONVERSATION = "EndConversation"
+#: Amendment 8: WebFetch may fetch the PREREG Appendix C hosts without asking.
+WEBFETCH_RULES = [
+    f"WebFetch(domain:{host})"
+    for host in sorted({host for rules in ALLOWLIST.values() for host, _ in rules})
+]
+#: The model WebFetch reads pages with: Claude Code's ``haiku`` alias on the API.
+WEBFETCH_MODEL = "claude-haiku-5-5"
+CONTEXT7_URL = "https://mcp.context7.com/mcp"
 MODEL = "claude-sonnet-5-5"
 MAX_TURNS = 15
 #: PREREG §10: an infrastructure failure is retried up to 2 times.
@@ -133,8 +157,20 @@ _USAGE_FIELDS = {
 }
 #: API statuses the CLI already retried that still count as transient.
 _TRANSIENT = {408, 409, 429}
-#: A tool error with one of these is the harness's failure, not the agent's.
-_INFRA_TOOL_ERRORS = (INFRA_ERROR, "Server error '500")
+#: A tool error with one of these is the harness's or a service's failure, not
+#: the agent's (a live page's own 404 stays the agent's).
+_INFRA_TOOL_ERRORS = (
+    INFRA_ERROR,
+    "Server error '500",
+    # WebFetch's domain safety check at api.anthropic.com
+    "Unable to verify if domain",
+    "The safety check for domain",
+    # Context7's API: a 5xx, or no answer at all
+    "Request failed with status 5",
+    "Error fetching library context",
+)
+#: Context7 refusing the run's key or quota, sent as plain text: stop the run.
+_STOP_TOOL_TEXTS = ("Invalid API key", "Rate limited or quota exceeded")
 
 QueryFn = Callable[..., AsyncIterator[Any]]
 
@@ -161,6 +197,8 @@ class Attempt:
     failed: bool = False
     #: Why it is an infrastructure failure; empty when it is not.
     infra_error: str = ""
+    #: Why the run must stop once this attempt's spend is recorded.
+    halt: str = ""
     wall_ms: int = 0
 
 
@@ -177,6 +215,7 @@ class RunContext:
     store: CorpusStore
     commit: str
     query_fn: QueryFn
+    context7_key: str = ""
 
 
 def task_prompt(task: ExternalTask) -> str:
@@ -187,7 +226,10 @@ def task_prompt(task: ExternalTask) -> str:
 
 def tool_names(arm: str) -> list[str]:
     """The names the agent sees for ``arm``'s tools."""
-    return [f"mcp__{SERVER}__{name}" for name in ARM_TOOLS[arm]]
+    return [
+        name if name in BUILTIN_TOOLS else f"mcp__{SERVER}__{name}"
+        for name in ARM_TOOLS[arm]
+    ]
 
 
 def arm_order(task_id: str) -> list[str]:
@@ -197,9 +239,17 @@ def arm_order(task_id: str) -> list[str]:
     return order
 
 
-def tool_server(arm: str, data_root: Path, log: Path) -> dict[str, Any] | None:
-    """The stdio MCP server the CLI starts for ``arm`` (none for ``no_docs``)."""
-    if not ARM_TOOLS[arm]:
+def tool_server(
+    arm: str, data_root: Path, log: Path, context7_key: str = ""
+) -> dict[str, Any] | None:
+    """The MCP server the CLI starts or reaches for ``arm``, if it has one."""
+    if arm == "context7_live":
+        return {
+            "type": "http",
+            "url": CONTEXT7_URL,
+            "headers": {"Authorization": f"Bearer {context7_key}"},
+        }
+    if set(ARM_TOOLS[arm]) <= BUILTIN_TOOLS:  # no tool, or only built-in ones
         return None
     args = ["-m", "bench.m10_tools", arm, "--data-root", str(data_root)]
     if arm == "nina":
@@ -227,8 +277,8 @@ def session_options(
         max_turns=MAX_TURNS,
         cwd=str(workdir),
         setting_sources=[],  # no user, project or local settings, so no CLAUDE.md
-        tools=[],  # no built-in tool
-        allowed_tools=tool_names(arm),
+        tools=[name for name in ARM_TOOLS[arm] if name in BUILTIN_TOOLS],
+        allowed_tools=WEBFETCH_RULES if arm == "webfetch_live" else tool_names(arm),
         permission_mode="dontAsk",  # what is not allowed is denied; never a bypass
         mcp_servers={SERVER: server} if server else {},  # type: ignore[dict-item]
         strict_mcp_config=True,
@@ -245,7 +295,10 @@ def session_options(
 def check_init(data: Mapping[str, Any], arm: str) -> None:
     """The session is set up as PREREG §4 requires, or raise."""
     servers = {s.get("name"): s.get("status") for s in data.get("mcp_servers") or []}
-    if servers != ({SERVER: "connected"} if ARM_TOOLS[arm] else {}):
+    if servers.get(SERVER) == "needs-auth":
+        raise HarnessError(f"the {arm} tool service refused the key")
+    no_server = set(ARM_TOOLS[arm]) <= BUILTIN_TOOLS
+    if servers != ({} if no_server else {SERVER: "connected"}):
         raise InfraError(f"tool server not ready: {servers}")
     expected = {
         "tools": sorted(tool_names(arm)),
@@ -253,7 +306,8 @@ def check_init(data: Mapping[str, Any], arm: str) -> None:
         "permissionMode": "dontAsk",
         "apiKeySource": "ANTHROPIC_API_KEY",
     }
-    seen = {**data, "tools": sorted(data.get("tools") or [])}
+    tools = [name for name in data.get("tools") or [] if name != END_CONVERSATION]
+    seen = {**data, "tools": sorted(tools)}
     problems = [
         f"{key} is {seen.get(key)!r}, expected {want!r}"
         for key, want in expected.items()
@@ -352,7 +406,11 @@ async def run_attempt(
                                 continue
                             text = _text(block.content)
                             attempt.tool_result_tokens += count_tokens(text)
-                            if block.is_error and text.startswith(_INFRA_TOOL_ERRORS):
+                            if arm == "context7_live" and text.startswith(
+                                _STOP_TOOL_TEXTS
+                            ):
+                                attempt.halt = f"Context7 refused the run: {text[:200]}"
+                            elif block.is_error and text.startswith(_INFRA_TOOL_ERRORS):
                                 error = f"tool failure: {text[:200]}"
                     elif isinstance(message, ResultMessage):
                         result = message
@@ -387,7 +445,10 @@ async def run_attempts(
                 config_dir=config_dir,
                 api_key=ctx.api_key,
                 server=tool_server(
-                    arm, ctx.data_root, ctx.out / "candidates" / f"{tag}.jsonl"
+                    arm,
+                    ctx.data_root,
+                    ctx.out / "candidates" / f"{tag}.jsonl",
+                    ctx.context7_key,
                 ),
             )
             attempt = await run_attempt(
@@ -407,6 +468,8 @@ async def run_attempts(
                 "infra_error": attempt.infra_error,
             },
         )
+        if attempt.halt:
+            raise HarnessError(attempt.halt)
         if not attempt.infra_error:
             break
     return attempt, cost
@@ -552,10 +615,14 @@ def frozen_commit(results: Path) -> str:
 
 
 class _AgentKey(BaseSettings):
-    """The agent's key: the dedicated workspace, never a judge's (PREREG §4, §6)."""
+    """The agent's key: the dedicated workspace, never a judge's (PREREG §4, §6).
+
+    Also the Context7 key of ``context7_live``.
+    """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     m10_agent_api_key: str | None = None
+    context7_api_key: str | None = None
 
 
 def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
@@ -585,7 +652,8 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         raise SystemExit(f"unknown arms: {sorted(unknown)}")
 
     os.chdir(args.data_root)
-    api_key = _AgentKey().m10_agent_api_key
+    keys = _AgentKey()
+    api_key = keys.m10_agent_api_key
     settings = get_settings()
     if not (
         api_key and settings.bench_answerer_api_key and settings.bench_judge_api_key
@@ -593,9 +661,14 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         raise SystemExit(
             "set M10_AGENT_API_KEY, BENCH_ANSWERER_API_KEY (OpenAI judge) and BENCH_JUDGE_API_KEY (second judge)"
         )
+    if "context7_live" in arms and not keys.context7_api_key:
+        raise SystemExit(
+            "set CONTEXT7_API_KEY (a free Context7 account is enough) or leave context7_live out of --arms"
+        )
     prices = load_prices(REPO_ROOT / "bench/prices.yaml")
+    models = [MODEL, WEBFETCH_MODEL] if "webfetch_live" in arms else [MODEL]
     try:  # fail before paying, not after the first session
-        session_cost_usd({MODEL: dict.fromkeys(_USAGE_FIELDS, 1)}, prices)
+        session_cost_usd({m: dict.fromkeys(_USAGE_FIELDS, 1) for m in models}, prices)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     if "nina" in arms:
@@ -618,6 +691,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         store=CorpusStore(CORPUS_DIR),
         commit=frozen_commit(out / "results.csv"),
         query_fn=query,
+        context7_key=keys.context7_api_key or "",
     )
     run(tasks, arms, ctx, cap_usd=args.cap_usd)
 

@@ -64,7 +64,7 @@ _SLOT_RE = re.compile("|".join(re.escape(slot) for slot in _SLOTS))
 #: candidate before a judge or a grader sees it (PREREG Amendment 5).
 _ARM_WORDS = re.compile(
     r"\b(assemble_context|resolve_url|get_document|fetch_page|search_docs"
-    r"|resolve-library-id|get-library-docs|web[ _-]?fetch|context7|nina)\b",
+    r"|resolve-library-id|get-library-docs|query-docs|web[ _-]?fetch|context7|nina)\b",
     re.IGNORECASE,
 )
 
