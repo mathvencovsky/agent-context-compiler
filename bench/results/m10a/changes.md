@@ -26,3 +26,12 @@ Half B checks (`confirm_lambda_0_B.md`), all pass:
 - median time at 8k: 2,368 vs 2,151 ms (+10%; selection only, providers cached).
 
 Paid calls: 0 (all providers served from the disk cache).
+
+## 2. Lexical ranking for the rerank pool (rejected on half A, 2026-10-16)
+
+Half A, answer chunk in the fused top-30 (ranking only, `pool_A.md`): current
+87/139, BM25 87, lexical weight 0.25 90 (best), title-only query 84, vector only
+81. Of the 23 tasks whose answer chunk misses the pool, 10 are outside both
+top-50 lists, and no variant recovers more than 3: the bottleneck is the long
+question (title + body with code) as the query, not the lexical scorer. No
+change to `app/`; not taken to half B. 0 paid calls.

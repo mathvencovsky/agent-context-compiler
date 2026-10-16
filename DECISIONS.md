@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-16: M10a — busca léxica do produto igual à do benchmark (sobreposição de palavras)
+Contexto: o produto buscava com `websearch_to_tsquery('simple', consulta)`, que exige todas as palavras (E). Uma pergunta de 41 palavras não achava nenhum pedaço, enquanto "bearer token" achava o certo (teste no Postgres). Nas perguntas longas dos agentes a lista léxica vinha vazia e o `assemble` virava só vetor. O benchmark (`bench/runners/ours._lexical_ranks`) media outra coisa: contagem de palavras da pergunta no pedaço, em Python. Todos os números do M8 e do M10a vêm dessa contagem.
+Decisão (humano, 2026-10-16): `app/retrieve/lexical.overlap_ranks` faz a contagem do benchmark (tokens `[a-z0-9]+` em minúsculas, descarta pontuação zero, desempate por `(document_id, ord)`, top-50), e `lexical_search` e o runner do benchmark chamam a mesma função. Os números medidos não mudam.
+Alternativas: OR de lexemas no Postgres (sem IDF, palavras comuns dominam e ainda difere do benchmark); BM25 nos dois (na metade A empatou no pedaço único, 87 contra 87, e subiu no conjunto, 109 contra 105; fica como experimento futuro pela regra das metades A/B, que pode pedir chamadas pagas de rerank); as duas listas léxicas fundidas (correlacionadas, dobram o peso léxico, que na metade A ajuda menor).
+Consequências: SPEC §5 atualizada. `lexical_search` carrega todos os pedaços das versões pedidas e pontua em Python, sem índice (aceitável para poucas URLs por pedido). A coluna `tsv` e o índice GIN ficam sem uso; removê-los pede migração, fora deste passo. Pela Emenda 6 do PREREG, o `app/` precisa ser recongelado antes do piloto.
+
 ## 2026-10-16: M10a Fase 3 — `selection_lambda` 0,3 → 0,0 (confirmado na metade B)
 Contexto: a penalidade de diversidade (λ = 0,3, calibrada no M8 em tarefas sintéticas de uma URL) encerrava a seleção com orçamento sobrando nas tarefas reais de documentação (em 8k, 145 de 176 tarefas da metade B pararam por valor ajustado abaixo de `min_value`).
 Decisão: `selection_lambda = 0.0` em `app/config.py` e `.env.example`. Ajustado na metade A; na metade B (176 tarefas, só cache, 0 chamadas pagas) passou em todas as regras: +8,0 pts em 8k (IC 95% pareado [+4,0; +12,5], p = 0,0001), +1,1/+1,7/+4,0 pts em 1k/2k/4k, cobertura por mil tokens acima da do strong_rag em todos os orçamentos (0,091 contra 0,088 em 8k), mediana de tempo +10%. Detalhes em `bench/results/m10a/changes.md`.
