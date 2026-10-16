@@ -160,11 +160,15 @@ cache. Saída local em `bench/results/m10a/baseline_real.{csv,md}`.
   (5xx ou sem resposta) são de infraestrutura; página ao vivo que não existe é
   erro do agente; chave ou cota recusada pelo Context7 para a rodada depois de
   gravar o gasto da sessão.
-- **`EndConversation`:** o Claude Code mantém essa ferramenta em toda sessão
-  com outra ferramenta, e nenhuma opção a remove. A conferência do `init` passou
-  a aceitá-la em todos os braços; sem isso, o piloto pararia na primeira sessão
-  com ferramenta.
-- **Emenda 8 do PREREG** registra os quatro pontos acima.
+- **Ambiente herdado:** o SDK passa ao CLI do agente o ambiente inteiro do
+  runner. Uma rodada iniciada de dentro do Claude Code levaria junto o esforço
+  (`CLAUDE_EFFORT`), os resumos de ferramenta e outras variáveis da sessão, que
+  mudariam custo e comportamento sem a conferência do `init` perceber. O
+  `main()` agora apaga as variáveis `ANTHROPIC_*` e `CLAUDE*` herdadas antes da
+  primeira sessão; fica só `CLAUDE_CODE_GIT_BASH_PATH`, de que o Claude Code no
+  Windows pode precisar.
+- **Emenda 8 do PREREG** registra os três primeiros pontos. A limpeza do
+  ambiente cumpre o §4 como está escrito.
 - **Decisão do humano (2026-10-16):** nada pago agora. O braço do Context7 foi
   construído offline. Antes do piloto, o humano cria uma conta gratuita do
   Context7 (1.000 chamadas por mês, o bastante para o piloto) ou o braço sai por
@@ -172,14 +176,19 @@ cache. Saída local em `bench/results/m10a/baseline_real.{csv,md}`.
   gratuito: decidir antes dela.
 - **Verificado offline:** testes com a função de consulta falsa (opções, `init`
   nos seis braços, custo com dois modelos, falhas de infraestrutura, parada pelo
-  Context7). O CLI do Claude Code não foi executado e nenhuma chamada paga foi
-  feita.
-- **Conferir no piloto:** se o `init` lista mesmo o `EndConversation`; se o
-  WebFetch cobra o `claude-haiku-5-5` (outro modelo, sem preço, para a rodada
-  depois da primeira sessão do braço); o status do servidor do Context7 com
-  chave errada (`needs-auth` esperado; `failed` viraria falha de
-  infraestrutura); o texto de erro do WebFetch quando a leitura da página falha
-  por sobrecarga da API (hoje contaria como erro do agente).
+  Context7, limpeza do ambiente). Nenhuma chamada paga foi feita.
+- **Conferência gratuita no CLI real (2.1.301):** cada braço montado como no
+  runner, com chave inválida e parado na mensagem `init`, sem chamada de
+  modelo. O `init` passa nos seis braços: as ferramentas são exatamente as do
+  braço (sem `EndConversation`, ao contrário do que a documentação sugeria), e
+  modelo, `dontAsk` e `apiKeySource` estão certos; os quatro servidores MCP
+  conectam. O Context7 conecta até com chave vazia ou errada: a recusa da chave
+  só aparece na primeira chamada de ferramenta ("Invalid API key…"), e aí a
+  rodada para.
+- **Conferir no piloto:** se o WebFetch cobra o `claude-haiku-5-5` (outro
+  modelo, sem preço, para a rodada depois da primeira sessão do braço); o texto
+  de erro do WebFetch quando a leitura da página falha por sobrecarga da API
+  (hoje contaria como erro do agente).
 - **Antes do piloto (humano), além da lista da seção abaixo:**
   `CONTEXT7_API_KEY` no `.env` ou a emenda que tira o braço; os preços de cache
   do `claude-sonnet-5-5`. A página de preços diz leitura a US$ 0,10 por milhão
