@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import statistics
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -23,10 +24,11 @@ from app.config import get_settings
 from app.retrieve.rrf import rrf_fuse
 from bench.anchor_qrels import in_tune_half
 from bench.corpus_store import CorpusStore
-from bench.m10a_baseline import bench_task
+from bench.m10a_baseline import BUDGETS, bench_task
+from bench.m10a_diagnose import paired
 from bench.m10a_pool import pool_hits
 from bench.runners.ours import _RRF_K, OursRunner, _lexical_ranks, _vector_ranks
-from bench.section_recall import units
+from bench.section_recall import HIT, coverage, units
 from bench.tasks_schema import load_external_tasks
 
 _OUT = Path("bench/results/m10a")
@@ -64,15 +66,107 @@ def lead(text: str, words: int = _LEAD_WORDS) -> str:
     return " ".join(text.split()[:words])
 
 
+class _SearchSwap:
+    """Embeddings that embed ``swap[text]`` in place of ``text`` (the question)."""
+
+    def __init__(self, delegate: Any, swap: dict[str, str]) -> None:
+        self._delegate = delegate
+        self.model = delegate.model
+        self.dim = delegate.dim
+        self.swap = swap
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return self._delegate.embed([self.swap.get(t, t) for t in texts])
+
+
+def _full(
+    keys: list[dict[str, Any]],
+    tasks: dict[str, Any],
+    store: CorpusStore,
+    embeddings: Any,
+    reranker: Any,
+) -> list[str]:  # pragma: no cover - real corpus
+    """Full pipeline, current vs ``strip`` (cleaned query for search only).
+
+    The reranker still sees the full question, so the pool is exactly the one
+    ``strip`` measured above; only the pools that changed cost rerank calls.
+    """
+    import bench.runners.ours as ours_module
+
+    settings = get_settings()
+    swap: dict[str, str] = {}
+    runner = OursRunner(
+        lambda_=settings.selection_lambda,
+        min_value=settings.min_value,
+        lexical_weight=settings.lexical_weight,
+        embeddings=_SearchSwap(embeddings, swap),
+        reranker=reranker,
+    )
+    original = ours_module._lexical_ranks
+    ours_module._lexical_ranks = lambda indexed, query: original(
+        indexed, swap.get(query, query)
+    )
+    hits: dict[str, dict[int, list[bool]]] = {"current": {}, "strip": {}}
+    tokens: dict[str, dict[int, list[int]]] = {"current": {}, "strip": {}}
+    try:
+        for i, key in enumerate(keys, 1):
+            ext = tasks[key["task_id"]]
+            task = bench_task(ext)
+            section_units = units(key["section"])
+            for name in hits:
+                swap.clear()
+                if name == "strip":
+                    swap[task.question] = (
+                        f"{ext.question_title}\n\n{clean_body(ext.question)}"
+                    )
+                prep = runner.prepare_candidates(task, store=store)
+                for budget in BUDGETS:
+                    result = runner.assemble_from_candidates(prep, budget_tokens=budget)
+                    cov = coverage(section_units, result.text)
+                    hits[name].setdefault(budget, []).append(cov >= HIT)
+                    tokens[name].setdefault(budget, []).append(result.context_tokens)
+            if i % 25 == 0:
+                print(f"assembled {i}/{len(keys)}", flush=True)
+    finally:
+        ours_module._lexical_ranks = original
+
+    lines = [
+        "",
+        f"## Full pipeline (lambda {settings.selection_lambda}), hit and tokens",
+        "",
+        "| variant | " + " | ".join(f"hit {b} | tokens {b}" for b in BUDGETS) + " |",
+        "|---" * (1 + 2 * len(BUDGETS)) + "|",
+    ]
+    for name in hits:
+        cells = [
+            f"{statistics.mean(hits[name][b]):.3f} | "
+            f"{statistics.mean(tokens[name][b]):,.0f}"
+            for b in BUDGETS
+        ]
+        lines.append(f"| {name} | " + " | ".join(cells) + " |")
+    lines += ["", "strip vs current, paired (diff [95% CI], McNemar p):", ""]
+    for b in BUDGETS:
+        p = paired(hits["strip"][b], hits["current"][b])
+        lines.append(
+            f"- {b}: {p['diff']:+.3f} [{p['lo']:+.3f}, {p['hi']:+.3f}], p={p['p']:.4f}"
+        )
+    return lines
+
+
 def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corpus
     from app.providers.embeddings.openai import OpenAIEmbeddingProvider
-    from bench.provider_cache import CachingEmbeddingProvider
+    from app.providers.rerank.jina import JinaRerankProvider
+    from bench.provider_cache import CachingEmbeddingProvider, CachingRerankProvider
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--half", choices=["A", "B"], default="A")
     parser.add_argument(
         "--data-root", type=Path, default=Path("."),
         help="checkout holding bench/corpus, bench/.cache and the qrels",
+    )  # fmt: skip
+    parser.add_argument(
+        "--full", action="store_true",
+        help="also run the full pipeline for strip (paid rerank calls)",
     )  # fmt: skip
     args = parser.parse_args(argv)
 
@@ -88,6 +182,20 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
         for k in map(json.loads, qrels.splitlines())
         if in_tune_half(k["task_id"]) == (args.half == "A")
     ]
+    if args.full:
+        reranker = CachingRerankProvider(
+            JinaRerankProvider(), cache_dir=root / ".cache"
+        )
+        lines = [f"# M10a query cleaning, half {args.half} ({len(keys)} tasks)"]
+        lines += _full(keys, tasks, store, embeddings, reranker)
+        report = "\n".join(lines) + "\n"
+        (_OUT / f"query_full_{args.half}.md").write_text(report, encoding="utf-8")
+        print(report)
+        print(
+            f"paid calls: embeddings {embeddings.api_calls}, "
+            f"rerank {reranker.api_calls}"
+        )
+        return
     runner = OursRunner(embeddings=embeddings)
     weight = get_settings().lexical_weight
     # name -> (lexical query, vector query)
@@ -121,7 +229,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
             print(f"ranked {i}/{len(keys)}", flush=True)
 
     n = len(keys)
-    lines: list[Any] = [
+    lines = [
         f"# M10a query cleaning, half {args.half} ({n} tasks)",
         "",
         "Answer in the fused top-30 the reranker sees (ranking only, no rerank).",

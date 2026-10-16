@@ -45,5 +45,13 @@ answer chunk in the fused top-30 (ranking only, `query_A.md`): current 87/139,
 cleaned on the lexical side 89, cleaned on both sides 89, title plus first 60
 cleaned words 84. The cleaned query embedding adds nothing over cleaning the
 lexical side alone. +2 tasks is within the spread of the lexical variants in
-item 2 (none taken to half B), so no rerank run and no change to `app/`. Paid
-calls: 139 batched OpenAI embedding calls (new query texts), 0 rerank.
+item 2 (none taken to half B). Paid calls: 139 batched OpenAI embedding calls
+(new query texts), 0 rerank.
+
+Full pipeline on half A anyway, at the human's request (`query_full_A.md`;
+cleaned query for search, full question for the reranker, λ = 0): hit
+0.288 → 0.288 (1k), 0.475 → 0.504 (2k), 0.662 → 0.655 (4k), 0.719 → 0.748
+(8k), same tokens. 8k paired diff +2.9 pts, 95% CI [−0.7, +7.2], McNemar
+p = 0.29. Smaller than neighbor expansion on half A (+4.4 at 8k) and not
+distinguishable from zero; not taken to half B, no change to `app/`. Paid
+calls: 137 rerank, 0 embeddings.

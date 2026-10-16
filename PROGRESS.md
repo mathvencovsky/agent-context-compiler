@@ -13,9 +13,11 @@ foi feita no M10.
 (só ranking): tirar do corpo as linhas de código e as frases de praxe do Stack
 Overflow leva o pedaço da resposta aos 30 candidatos em 89 de 139 tarefas,
 contra 87 hoje; só o título e as 60 primeiras palavras limpas, 84. Ganho de 2
-tarefas, do tamanho do ruído das variantes do item 2; não foi para o rerank nem
-para a metade B. Nada mudou em `app/`. 139 chamadas pagas de embedding, 0 de
-rerank. Detalhes em `bench/results/m10a/changes.md`.
+tarefas, do tamanho do ruído das variantes do item 2. A pedido do humano, o
+pipeline completo na metade A (`--full`, 137 chamadas pagas de rerank): acerto
+em 8k de 0,719 para 0,748 (+2,9 pts, IC 95% [−0,7; +7,2], p = 0,29), 2k +2,9,
+4k −0,7, 1k igual, mesmos tokens. Não distinguível de zero; não foi para a
+metade B. Nada mudou em `app/`. Detalhes em `bench/results/m10a/changes.md`.
 
 ### M10a — busca léxica do produto alinhada ao benchmark (2026-10-16)
 
