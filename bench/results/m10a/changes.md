@@ -106,3 +106,13 @@ Paid: 42 embedding and 39 rerank calls (one Jina 429, retried).
 
 The answer key now ignores inline script/style/template (2 MDN keys dropped):
 313 keys, half A 138, half B 175.
+
+## A1. Adaptive budget: stop at low rerank relevance (rejected on half A, 2026-10-17)
+
+Rule fixed first (DECISIONS.md 2026-10-17). Half A (138 tasks, cache only, 0
+paid calls; `adaptive_A.md`): every cut that saves tokens loses coverage beyond
+the 0.5 pt tolerance. The mildest, an absolute cut at 0.1, saves 4% of tokens at
+4k and 11% at 8k but loses 1.3 pt of coverage at 4k and 2.3 pt at 8k; stronger
+cuts lose more. Half B was not opened; `app/` unchanged. The rerank score is not
+a reliable stop signal here: low-scored chunks still carry parts of the answer
+section.

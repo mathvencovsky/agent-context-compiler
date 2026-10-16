@@ -7,6 +7,13 @@ sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
 de agente foi feita no M10.
 
+### M10a — trilha A, A1 orçamento adaptativo (2026-10-17, rejeitado)
+
+`uv run python -m bench.m10a_adaptive --half A` (0 chamadas pagas): nenhum corte
+por relevância do rerank passou; o mais leve (nota mínima 0,1) economiza 11% de
+tokens em 8k, mas perde 2,3 pts de cobertura. Rejeitado sem abrir a metade B,
+como manda a regra fixada antes. Nada mudou em `app/`.
+
 ### M10a — trilha B, testes de regressão a partir das issues dos concorrentes (2026-10-17)
 
 Sem nenhuma chamada paga. Novos testes: decodificação GBK/Shift_JIS (B7;
