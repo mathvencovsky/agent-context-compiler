@@ -1,11 +1,25 @@
 # PROGRESS
 
-Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 1 CONCLUÍDA**
+Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 2 CONCLUÍDA**
 (exceto o peso do envelope, que precisa da API rodando). Próximo passo: plano
 da Fase 2 (diagnóstico das falhas do NINA). Da Fase 3 do M10 continuam prontos o
 custo por sessão, o tamanho de página e os arquivos de saída; o harness do
 agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
 foi feita no M10.
+
+### M10a Fase 2 — diagnóstico das falhas do NINA (2026-10-16)
+
+`uv run python -m bench.m10a_diagnose` (só cache: 0 chamadas pagas) mede a
+seção em cada etapa do pipeline. Falhas em 4k (137 de 315), pela primeira causa:
+fora dos candidatos com a seção inteira num pedaço 53, descartada na seleção 53,
+picotada entre pedaços 16, perdida na extração 15 (11 no PostgreSQL). A seção
+está no índice em 300 tarefas, nos 30 candidatos em 231. Os candidatos somam
+mediana de 12.105 tokens (só 94 tarefas abaixo de 8k): a parada do NINA em 5,4
+mil tokens vem da seleção, não do tamanho do conjunto (hipótese a confirmar: a
+penalidade de diversidade leva o valor ajustado abaixo de `min_value = 0`).
+Pareado contra strong_rag: +4,4 pts em 1k (IC [−0,6; +9,2], p = 0,09),
+empate em 2k e 4k, −9,5 pts em 8k (IC [−14,9; −3,8], p = 0,001). Saída local
+em `bench/results/m10a/{diagnose.csv,failures.md}`.
 
 ### M10a Fase 1 — linha de base com provedores reais (2026-10-16)
 
