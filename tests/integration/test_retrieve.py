@@ -9,8 +9,8 @@ and indexed with ``index_version`` — exactly the pattern of
 Two versions of two sources are indexed. The test proves:
 
 * ``lexical_search`` ranks the chunk containing the query terms first and NEVER
-  returns a chunk from a version outside the requested set (``ts_rank_cd`` over
-  the ``'simple'`` tsvector, version-restricted);
+  returns a chunk from a version outside the requested set (query-word overlap,
+  version-restricted), also for long natural-language questions;
 * ``vector_search`` returns chunks ordered by cosine distance to the query
   embedding, restricted to the requested versions.
 """
@@ -210,16 +210,15 @@ def test_lexical_ranks_query_terms_first_and_restricts_versions(
     assert all(chunk.version_id == version_a for chunk, _ in results)
 
 
-def test_lexical_long_question_matches_nothing_under_and_semantics(
+def test_lexical_long_question_still_finds_the_target_chunk(
     clean_db: None,
     session_factory: sessionmaker[Session],
     blob_store: BlobStore,
 ) -> None:
-    """Characterizes ``websearch_to_tsquery``: every query word must match (AND).
+    """Any query word counts: a long question ranks the target chunk first.
 
-    A short query hits the target chunk; a long natural-language question that
-    contains the same terms plus words absent from every chunk returns nothing.
-    Pins current behavior (M10a); changing it is a SPEC §6 decision.
+    Under ``websearch_to_tsquery`` (AND of every word) this 41-word question
+    returned nothing (DECISIONS 2026-10-16); the overlap ranking must not.
     """
     version_a = _index(
         session_factory,
@@ -239,7 +238,6 @@ def test_lexical_long_question_matches_nothing_under_and_semantics(
             ),
         ],
     )
-    # No "or"/"-"/quotes: websearch_to_tsquery would read them as operators.
     long_question = (
         "When I am calling the API from a small Python script running on my "
         "laptop, how exactly should I send the authorization bearer token header "
@@ -254,7 +252,8 @@ def test_lexical_long_question_matches_nothing_under_and_semantics(
 
     assert len(short) == 1
     assert "Authorization" in short[0][0].text
-    assert long == []
+    assert long, "a long question must still match"
+    assert "Authorization" in long[0][0].text
 
 
 def test_vector_search_orders_by_cosine_and_restricts_versions(

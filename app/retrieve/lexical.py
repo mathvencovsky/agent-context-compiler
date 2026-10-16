@@ -1,33 +1,57 @@
-"""Lexical search over the generated tsvector column (SPEC §6 step 2, §5).
+"""Lexical search by query-word overlap (SPEC §6 step 2, §5).
 
-``lexical_search`` ranks a version-restricted set of chunks against the query
-using Postgres full-text search. It builds the query with
-``websearch_to_tsquery('simple', :query)`` — the ``'simple'`` configuration
-matches the GENERATED ``tsv`` column (``to_tsvector('simple', text)``; SPEC §5)
-so the index (GIN on ``tsv``) is usable — and ranks by ``ts_rank_cd`` descending.
+``lexical_search`` loads the chunks of the requested versions and ranks them
+with ``overlap_ranks``: each chunk scores the number of its tokens that are
+query words (lowercase ``[a-z0-9]+`` tokens), zero-score chunks are dropped,
+and ties break on the ``(document_id, ord)`` key — the same key the RRF fusion
+uses. Any query word counts, so a long natural-language question still matches
+(``websearch_to_tsquery`` required every word; DECISIONS 2026-10-16).
 
-Results are restricted to ``Chunk.version_id IN version_ids`` (the current
-versions of the requested URLs; SPEC §6 step 2), capped at ``limit`` (top-50),
-and returned as ``(chunk, rank_position)`` with 1-based positions. Ties on the
-rank score are broken deterministically by ``(version_id, ord)`` so the output
-is stable and the downstream RRF tie-break (keyed by ``(document_id, ord)``) is
-meaningful. An empty query (no lexemes) yields an empty tsquery and therefore an
-empty result.
+``overlap_ranks`` is shared with the benchmark runner (``bench/runners/ours``),
+so the product ranks exactly as the benchmark measures. Results are capped at
+``limit`` (top-50) and returned as ``(chunk, rank_position)`` with 1-based
+positions. A query with no tokens yields an empty result.
 """
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
-from app.store.models import Chunk
+from app.store.models import Chunk, DocumentVersion, Source
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 #: SPEC §6 step 2: top-50 by lexical rank.
 _DEFAULT_LIMIT = 50
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+#: (document_id, ord), the fusion key.
+Key = tuple[str, int]
+
+
+def tokenize(text: str) -> list[str]:
+    """Return lowercase alphanumeric tokens for ``text``."""
+    return _TOKEN_RE.findall(text.lower())
+
+
+def overlap_ranks(
+    items: Iterable[tuple[Key, str]], query: str, limit: int = _DEFAULT_LIMIT
+) -> list[Key]:
+    """Rank ``(key, text)`` items by how many of their tokens are query words."""
+    terms = set(tokenize(query))
+    scored: list[tuple[int, Key]] = []
+    for key, text in items:
+        overlap = sum(1 for t in tokenize(text) if t in terms)
+        if overlap > 0:
+            scored.append((overlap, key))
+    scored.sort(key=lambda s: (-s[0], s[1]))
+    return [key for _, key in scored[:limit]]
 
 
 def lexical_search(
@@ -37,27 +61,26 @@ def lexical_search(
     version_ids: list[str],
     limit: int = _DEFAULT_LIMIT,
 ) -> list[tuple[Chunk, int]]:
-    """Return the top-``limit`` chunks for ``query`` ranked by ``ts_rank_cd``.
+    """Return the top-``limit`` chunks of ``version_ids`` by ``overlap_ranks``.
 
-    Restricted to ``version_ids``. Each result is ``(chunk, rank_position)`` with
-    a 1-based position; ties are broken by ``(version_id, ord)``. An empty
-    ``version_ids`` or an empty tsquery yields ``[]``.
+    Each result is ``(chunk, rank_position)`` with a 1-based position. An empty
+    ``version_ids`` or a query without tokens yields ``[]``.
     """
     if not version_ids:
         return []
 
-    tsquery = func.websearch_to_tsquery("simple", query)
-    rank = func.ts_rank_cd(Chunk.tsv, tsquery)
-    stmt = (
-        select(Chunk)
-        .where(
-            Chunk.version_id.in_(version_ids),
-            # Only rows whose tsvector actually matches the query contribute;
-            # an empty tsquery matches nothing, so the result is empty.
-            Chunk.tsv.op("@@")(tsquery),
-        )
-        .order_by(rank.desc(), Chunk.version_id.asc(), Chunk.ord.asc())
-        .limit(limit)
+    # shortcut: scores every chunk of the requested versions in Python, no index;
+    # fine for a few URLs per request, revisit if requests grow to many large docs.
+    rows = session.execute(
+        select(Chunk, Source.id)
+        .join(DocumentVersion, DocumentVersion.id == Chunk.version_id)
+        .join(Source, Source.id == DocumentVersion.source_id)
+        .where(Chunk.version_id.in_(version_ids))
+    ).all()
+    chunk_by_key: dict[Key, Chunk] = {
+        (document_id, chunk.ord): chunk for chunk, document_id in rows
+    }
+    ranked = overlap_ranks(
+        ((key, chunk.text) for key, chunk in chunk_by_key.items()), query, limit
     )
-    chunks = list(session.scalars(stmt))
-    return [(chunk, position) for position, chunk in enumerate(chunks, start=1)]
+    return [(chunk_by_key[key], pos) for pos, key in enumerate(ranked, start=1)]

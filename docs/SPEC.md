@@ -169,7 +169,7 @@ class Document(BaseModel):
 - Um chunk agrupa blocos consecutivos da mesma seção (mesmo `heading_path`), com alvo de 200 a 500 tokens e máximo de 800.
 - Tabelas e blocos de código nunca são cortados, a menos que passem de 800 tokens. Nesse caso, tabelas são divididas por linhas, repetindo os headers em cada parte, e código é dividido por linhas em branco.
 - O texto indexado do chunk recebe um prefixo com o caminho de seções: `"Autenticação > Tokens > Expiração\n\n" + conteúdo`.
-- Lexical: coluna `tsvector` gerada com a configuração `simple` e índice GIN. Ranking com `ts_rank_cd`.
+- Lexical: o chunk pontua quantos dos seus tokens (minúsculas, `[a-z0-9]+`) são palavras da consulta; qualquer palavra conta, e o empate sai por `(document_id, ord)`. É a mesma função (`app/retrieve/lexical.overlap_ranks`) que o benchmark usa. A coluna `tsvector` gerada (configuração `simple`, índice GIN) continua no esquema, mas a busca não a usa (DECISIONS 2026-10-16).
 - Vetorial: coluna `vector(DIM)` (DIM vindo do provedor configurado) com índice HNSW de distância cosseno.
 - Chunks pertencem a uma `version_id`. Uma versão nova de um documento gera chunks novos; os antigos ficam até a limpeza.
 

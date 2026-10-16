@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import get_settings
+from app.retrieve.lexical import tokenize as _tokenize
 from app.retrieve.rrf import rrf_fuse
 from bench.anchor_qrels import in_tune_half
 from bench.corpus_store import CorpusStore
@@ -33,7 +34,6 @@ from bench.runners.ours import (
     _IndexedChunk,
     _Key,
     _lexical_ranks,
-    _tokenize,
     _vector_ranks,
 )
 from bench.section_recall import HIT, coverage, units
