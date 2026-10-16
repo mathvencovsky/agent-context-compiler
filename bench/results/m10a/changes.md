@@ -83,3 +83,26 @@ losses. Variant: each pick pulls in its `ord` ± 1 neighbors, only at budgets of
 Half B (`confirm_adj_1_from_4k_B.md`): 8k +1.1 pts, CI [-3.4, +5.7], p = 0.81;
 4k -3.4 pts. Two rules fail; the half A gain did not replicate. No change to
 `app/`. 0 paid calls.
+
+## 4. Dominant content container when a page has no main (accepted 2026-10-16)
+
+Pages without `<main>`/`<article>`/`role="main"` (PostgreSQL, SQLite, RFC
+Editor) let readability keep a single block. `app/extract/html.py` now descends
+from `<body>` while one child holds >= 80% of the non-chrome text and falls back
+to that container when readability keeps < 80% of it. PostgreSQL pages keeping
+under half their text: 38 -> 5. Item 4 rule: DECISIONS.md 2026-10-16.
+
+| half | variant | extraction hit | hit 1k | hit 2k | hit 4k | hit 8k |
+|---|---|---|---|---|---|---|
+| A (138) | current | 0.978 | 0.290 | 0.478 | 0.667 | 0.725 |
+| A (138) | container_fallback | 1.000 | 0.290 | 0.471 | 0.667 | 0.732 |
+| B (175) | current | 0.943 | 0.291 | 0.440 | 0.594 | 0.691 |
+| B (175) | container_fallback | 0.989 | 0.280 | 0.451 | 0.617 | 0.720 |
+
+Half B checks (`confirm_container_fallback_B.md`), all pass: no task's
+extraction coverage drops; PostgreSQL mean 0.694 -> 0.963 (27 tasks); no budget
+drops over 2 pts; coverage per 1k tokens above strong_rag at every budget.
+Paid: 42 embedding and 39 rerank calls (one Jina 429, retried).
+
+The answer key now ignores inline script/style/template (2 MDN keys dropped):
+313 keys, half A 138, half B 175.

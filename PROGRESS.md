@@ -1,11 +1,24 @@
 # PROGRESS
 
 Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 3 em andamento**
-(item 1 da trilha 1 aceito: `selection_lambda` 0,3 → 0,0). Próximo passo: item 2
-da trilha 1 (seção fora dos candidatos). Da Fase 3 do M10 continuam prontos o
+(trilha 1: itens 1 e 4 aceitos, 2 e 3 rejeitados). Próximo passo: plano da
+trilha 2 (qualidade da resposta). Da Fase 3 do M10 continuam prontos o
 custo por sessão, o tamanho de página e os arquivos de saída; o harness do
 agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
 foi feita no M10.
+
+### M10a Fase 3 — item 4: perdas de extração (2026-10-16, aceito)
+
+Páginas sem `<main>`/`<article>`/`role="main"` (PostgreSQL, SQLite, RFC Editor)
+ficavam só com o bloco que o readability escolhia. `app/extract/html.py` agora
+acha o contêiner dominante e o usa quando o readability guarda menos de 80% do
+texto dele (SPEC §4). `uv run python -m bench.m10a_extract --half A` e
+`--half B --confirm`: na metade B a seção está na extração em 0,989 das tarefas
+(antes 0,943; PostgreSQL 0,694 → 0,963), acerto +2,9 pts em 8k e −1,1 em 1k,
+aceito pelo critério de extração (DECISIONS.md). O gabarito passou a ignorar
+`<script>`/`<style>`/`<template>`: 313 tarefas (A 138, B 175). Custo: 42
+chamadas de embedding e 39 de rerank. Dívida: o `angular.io` (casca de
+JavaScript no HTML bruto) segue vazio.
 
 ### M10a Fase 3 — item 2b: limpar a pergunta antes de buscar (2026-10-16, rejeitado na metade B)
 

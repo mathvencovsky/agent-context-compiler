@@ -808,6 +808,50 @@ def _find_main(tree: HtmlElement) -> HtmlElement | None:
     return None
 
 
+#: A child holding this share of its parent's content text is the content.
+_DOMINANT_SHARE = 0.8
+#: Readability keeping less than this share of the container's text lost content
+#: (0.5 missed PostgreSQL pages where it kept only the largest table, ~54%).
+_READABILITY_MIN_SHARE = 0.8
+
+
+def _content_chars(el: HtmlElement, sizes: dict[HtmlElement, int]) -> int:
+    """Characters of text under ``el``, chrome subtrees excluded; memoized."""
+    if el in sizes:
+        return sizes[el]
+    if not isinstance(el.tag, str) or el.tag in _CHROME_TAGS or _is_chrome(el):
+        n = 0
+    else:
+        n = len(normalize_text(el.text or "")) + sum(
+            _content_chars(child, sizes) + len(normalize_text(child.tail or ""))
+            for child in el
+        )
+    sizes[el] = n
+    return n
+
+
+def _dominant_container(
+    tree: HtmlElement, sizes: dict[HtmlElement, int]
+) -> HtmlElement:
+    """The deepest element holding most of the page's content text.
+
+    For pages with no ``<main>``/``<article>``/``role="main"`` (PostgreSQL,
+    SQLite, RFC Editor docs): descend from ``<body>`` while one child holds at
+    least ``_DOMINANT_SHARE`` of its parent's non-chrome text (DECISIONS.md
+    2026-10-16, M10a Fase 3 item 4).
+    """
+    bodies = tree.xpath("//body")
+    node: HtmlElement = bodies[0] if bodies else tree
+    while True:
+        children = [c for c in node if isinstance(c.tag, str)]
+        if not children:
+            return node
+        best = max(children, key=lambda c: _content_chars(c, sizes))
+        if _content_chars(best, sizes) < _DOMINANT_SHARE * _content_chars(node, sizes):
+            return node
+        node = best
+
+
 def _count_tag(el: HtmlElement | None, tag: str) -> int:
     """Count descendants (and self) with ``tag`` under ``el``."""
     if el is None:
@@ -863,6 +907,17 @@ def extract_html(raw: bytes | str, source: SourceInfo) -> Document:
         if any(ra_counts[tag] < orig_counts[tag] for tag in orig_counts):
             used_fallback = True
 
+    # No main container to compare against: readability may keep a single block
+    # of a long page (one table of a PostgreSQL function chapter). Compare its
+    # text with the page's dominant content container instead.
+    lost_text = False
+    if original_main is None and text.strip():
+        sizes: dict[HtmlElement, int] = {}
+        container = _dominant_container(full_tree, sizes)
+        kept = len(normalize_text(readability_subtree.text_content() or ""))
+        if kept < _READABILITY_MIN_SHARE * _content_chars(container, sizes):
+            original_main, used_fallback, lost_text = container, True, True
+
     content_root = original_main if used_fallback else readability_subtree
 
     _clean_subtree(content_root)
@@ -876,7 +931,10 @@ def extract_html(raw: bytes | str, source: SourceInfo) -> Document:
             Warning(
                 code="readability_fallback",
                 message=(
-                    "readability dropped main-content tables or code; "
+                    "readability kept under 80% of the page's main text; "
+                    "re-extracted from its dominant content container"
+                    if lost_text
+                    else "readability dropped main-content tables or code; "
                     "re-extracted from <main>/<article>"
                 ),
                 block_id=None,
