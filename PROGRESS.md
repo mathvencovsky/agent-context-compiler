@@ -2,10 +2,9 @@
 
 Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 3 em andamento**
 (trilha 1: itens 1 e 4 aceitos, 2 e 3 rejeitados). Próximo passo: plano da
-trilha 2 (qualidade da resposta). Da Fase 3 do M10 continuam prontos o
-custo por sessão, o tamanho de página e os arquivos de saída; o harness do
-agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
-foi feita no M10.
+trilha 2 (qualidade da resposta). Da Fase 3 do M10 estão prontos o custo por
+sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
+quatro braços do corpus congelado. Nenhuma sessão de agente foi feita no M10.
 
 ### M10a — formato conciso para agentes (2026-10-16)
 
@@ -155,6 +154,44 @@ cache. Saída local em `bench/results/m10a/baseline_real.{csv,md}`.
   `in_dev_slice` (com teste); o `external.yaml` foi reetiquetado sem mudar a
   ordem nem outro campo (piloto 20, `holdout` 2.278, `dev` 756).
 
+### M10 Fase 3 — harness do agente (2026-10-16)
+
+- **`bench/m10_agent.py`:** uma sessão do Claude Agent SDK por (tarefa, braço)
+  em `no_docs`, `full_page`, `strong_rag` e `nina`, com o PREREG §4 conferido na
+  mensagem `init` de cada sessão. Grava `results.csv`, transcrições,
+  `spend.jsonl` (uso por modelo e custo de cada tentativa), `judgments.jsonl` e,
+  na rodada principal, `answers.jsonl`. Teto de gasto obrigatório
+  (`--cap-usd`); a tela mostra só gasto e erros.
+- **`bench/m10_tools.py`:** `fetch_page`, `search_docs` e o servidor MCP
+  publicado do NINA sobre a API real em processo, todos lendo o corpus
+  congelado. O NINA usa o banco `nina_m10`; os candidatos pontuados vão para
+  `candidates/`.
+- **Emenda 7 do PREREG:** a saída das ferramentas chega inteira
+  (`MAX_MCP_OUTPUT_TOKENS`); recusa da API por prompt longo demais conta como
+  erro da sessão.
+- **Verificado offline:** as 1.828 URLs das tarefas (96 do piloto) passam pelo
+  fetch protegido do produto e voltam com os bytes congelados. Nenhuma sessão
+  paga rodou, e o CLI do Claude Code não foi executado.
+- **Antes do piloto (humano):** chave da Anthropic num workspace dedicado
+  (`M10_AGENT_API_KEY`); chave da OpenAI do juiz principal
+  (`BENCH_ANSWERER_API_KEY`); chave da Anthropic do segundo juiz fora desse
+  workspace (`BENCH_JUDGE_API_KEY`); preços de escrita e leitura de cache do
+  `claude-sonnet-5-5` no `bench/prices.yaml`; o teto em USD; tirar
+  `SELECTION_LAMBDA=0.3` do `.env`; e a emenda que recongela o `app/`
+  (Emenda 6).
+- **Conferir no piloto:** páginas longas chegam inteiras nas transcrições; o
+  segundo juiz devolve JSON (o `AnthropicProvider` limita a saída a 1.024
+  tokens, e o `claude-opus-5-5` sempre pensa); o uso por modelo bate com o
+  Console.
+
+Como testar (com `make up`):
+
+```
+uv run pytest tests/unit/bench/test_m10_agent.py tests/unit/bench/test_m10_tools.py tests/integration/test_m10_nina_tool.py -q
+```
+
+Piloto (pago, só com o acima pronto): `uv run python -m bench.m10_agent --cap-usd <teto>`.
+
 ### M10 Fase 3 (parcial) — o que foi feito
 
 - **`bench/session_cost.py`:** custo de uma sessão a partir do uso por modelo
@@ -244,10 +281,10 @@ uv run pytest tests/unit/bench/test_judge_external.py tests/unit/bench/test_agre
 
 ### M10 — pendente e dívidas
 
-- Fase 3: o harness do agente e a ligação do braço `nina` ao corpus congelado
-  estão pausados (duas respostas do agente foram interrompidas pelo sistema de
-  segurança nesse trabalho); o humano decide como seguir. Depois, as Fases 4 e
-  5, uma por vez, cada uma com plano aprovado.
+- Fase 3: o harness dos quatro braços do corpus congelado está pronto (seção
+  acima). Faltam os braços ao vivo, o laço da triagem (§2.2), a fatia-ponte
+  (§2.3) e o piloto. Depois, as Fases 4 e 5, uma por vez, cada uma com plano
+  aprovado.
 - Antes do piloto da Fase 3 (PREREG §6; a Emenda 4 usa `p_read`):
   `bench/prices.yaml` não tem `cache_write_usd_per_1m` nem
   `cache_read_usd_per_1m` para nenhum modelo; o humano confere os valores na

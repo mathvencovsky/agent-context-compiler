@@ -435,6 +435,26 @@ data had been seen.
   accepted-answer anchors and page sizes had been examined, and none of them are
   outcomes.
 
+### Amendment 7 — 2026-10-16: tool output reaches the agent whole
+
+- **What changed:** two harness rules (§4), the same for every arm.
+  1. The harness sets `MAX_MCP_OUTPUT_TOKENS` to 1,000,000, the agent model's
+     context window. Without it, Claude Code cuts any MCP tool result above
+     25,000 tokens (or above a cap set remotely) and appends a truncation
+     notice.
+  2. A session the API rejects for a non-transient reason, such as a prompt
+     longer than the context window, counts as a failure of that session, like
+     hitting the turn limit. It is not an infrastructure failure under §10.
+- **Why:** §3 defines `full_page` as the whole page. With the default cap, 398
+  of the 3,054 tasks cite more than 25,000 tokens of pages, and one of the 20
+  pilot tasks cites 493,925. The primary comparator would stop being the whole
+  page exactly on the long pages where Amendment 4 expects the difference to
+  grow. Setting the value also keeps a remote change of the default from
+  changing the harness during the run.
+- **Data seen:** none from any arm. No agent session had run. The counts come
+  from the page sizes of the frozen corpus (`bench/page_length.py`), which are
+  not outcomes.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

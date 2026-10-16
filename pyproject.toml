@@ -53,6 +53,7 @@ bench = [
     "openai",
     "anthropic",
     "pyyaml",
+    "claude-agent-sdk>=0.2.168",
 ]
 
 [tool.uv]
