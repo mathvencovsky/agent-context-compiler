@@ -29,6 +29,7 @@ markup-free text.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 
@@ -274,8 +275,26 @@ def _raw_code(el: HtmlElement) -> str:
     normalization), which is exactly the SPEC §4 requirement for code. A single
     trailing newline that browsers add visually is left untouched to stay
     faithful to the source bytes.
+
+    Line breaks a browser draws without a newline character are kept too: a
+    ``<br>``, and each ``<div>``/``<p>`` line inside the block (the CodeMirror
+    markup of react.dev). Without this, every line of such a snippet was glued
+    into one (DECISIONS.md 2026-10-17).
     """
-    return el.text_content() or ""
+    if not any(sub is not el for sub in el.iter("br", "div", "p")):
+        return el.text_content() or ""
+    copy = deepcopy(el)
+    for sub in copy.iter("br", "div", "p"):
+        if sub is copy:
+            continue
+        tail = sub.tail or ""
+        if sub.tag == "br":
+            sub.tail = "\n" + tail
+        elif not tail.startswith("\n") and not (sub.text_content() or "").endswith(
+            "\n"
+        ):
+            sub.tail = "\n" + tail
+    return copy.text_content() or ""
 
 
 def _build_list(el: HtmlElement, ordered: bool, indent: int = 0) -> list[str]:

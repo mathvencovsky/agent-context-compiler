@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: quebras de linha de código dentro de `<pre>` preservadas
+Contexto: teste de regressão da trilha B (bug do `jina-ai/reader#77`). O texto do código vinha de `text_content()`, que ignora `<br>` e as linhas em `<div>` (marcação do CodeMirror no react.dev): o trecho inteiro saía numa linha só. Afeta 154 páginas do corpus (MDN 99, react.dev 55, RFC Editor 1).
+Decisão (humano, 2026-10-17): `_raw_code` em `app/extract/html.py` põe uma quebra de linha depois de cada `<br>` e de cada linha em `<div>`/`<p>` dentro do bloco; um `<pre>` sem essas tags continua byte a byte.
+Custo para remedir: 649 textos de pedaço novos (137 mil tokens de embedding, cerca de US$ 0,003); 33 tarefas com gabarito do dev tocam essas páginas, até ~0,63 mi de tokens Jina por variante remedida. Nenhuma remedição foi feita.
+Consequências: os números do M10a já registrados para essas 33 tarefas foram medidos com o código antigo. O `app/` mudou: entra na emenda de recongelamento.
+
 ## 2026-10-17: M10 — `app/` recongelado depois do M10a (Emenda 9 do PREREG)
 Contexto: a Emenda 3 congelou o `app/` para as execuções do M10, e a Emenda 6 (ponto 4) permitiu mudá-lo durante o M10a, usando só a fatia de desenvolvimento, desde que uma emenda posterior nomeasse o novo commit. Cinco commits mudaram o `app/` desde a Emenda 3: λ de 0,3 para 0,0 (`3aa411d`), busca léxica por sobreposição de palavras (`8feaa2d`), contêiner dominante na extração (`6649b4a`), formato conciso no `assemble` e no MCP (`23b887f`), e índice reaproveitado com `include_evidence` funcionando (`666bdba`, migração `0005`). O `.env` local tinha `SELECTION_LAMBDA=0.3`, que anulava a mudança aceita.
 Decisão (aprovada pelo humano em 2026-10-17): a Emenda 9 recongela `app/` e `migrations/` no commit que a adiciona, para o piloto, a triagem e a rodada principal. O `.env` local passou a `SELECTION_LAMBDA=0.0`, e os valores efetivos de busca, seleção, modelos e TTL de cache foram conferidos contra os padrões do código: todos batem. Uma execução cujos valores efetivos difiram desses padrões é inválida.
