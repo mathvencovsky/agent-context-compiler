@@ -7,6 +7,21 @@ sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
 de agente foi feita no M10.
 
+### M10a — trilha B, testes de regressão a partir das issues dos concorrentes (2026-10-17)
+
+Sem nenhuma chamada paga. Novos testes: decodificação GBK/Shift_JIS (B7;
+achou e corrigiu um bug: o charset declarado só em `<meta>` era ignorado,
+`app/fetch/detect.py`), stdout limpo no MCP via stdio (B3), extração de
+código, tabela, links e texto repetido (B2), falha explícita para robots.txt e
+página bloqueada no `assemble` (B5), texto de injeção só nos campos de conteúdo
+(B6), `assemble` numa página sintética de ~500 mil tokens em 22 s e dentro do
+orçamento (B4), e `uv run python -m bench.extract_retention --check` contra a
+linha de base por site em `bench/extract_retention_baseline.json` (B1).
+Pendente, decisão do humano: quebras de linha de código dentro de `<pre>` (por
+`<br>` ou por linhas em `<div>`, como no react.dev) se perdem; corrigir muda o
+texto dos pedaços de ~154 páginas do corpus. Os testes estão prontos fora do
+repositório. O `app/` mudou (charset): entra na emenda de recongelamento.
+
 ### M10a — índice reaproveitado entre chamadas (2026-10-16)
 
 `assemble` não recalcula mais os embeddings a cada chamada: `index_version`

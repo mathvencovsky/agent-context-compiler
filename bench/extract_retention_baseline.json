@@ -1,0 +1,77 @@
+{
+  "angular.dev": {
+    "pages": 18,
+    "median": 0.772,
+    "under_half": 5
+  },
+  "angular.io": {
+    "pages": 104,
+    "median": 0.0,
+    "under_half": 103
+  },
+  "datatracker.ietf.org": {
+    "pages": 40,
+    "median": 0.979,
+    "under_half": 0
+  },
+  "developer.mozilla.org": {
+    "pages": 954,
+    "median": 0.986,
+    "under_half": 6
+  },
+  "docs.docker.com": {
+    "pages": 87,
+    "median": 0.936,
+    "under_half": 1
+  },
+  "docs.python.org": {
+    "pages": 213,
+    "median": 1.066,
+    "under_half": 7
+  },
+  "flask.palletsprojects.com": {
+    "pages": 19,
+    "median": 0.994,
+    "under_half": 0
+  },
+  "kubernetes.io": {
+    "pages": 57,
+    "median": 1.015,
+    "under_half": 0
+  },
+  "legacy.reactjs.org": {
+    "pages": 14,
+    "median": 1.0,
+    "under_half": 0
+  },
+  "react.dev": {
+    "pages": 57,
+    "median": 1.002,
+    "under_half": 0
+  },
+  "reactjs.org": {
+    "pages": 25,
+    "median": 1.001,
+    "under_half": 0
+  },
+  "sqlite.org": {
+    "pages": 10,
+    "median": 0.973,
+    "under_half": 1
+  },
+  "www.postgresql.org": {
+    "pages": 233,
+    "median": 0.924,
+    "under_half": 5
+  },
+  "www.rfc-editor.org": {
+    "pages": 51,
+    "median": 0.948,
+    "under_half": 0
+  },
+  "www.sqlite.org": {
+    "pages": 35,
+    "median": 0.994,
+    "under_half": 1
+  }
+}
