@@ -7,6 +7,16 @@ custo por sessão, o tamanho de página e os arquivos de saída; o harness do
 agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
 foi feita no M10.
 
+### M10a Fase 3 — item 3: seções picotadas entre pedaços (2026-10-16, rejeitado)
+
+Na metade A, das 29 tarefas sem um pedaço com metade da seção, 25 são seções
+picotadas (o chunker fecha o pedaço ao chegar em 200 tokens) e 4 são perdas de
+extração. `uv run python -m bench.m10a_expand --half A` testou puxar os vizinhos
+de cada pedaço escolhido: só a partir de 4k não perde nos orçamentos pequenos
+(+4,3 pts em 8k na metade A). Na metade B (`--half B --confirm adj_1_from_4k`)
+não se repetiu: +1,1 pts em 8k (IC [−3,4; +5,7]) e −3,4 pts em 4k. Rejeitado;
+nada mudou em `app/`. 0 chamadas pagas. Detalhes em `bench/results/m10a/changes.md`.
+
 ### M10a Fase 3 — item 2: seção fora dos candidatos (2026-10-16, rejeitado)
 
 `uv run python -m bench.m10a_pool --half A` (só ranking, 0 chamadas pagas):
