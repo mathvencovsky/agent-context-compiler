@@ -210,6 +210,53 @@ def test_lexical_ranks_query_terms_first_and_restricts_versions(
     assert all(chunk.version_id == version_a for chunk, _ in results)
 
 
+def test_lexical_long_question_matches_nothing_under_and_semantics(
+    clean_db: None,
+    session_factory: sessionmaker[Session],
+    blob_store: BlobStore,
+) -> None:
+    """Characterizes ``websearch_to_tsquery``: every query word must match (AND).
+
+    A short query hits the target chunk; a long natural-language question that
+    contains the same terms plus words absent from every chunk returns nothing.
+    Pins current behavior (M10a); changing it is a SPEC §6 decision.
+    """
+    version_a = _index(
+        session_factory,
+        blob_store,
+        url=_URL_A,
+        content_hash=_HASH_A,
+        blocks=[
+            _make_block(
+                heading_path=["Auth", "Headers"],
+                text="Send the Authorization bearer token header on every request.",
+                order=0,
+            ),
+            _make_block(
+                heading_path=["Auth", "Rate limits"],
+                text="Each account has a daily quota and a burst allowance.",
+                order=1,
+            ),
+        ],
+    )
+    # No "or"/"-"/quotes: websearch_to_tsquery would read them as operators.
+    long_question = (
+        "When I am calling the API from a small Python script running on my "
+        "laptop, how exactly should I send the authorization bearer token header "
+        "on every request, and what happens when I forget to include it in the "
+        "client configuration?"
+    )
+    assert len(long_question.split()) >= 30
+
+    with session_factory() as session:
+        short = lexical_search(session, query="bearer token", version_ids=[version_a])
+        long = lexical_search(session, query=long_question, version_ids=[version_a])
+
+    assert len(short) == 1
+    assert "Authorization" in short[0][0].text
+    assert long == []
+
+
 def test_vector_search_orders_by_cosine_and_restricts_versions(
     clean_db: None,
     session_factory: sessionmaker[Session],
