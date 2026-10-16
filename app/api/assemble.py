@@ -46,6 +46,7 @@ from app.api.errors import AblationNotAllowed, AllSourcesFailed
 from app.api.schemas import (
     AssembleRequest,
     AssembleResponse,
+    ConciseAssembleResponse,
     EvidenceItem,
     FragmentModel,
     FragmentScoresModel,
@@ -58,6 +59,7 @@ from app.providers.embeddings.openai import OpenAIEmbeddingProvider
 from app.providers.rerank.base import RerankProvider
 from app.providers.rerank.jina import JinaRerankProvider
 from app.retrieve.assemble import AssembleResult, assemble_context
+from app.retrieve.render import render_concise
 
 # Bearer auth gates /v1/context/assemble too (no-op in dev — SPEC §8); the M9
 # quota dependency spends one token from the per-key bucket before the handler.
@@ -106,6 +108,33 @@ def _reject_ablations_in_production(req: AssembleRequest) -> None:
         )
 
 
+def _sources(result: AssembleResult) -> list[SourceStatusModel]:
+    return [
+        SourceStatusModel(
+            url=src.url,
+            document_id=src.document_id,
+            version_id=src.version_id,
+            fetched_at=src.fetched_at,
+            status=src.status,
+        )
+        for src in result.sources
+    ]
+
+
+def _to_concise(result: AssembleResult) -> ConciseAssembleResponse:
+    """The same result rendered as Markdown for agents (SPEC §8)."""
+    return ConciseAssembleResponse(
+        context=render_concise(result),
+        sources=_sources(result),
+        token_usage=TokenUsage(
+            output_tokens=result.output_tokens,
+            budget_tokens=result.budget_tokens,
+        ),
+        coverage=result.coverage,  # type: ignore[arg-type]
+        warnings=result.warnings,
+    )
+
+
 def _to_response(result: AssembleResult) -> AssembleResponse:
     """Map the orchestrator's :class:`AssembleResult` to the SPEC §8 envelope."""
     fragments = [
@@ -130,20 +159,10 @@ def _to_response(result: AssembleResult) -> AssembleResponse:
         )
         for frag in result.fragments
     ]
-    sources = [
-        SourceStatusModel(
-            url=src.url,
-            document_id=src.document_id,
-            version_id=src.version_id,
-            fetched_at=src.fetched_at,
-            status=src.status,
-        )
-        for src in result.sources
-    ]
     return AssembleResponse(
         query=result.query,
         fragments=fragments,
-        sources=sources,
+        sources=_sources(result),
         token_usage=TokenUsage(
             output_tokens=result.output_tokens,
             budget_tokens=result.budget_tokens,
@@ -156,7 +175,10 @@ def _to_response(result: AssembleResult) -> AssembleResponse:
 # --------------------------------------------------------------------------- #
 # Endpoint
 # --------------------------------------------------------------------------- #
-@router.post("/v1/context/assemble", response_model=AssembleResponse)
+@router.post(
+    "/v1/context/assemble",
+    response_model=AssembleResponse | ConciseAssembleResponse,
+)
 def assemble(
     req: AssembleRequest,
     request: Request,
@@ -169,7 +191,7 @@ def assemble(
     reranker: RerankerDep,
     now: NowDep,
     settings: SettingsDep,
-) -> AssembleResponse:
+) -> AssembleResponse | ConciseAssembleResponse:
     """Assemble an agent-ready context package for a query over 1-20 URLs."""
     if settings.env == "production":
         _reject_ablations_in_production(req)
@@ -204,4 +226,6 @@ def assemble(
     # MVP choice); only resolve meters a browser render.
     set_usage_units(request, {"output_tokens": result.output_tokens, "renders": 0})
 
+    if req.response_format == "concise":
+        return _to_concise(result)
     return _to_response(result)

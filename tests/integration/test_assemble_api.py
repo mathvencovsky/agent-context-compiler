@@ -147,6 +147,43 @@ def test_assemble_happy_path(assemble_harness: AssembleHarness) -> None:
             assert len(ev["quote"]) <= 300
 
 
+def test_assemble_concise_renders_the_same_fragments(
+    assemble_harness: AssembleHarness,
+) -> None:
+    """``response_format="concise"`` -> Markdown with the detailed fragments."""
+    harness = assemble_harness
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+    harness.transport.set(_ERRORS_PATH, lambda: html_response(_HTML_B))
+    body = {
+        "query": "How are classes defined and used?",
+        "urls": [harness.url(_AUTH_PATH), harness.url(_ERRORS_PATH)],
+        "max_tokens": 4000,
+        "selection": "truncate",
+    }
+    detailed = _post(harness, body).json()
+    response = _post(harness, {**body, "response_format": "concise"})
+    assert response.status_code == 200, response.text
+    concise = response.json()
+
+    assert set(concise) == {
+        "context", "sources", "token_usage", "coverage", "warnings", "trust"
+    }  # fmt: skip
+    assert concise["trust"] == "untrusted_source"
+    assert concise["token_usage"] == detailed["token_usage"]
+    assert detailed["fragments"]
+    # Every assemble re-indexes, so chunk ids differ between the two calls;
+    # the content, document and version must not.
+    headers = [
+        line
+        for line in concise["context"].splitlines()
+        if line.startswith("### ") and " · chunk " in line
+    ]
+    assert len(headers) == len(detailed["fragments"])
+    for frag in detailed["fragments"]:
+        assert frag["md"] in concise["context"]
+        assert f"({frag['document_id']}, {frag['version_id']})" in concise["context"]
+
+
 def test_assemble_partial_failure_stays_200(
     assemble_harness: AssembleHarness,
 ) -> None:

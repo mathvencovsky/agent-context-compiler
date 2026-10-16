@@ -24,7 +24,11 @@ from typing import Any
 
 import httpx
 from nina_client.errors import NinaError, error_from_envelope
-from nina_client.models import AssembleResponse, ResolveResponse
+from nina_client.models import (
+    AssembleResponse,
+    ConciseAssembleResponse,
+    ResolveResponse,
+)
 
 __all__ = ["NinaClient"]
 
@@ -126,6 +130,19 @@ class NinaClient:
         }
         body = self._request("POST", "/v1/context/assemble", json=payload)
         return AssembleResponse.from_dict(body)
+
+    def assemble_concise(
+        self, query: str, urls: list[str], *, max_tokens: int = 4000
+    ) -> ConciseAssembleResponse:
+        """The same context as Markdown for an agent (``response_format="concise"``)."""
+        payload: dict[str, Any] = {
+            "query": query,
+            "urls": urls,
+            "max_tokens": max_tokens,
+            "response_format": "concise",
+        }
+        body = self._request("POST", "/v1/context/assemble", json=payload)
+        return ConciseAssembleResponse.from_dict(body)
 
     def get_document(
         self,

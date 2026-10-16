@@ -36,6 +36,7 @@ from nina_client.errors import (
 )
 from nina_client.models import (
     AssembleResponse,
+    ConciseAssembleResponse,
     EvidenceItem,
     Fragment,
     FragmentScores,
@@ -67,6 +68,7 @@ __all__ = [
     # Models
     "ResolveResponse",
     "AssembleResponse",
+    "ConciseAssembleResponse",
     "SourceInfo",
     "Stats",
     "Fragment",

@@ -7,6 +7,18 @@ custo por sessão, o tamanho de página e os arquivos de saída; o harness do
 agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
 foi feita no M10.
 
+### M10a — formato conciso para agentes (2026-10-16)
+
+Pesquisa de concorrentes em `docs/CONCORRENTES.md`. A lição mais cara: o JSON
+detalhado do `assemble` custava ao agente quase o dobro do texto entregue, e o
+MCP o mandava duas vezes (texto e `structuredContent`). Agora `assemble` aceita
+`response_format="concise"` (Markdown em `context`, `app/retrieve/render.py`),
+o MCP usa o conciso por padrão e não manda a cópia estruturada, e o SDK tem
+`assemble_concise`. `uv run python -m bench.m10a_format` (offline): −48% de
+tokens em 4k e −42% em 8k, sem perder texto. SPEC §8/§9 e DECISIONS atualizados.
+Achados para depois: `include_evidence` não tem efeito; cada `assemble`
+re-indexa as URLs e recalcula embeddings (custo e latência a cada chamada).
+
 ### M10a Fase 3 — item 4: perdas de extração (2026-10-16, aceito)
 
 Páginas sem `<main>`/`<article>`/`role="main"` (PostgreSQL, SQLite, RFC Editor)

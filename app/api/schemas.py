@@ -23,6 +23,9 @@ from app.extract.ir import Block, Metadata, SourceInfo, Warning
 ResolveFormat = Literal["markdown", "blocks"]
 RenderDecision = Literal["auto", "never", "always"]
 SelectionStrategy = Literal["greedy", "truncate"]
+#: ``detailed``: fragments with ids, scores and evidence (JSON); ``concise``: the
+#: same fragments rendered as Markdown for agents (SPEC §8; DECISIONS 2026-10-16).
+ResponseFormat = Literal["detailed", "concise"]
 
 
 class ResolveRequest(BaseModel):
@@ -121,6 +124,7 @@ class AssembleRequest(BaseModel):
     urls: list[str] = Field(min_length=1, max_length=20)
     max_tokens: int = Field(default=4000, ge=256, le=32000)
     include_evidence: bool = True
+    response_format: ResponseFormat = "detailed"
     # Ablation flags (SPEC §6; non-production only, enforced by the handler).
     use_lexical: bool = True
     use_vector: bool = True
@@ -202,6 +206,23 @@ class AssembleResponse(BaseModel):
 
     query: str
     fragments: list[FragmentModel]
+    sources: list[SourceStatusModel]
+    token_usage: TokenUsage
+    coverage: Literal["insufficient", "partial", "sufficient"]
+    warnings: list[dict[str, object]]
+    trust: Literal["untrusted_source"] = "untrusted_source"
+
+
+class ConciseAssembleResponse(BaseModel):
+    """``POST /v1/context/assemble`` with ``response_format="concise"`` (SPEC §8).
+
+    ``context`` holds the selected fragments as Markdown
+    (:func:`app.retrieve.render.render_concise`): document URL and ids once per
+    document, ``chunk_id`` (and PDF page) per fragment. Scores and evidence
+    quotes are only in the detailed format.
+    """
+
+    context: str
     sources: list[SourceStatusModel]
     token_usage: TokenUsage
     coverage: Literal["insufficient", "partial", "sufficient"]

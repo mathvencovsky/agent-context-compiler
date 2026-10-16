@@ -5,7 +5,8 @@ builder from the official ``mcp`` SDK — renamed from ``FastMCP`` in mcp 2.x) w
 the three SPEC §9 tools, each delegating to a thin :class:`NinaApiClient`:
 
 * ``resolve_url(url, format="markdown")`` -> ``POST /v1/documents/resolve``
-* ``assemble_context(query, urls, max_tokens=4000)`` -> ``POST /v1/context/assemble``
+* ``assemble_context(query, urls, max_tokens=4000, response_format="concise")``
+  -> ``POST /v1/context/assemble``
 * ``get_document(document_id, version_id=None)`` -> ``GET /v1/documents/{id}``
 
 Every tool description carries the SPEC §9 warning: the returned payload comes
@@ -17,7 +18,7 @@ client.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server.mcpserver import MCPServer
 
@@ -56,15 +57,30 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
 
     @server.tool(
         description=(
-            "Assemble a token-budgeted context package answering `query` from "
-            "the given `urls`, with per-fragment evidence, via the NINA API. "
+            "Assemble a token-budgeted context answering `query` from the given "
+            '`urls` via the NINA API. `response_format="concise"` (default) '
+            "returns Markdown: one header per document, one line per fragment "
+            'with its heading path and chunk id. `"detailed"` returns JSON '
+            "with ids, scores and evidence quotes for every fragment. "
             + UNTRUSTED_NOTICE
-        )
+        ),
+        # Without this the SDK also sends the JSON as structuredContent, a
+        # second copy of the same payload (DECISIONS.md 2026-10-16).
+        structured_output=False,
     )
     def assemble_context(
-        query: str, urls: list[str], max_tokens: int = 4000
-    ) -> dict[str, Any]:
-        return _client().assemble(query=query, urls=urls, max_tokens=max_tokens)
+        query: str,
+        urls: list[str],
+        max_tokens: int = 4000,
+        response_format: Literal["concise", "detailed"] = "concise",
+    ) -> str | dict[str, Any]:
+        body = _client().assemble(
+            query=query,
+            urls=urls,
+            max_tokens=max_tokens,
+            response_format=response_format,
+        )
+        return str(body["context"]) if response_format == "concise" else body
 
     @server.tool(
         description=(

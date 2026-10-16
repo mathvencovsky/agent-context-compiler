@@ -90,12 +90,22 @@ class NinaApiClient:
         )
 
     def assemble(
-        self, *, query: str, urls: list[str], max_tokens: int
+        self,
+        *,
+        query: str,
+        urls: list[str],
+        max_tokens: int,
+        response_format: str = "detailed",
     ) -> dict[str, Any]:
         """Call ``POST /v1/context/assemble`` and return the JSON body."""
         return self._post_json(
             "/v1/context/assemble",
-            {"query": query, "urls": urls, "max_tokens": max_tokens},
+            {
+                "query": query,
+                "urls": urls,
+                "max_tokens": max_tokens,
+                "response_format": response_format,
+            },
         )
 
     def get_document(
