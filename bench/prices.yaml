@@ -33,6 +33,12 @@ models:
     provider: anthropic
     input_usd_per_1m: 0.10
     output_usd_per_1m: 0.50
+    # M10 webfetch_live: o WebFetch lê cada página com este modelo (até 100 mil
+    # caracteres por chamada, sempre abaixo da faixa de prompts > 100 mil tokens).
+    # Cache pela página de preços da Anthropic (2026-10-16): escrita com TTL de
+    # 5 min (com TTL de 1 h seria 0.20) e leitura. O humano confere antes do piloto.
+    cache_write_usd_per_1m: 0.125
+    cache_read_usd_per_1m: 0.01
   claude-sonnet-5-5:
     provider: anthropic
     input_usd_per_1m: 2.00

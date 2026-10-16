@@ -4,7 +4,8 @@ Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 3 em andamento*
 (trilha 1: itens 1 e 4 aceitos, 2 e 3 rejeitados). Próximo passo: plano da
 trilha 2 (qualidade da resposta). Da Fase 3 do M10 estão prontos o custo por
 sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
-quatro braços do corpus congelado. Nenhuma sessão de agente foi feita no M10.
+seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
+de agente foi feita no M10.
 
 ### M10a — índice reaproveitado entre chamadas (2026-10-16)
 
@@ -162,6 +163,64 @@ cache. Saída local em `bench/results/m10a/baseline_real.{csv,md}`.
   `in_dev_slice` (com teste); o `external.yaml` foi reetiquetado sem mudar a
   ordem nem outro campo (piloto 20, `holdout` 2.278, `dev` 756).
 
+### M10 Fase 3 — braços ao vivo (2026-10-16)
+
+- **`webfetch_live`:** o WebFetch embutido do Claude Code é a única
+  ferramenta, com uma regra `WebFetch(domain:...)` por host do Apêndice C. A
+  regra solta `WebFetch` deixaria o agente ler o stackoverflow.com, onde está a
+  resposta de referência. O WebFetch lê cada página com o `claude-haiku-5-5`,
+  que entra no custo da sessão; o `bench/prices.yaml` ganhou os preços de cache
+  desse modelo (página de preços da Anthropic, 2026-10-16).
+- **`context7_live`:** o servidor hospedado do Context7
+  (`https://mcp.context7.com/mcp`) com `CONTEXT7_API_KEY` no cabeçalho. As
+  ferramentas atuais são `resolve-library-id` e `query-docs` (o
+  `get-library-docs` saiu na versão 2.0.0), e `query-docs` entrou no cegamento.
+  Sem a chave, o runner se recusa a rodar o braço.
+- **Falhas:** erro da checagem de domínio do WebFetch e erro da API do Context7
+  (5xx ou sem resposta) são de infraestrutura; página ao vivo que não existe é
+  erro do agente; chave ou cota recusada pelo Context7 para a rodada depois de
+  gravar o gasto da sessão.
+- **Ambiente herdado:** o SDK passa ao CLI do agente o ambiente inteiro do
+  runner. Uma rodada iniciada de dentro do Claude Code levaria junto o esforço
+  (`CLAUDE_EFFORT`), os resumos de ferramenta e outras variáveis da sessão, que
+  mudariam custo e comportamento sem a conferência do `init` perceber. O
+  `main()` agora apaga as variáveis `ANTHROPIC_*` e `CLAUDE*` herdadas antes da
+  primeira sessão; fica só `CLAUDE_CODE_GIT_BASH_PATH`, de que o Claude Code no
+  Windows pode precisar.
+- **Emenda 8 do PREREG** registra os três primeiros pontos. A limpeza do
+  ambiente cumpre o §4 como está escrito.
+- **Decisão do humano (2026-10-16):** nada pago agora. O braço do Context7 foi
+  construído offline. Antes do piloto, o humano cria uma conta gratuita do
+  Context7 (1.000 chamadas por mês, o bastante para o piloto) ou o braço sai por
+  emenda. A rodada principal (cerca de 1.000 a 3.000 chamadas) passa do plano
+  gratuito: decidir antes dela.
+- **Verificado offline:** testes com a função de consulta falsa (opções, `init`
+  nos seis braços, custo com dois modelos, falhas de infraestrutura, parada pelo
+  Context7, limpeza do ambiente). Nenhuma chamada paga foi feita.
+- **Conferência gratuita no CLI real (2.1.301):** cada braço montado como no
+  runner, com chave inválida e parado na mensagem `init`, sem chamada de
+  modelo. O `init` passa nos seis braços: as ferramentas são exatamente as do
+  braço (sem `EndConversation`, ao contrário do que a documentação sugeria), e
+  modelo, `dontAsk` e `apiKeySource` estão certos; os quatro servidores MCP
+  conectam. O Context7 conecta até com chave vazia ou errada: a recusa da chave
+  só aparece na primeira chamada de ferramenta ("Invalid API key…"), e aí a
+  rodada para.
+- **Conferir no piloto:** se o WebFetch cobra o `claude-haiku-5-5` (outro
+  modelo, sem preço, para a rodada depois da primeira sessão do braço); o texto
+  de erro do WebFetch quando a leitura da página falha por sobrecarga da API
+  (hoje contaria como erro do agente).
+- **Antes do piloto (humano), além da lista da seção abaixo:**
+  `CONTEXT7_API_KEY` no `.env` ou a emenda que tira o braço; os preços de cache
+  do `claude-sonnet-5-5`. A página de preços diz leitura a US$ 0,10 por milhão
+  (0,05× a entrada) e escrita a US$ 2,50 (TTL de 5 min) ou US$ 4 (TTL de 1 h); o
+  TTL que o Claude Code usa decide qual vale.
+
+Como testar:
+
+```
+uv run pytest tests/unit/bench/test_m10_agent.py tests/unit/bench/test_judge_external.py -q
+```
+
 ### M10 Fase 3 — harness do agente (2026-10-16)
 
 - **`bench/m10_agent.py`:** uma sessão do Claude Agent SDK por (tarefa, braço)
@@ -289,10 +348,9 @@ uv run pytest tests/unit/bench/test_judge_external.py tests/unit/bench/test_agre
 
 ### M10 — pendente e dívidas
 
-- Fase 3: o harness dos quatro braços do corpus congelado está pronto (seção
-  acima). Faltam os braços ao vivo, o laço da triagem (§2.2), a fatia-ponte
-  (§2.3) e o piloto. Depois, as Fases 4 e 5, uma por vez, cada uma com plano
-  aprovado.
+- Fase 3: o harness dos seis braços está pronto (seções acima). Faltam o laço
+  da triagem (§2.2), a fatia-ponte (§2.3) e o piloto. Depois, as Fases 4 e 5,
+  uma por vez, cada uma com plano aprovado.
 - Antes do piloto da Fase 3 (PREREG §6; a Emenda 4 usa `p_read`):
   `bench/prices.yaml` não tem `cache_write_usd_per_1m` nem
   `cache_read_usd_per_1m` para nenhum modelo; o humano confere os valores na
