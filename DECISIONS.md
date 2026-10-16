@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-16: M10a Fase 3 — regra de tokens trocada por eficiência contra o strong_rag (antes da metade B)
+Contexto: na metade A, a seleção atual parou por "valor ajustado abaixo de `min_value`" em 116 de 139 tarefas em 8k, com orçamento sobrando: a penalidade de diversidade (λ = 0,3, calibrada no M8 em tarefas sintéticas de uma URL) encerrava a seleção. Sem ela (λ = 0) o acerto subiu 3,6 pts em 2k, 7,9 em 4k e 7,2 em 8k (−1,4 em 1k), mas com +11% de tokens em 4k e +35% em 8k, o que a regra "tokens médios no máximo +10%" barrava. Usar o orçamento que o agente pediu é a própria correção, não desperdício.
+Decisão (humano, 2026-10-16, depois da metade A e antes de qualquer número da metade B): no critério de aceite, a regra de tokens passa a ser "os tokens podem subir até o orçamento pedido, desde que a cobertura por mil tokens do NINA fique acima da do strong_rag no mesmo orçamento e na mesma metade". As outras regras não mudam.
+Alternativas: manter os +10% (só passariam ajustes de +1 a +2 pts, como o portão 0,2); não ter regra de tokens (abriria mão da tese de eficiência).
+Consequências: a confirmação na metade B usa a nova regra; a troca foi feita depois de ver a metade A e fica registrada aqui por isso.
+
 ## 2026-10-16: M10a Fase 3 — metades A/B e critério de aceite, antes de qualquer mudança
 Contexto: a Fase 3 vai ajustar o NINA na fatia `dev`; ajustar e medir nas mesmas tarefas premiaria decorar o gabarito.
 Decisão (plano aprovado pelo humano em 2026-10-16): as 315 tarefas com gabarito se dividem por hash com semente (`in_tune_half`: sha256 de `20261015:tune:<id>`, metade inferior) em A = 139 (ajuste) e B = 176 (confirmação). Uma mudança só entra se, na metade B: o IC 95% pareado (bootstrap) do acerto no orçamento-alvo ficar acima de zero; nenhum outro orçamento cair mais de 2 pontos; os tokens médios não subirem mais de 10%; a latência mediana não subir mais de 50%. Uma mudança por vez, cada uma com teste de regressão e uma linha em `bench/results/m10a/changes.md`; duas rodadas sem progresso numa causa, parar e reportar.
