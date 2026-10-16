@@ -10,6 +10,10 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: A1 (orçamento adaptativo) — regra de aceite, antes de qualquer medição
+Contexto: com λ = 0 a seleção enche o orçamento. O A1 corta candidatos de baixa relevância do rerank. Variantes na metade A: corte absoluto (τ = 0,1/0,2/0,3), relativo à maior nota (r = 0,3/0,5) e cotovelo (para quando a nota cai mais de 50% em relação à escolha anterior). Medição só com cache, com a extração anterior à correção do `<pre>` aplicada no script (todas as variantes usam os mesmos candidatos).
+Decisão (humano, 2026-10-17): na metade B, a variante escolhida passa se (1) em 1k/2k/4k/8k a cobertura média cai no máximo 0,5 pt e o acerto no máximo 1 pt; (2) os tokens médios caem pelo menos 5% em 4k e em 8k; (3) a cobertura por mil tokens fica acima da do strong_rag em todos os orçamentos. Na metade A escolhe-se a que mais economiza tokens entre as que passam em (1) e (3); se nenhuma passar, o A1 é rejeitado sem abrir a metade B.
+
 ## 2026-10-17: quebras de linha de código dentro de `<pre>` preservadas
 Contexto: teste de regressão da trilha B (bug do `jina-ai/reader#77`). O texto do código vinha de `text_content()`, que ignora `<br>` e as linhas em `<div>` (marcação do CodeMirror no react.dev): o trecho inteiro saía numa linha só. Afeta 154 páginas do corpus (MDN 99, react.dev 55, RFC Editor 1).
 Decisão (humano, 2026-10-17): `_raw_code` em `app/extract/html.py` põe uma quebra de linha depois de cada `<br>` e de cada linha em `<div>`/`<p>` dentro do bloco; um `<pre>` sem essas tags continua byte a byte.
