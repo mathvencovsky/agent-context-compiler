@@ -7,6 +7,16 @@ custo por sessão, o tamanho de página e os arquivos de saída; o harness do
 agente e a ligação do braço `nina` seguem pausados. Nenhuma sessão de agente
 foi feita no M10.
 
+### M10a Fase 3 — item 2: seção fora dos candidatos (2026-10-16, rejeitado)
+
+`uv run python -m bench.m10a_pool --half A` (só ranking, 0 chamadas pagas):
+o pedaço da resposta entra nos 30 candidatos em 87 de 139 tarefas hoje; BM25
+não muda (87), peso léxico 0,25 chega a 90, só o título 84, só vetor 81. A busca
+léxica não é o gargalo: nas 23 perdas, a pergunta longa (título e corpo com
+código) não acha o pedaço em nenhuma das duas buscas. Nada mudou em `app/`.
+Achado à parte: a busca léxica do produto (`websearch_to_tsquery`) exige todas
+as palavras da consulta, diferente da do benchmark; falta um teste no Postgres.
+
 ### M10a Fase 3 — item 1: parada precoce da seleção (2026-10-16)
 
 As 315 tarefas com gabarito foram divididas por sorteio com semente em metade A
