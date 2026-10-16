@@ -82,7 +82,12 @@ def test_assemble_context_serves_the_frozen_page_and_logs_candidates(
     body = _call(
         server,
         "assemble_context",
-        {"query": query, "urls": [_URL], "max_tokens": 2000},
+        {
+            "query": query,
+            "urls": [_URL],
+            "max_tokens": 2000,
+            "response_format": "detailed",
+        },
     )
 
     assert body["trust"] == "untrusted_source"
@@ -106,6 +111,9 @@ def test_a_page_outside_the_corpus_fails_as_in_production(server: MCPServer) -> 
     missing = "https://docs.python.org/3/library/not-frozen.html"
     with pytest.raises(ToolError) as info:
         asyncio.run(
-            server.call_tool("assemble_context", {"query": "abs", "urls": [missing]})
+            server.call_tool(
+                "assemble_context",
+                {"query": "abs", "urls": [missing], "response_format": "detailed"},
+            )
         )
     assert "422" in str(info.value.__cause__)  # every source failed (SPEC §8)

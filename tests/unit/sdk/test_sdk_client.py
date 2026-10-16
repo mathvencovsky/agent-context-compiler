@@ -9,6 +9,7 @@ as the matching typed error (``UnauthorizedError`` / ``RateLimitedError``).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -137,6 +138,31 @@ def test_assemble_sends_bearer_and_parses_fragments() -> None:
     assert result.sources[0].status == "ok"
     assert result.token_usage.output_tokens == 9
     assert result.coverage == "sufficient"
+
+
+def test_assemble_concise_asks_for_markdown_and_parses_it() -> None:
+    sent: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "context": "## https://docs.example.com/auth (doc_abc, ver_abc)",
+                "sources": _ASSEMBLE_PAYLOAD["sources"],
+                "token_usage": _ASSEMBLE_PAYLOAD["token_usage"],
+                "coverage": "sufficient",
+                "warnings": [],
+                "trust": "untrusted_source",
+            },
+        )
+
+    result = _client(handler).assemble_concise("q", ["https://docs.example.com/auth"])
+
+    assert sent["response_format"] == "concise"
+    assert result.context.startswith("## https://docs.example.com/auth")
+    assert result.sources[0].status == "ok"
+    assert result.trust == "untrusted_source"
 
 
 def test_get_document_sends_bearer_and_version_param() -> None:

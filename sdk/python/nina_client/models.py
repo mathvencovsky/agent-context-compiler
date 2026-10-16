@@ -200,6 +200,35 @@ class TokenUsage:
 
 
 @dataclass(frozen=True)
+class ConciseAssembleResponse:
+    """``POST /v1/context/assemble`` with ``response_format="concise"`` (SPEC §8).
+
+    ``context`` is the selected fragments as Markdown for an agent; scores and
+    evidence quotes are only in :class:`AssembleResponse`.
+    """
+
+    context: str
+    sources: list[SourceStatus]
+    token_usage: TokenUsage
+    coverage: str
+    warnings: list[dict[str, Any]] = field(default_factory=list)
+    trust: str = "untrusted_source"
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ConciseAssembleResponse:
+        return cls(
+            context=str(data.get("context", "")),
+            sources=[SourceStatus.from_dict(s) for s in data.get("sources", [])],
+            token_usage=TokenUsage.from_dict(data.get("token_usage", {})),
+            coverage=str(data.get("coverage", "")),
+            warnings=data.get("warnings", []),
+            trust=str(data.get("trust", "untrusted_source")),
+            raw=data,
+        )
+
+
+@dataclass(frozen=True)
 class AssembleResponse:
     """Response of ``POST /v1/context/assemble`` (SPEC §8).
 
