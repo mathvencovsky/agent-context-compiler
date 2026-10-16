@@ -16,6 +16,11 @@ Decisão (humano, 2026-10-16): `app/retrieve/lexical.overlap_ranks` faz a contag
 Alternativas: OR de lexemas no Postgres (sem IDF, palavras comuns dominam e ainda difere do benchmark); BM25 nos dois (na metade A empatou no pedaço único, 87 contra 87, e subiu no conjunto, 109 contra 105; fica como experimento futuro pela regra das metades A/B, que pode pedir chamadas pagas de rerank); as duas listas léxicas fundidas (correlacionadas, dobram o peso léxico, que na metade A ajuda menor).
 Consequências: SPEC §5 atualizada. `lexical_search` carrega todos os pedaços das versões pedidas e pontua em Python, sem índice (aceitável para poucas URLs por pedido). A coluna `tsv` e o índice GIN ficam sem uso; removê-los pede migração, fora deste passo. Pela Emenda 6 do PREREG, o `app/` precisa ser recongelado antes do piloto.
 
+## 2026-10-16: M10a — gabarito ignora `<script>`, `<style>` e `<template>`
+Contexto: no diagnóstico do item 4, 2 seções do gabarito ("Browser compatibility" do MDN) eram só CSS embutido: no HTML bruto a tabela de compatibilidade é montada no navegador.
+Decisão: `bench/anchor_qrels._text` descarta `<script>`, `<style>` e `<template>`. As 2 seções ficam sem unidades e saem do gabarito (`section_without_units`); nenhuma outra mudou. Gabarito: 313 tarefas (metade A 138, metade B 175).
+Consequências: correção feita depois das medições das Fases 1 a 3; os resultados já aceitos não mudam, pois essas 2 tarefas eram erro para todas as variantes.
+
 ## 2026-10-16: M10a Fase 3 — `selection_lambda` 0,3 → 0,0 (confirmado na metade B)
 Contexto: a penalidade de diversidade (λ = 0,3, calibrada no M8 em tarefas sintéticas de uma URL) encerrava a seleção com orçamento sobrando nas tarefas reais de documentação (em 8k, 145 de 176 tarefas da metade B pararam por valor ajustado abaixo de `min_value`).
 Decisão: `selection_lambda = 0.0` em `app/config.py` e `.env.example`. Ajustado na metade A; na metade B (176 tarefas, só cache, 0 chamadas pagas) passou em todas as regras: +8,0 pts em 8k (IC 95% pareado [+4,0; +12,5], p = 0,0001), +1,1/+1,7/+4,0 pts em 1k/2k/4k, cobertura por mil tokens acima da do strong_rag em todos os orçamentos (0,091 contra 0,088 em 8k), mediana de tempo +10%. Detalhes em `bench/results/m10a/changes.md`.

@@ -54,6 +54,7 @@ _BREAKS = (
     + _HEADINGS
 )
 _CELLS = ("td", "th")
+_NOT_TEXT = ("script", "style", "template")
 #: Larger "sections" are pages, not targets: the default ``assemble`` budget.
 MAX_SECTION_TOKENS = 4_000
 
@@ -128,6 +129,10 @@ def _text(elements: Sequence[Any]) -> str:
     for original in elements:
         el = copy.deepcopy(original)
         el.tail = None
+        if _tag(el) in _NOT_TEXT:
+            continue
+        for bad in el.xpath(".//script | .//style | .//template"):
+            bad.drop_tree()  # inline CSS/JS is markup, not section text
         for sub in el.iter():
             if _tag(sub) in _BREAKS:
                 sub.tail = "\n" + (sub.tail or "")

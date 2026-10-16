@@ -163,3 +163,12 @@ def test_tune_half_is_seeded_and_about_half() -> None:
     picks = [in_tune_half(i) for i in ids]
     assert 0.47 < sum(picks) / len(picks) < 0.53
     assert picks == [in_tune_half(i) for i in ids]
+
+
+def test_inline_css_and_scripts_are_not_section_text() -> None:
+    html = (
+        "<html><body><section><h2 id='c'>Compat</h2>"
+        "<style>a{color:red}</style><script>var x = 1;</script>"
+        "<p>Works in every browser since 2020.</p></section></body></html>"
+    )
+    assert section_text(html, "c") == "Compat\nWorks in every browser since 2020."
