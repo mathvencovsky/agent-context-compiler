@@ -197,7 +197,7 @@ document_versions(id pk, source_id fk, content_hash, fetched_at, etag, last_modi
                   render_mode, raw_blob_key, ir_blob_key, status, warnings jsonb,
                   unique(source_id, content_hash))
 chunks(id pk, version_id fk, block_ids text[], heading_path text[], text, md,
-       tokens int, tsv tsvector generated, embedding vector(DIM), ord int)
+       tokens int, tsv tsvector generated, embedding vector(DIM), embedding_model text null, ord int)
 api_keys(id pk, key_hash unique, name, created_at, revoked_at null, limits jsonb)
 usage_events(id pk, api_key_id fk, endpoint, ts, status_code, latency_ms, units jsonb)
 ```
@@ -245,7 +245,7 @@ Request:
   "response_format": "detailed"
 }
 ```
-Limites: `urls` entre 1 e 20, `max_tokens` entre 256 e 32000. `response_format` é `"detailed"` (padrão na API HTTP; resposta abaixo) ou `"concise"`.
+Limites: `urls` entre 1 e 20, `max_tokens` entre 256 e 32000. Com `include_evidence: false`, cada fragmento vem com `evidence: []` (no conciso o campo é ignorado, porque a página dos PDFs vem da evidência). `response_format` é `"detailed"` (padrão na API HTTP; resposta abaixo) ou `"concise"`.
 
 Response 200:
 ```json

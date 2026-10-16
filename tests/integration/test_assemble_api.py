@@ -171,8 +171,7 @@ def test_assemble_concise_renders_the_same_fragments(
     assert concise["trust"] == "untrusted_source"
     assert concise["token_usage"] == detailed["token_usage"]
     assert detailed["fragments"]
-    # Every assemble re-indexes, so chunk ids differ between the two calls;
-    # the content, document and version must not.
+    # The second call reuses the index, so chunk ids are stable across calls.
     headers = [
         line
         for line in concise["context"].splitlines()
@@ -181,7 +180,32 @@ def test_assemble_concise_renders_the_same_fragments(
     assert len(headers) == len(detailed["fragments"])
     for frag in detailed["fragments"]:
         assert frag["md"] in concise["context"]
+        assert f" · chunk {frag['chunk_id']}" in concise["context"]
         assert f"({frag['document_id']}, {frag['version_id']})" in concise["context"]
+
+
+def test_assemble_include_evidence_false_omits_quotes(
+    assemble_harness: AssembleHarness,
+) -> None:
+    """``include_evidence: false`` -> fragments without evidence (SPEC §8)."""
+    harness = assemble_harness
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+    body = {
+        "query": "How are classes defined and used?",
+        "urls": [harness.url(_AUTH_PATH)],
+        "max_tokens": 2000,
+        "selection": "truncate",
+    }
+    with_quotes = _post(harness, body).json()
+    without = _post(harness, {**body, "include_evidence": False}).json()
+
+    assert with_quotes["fragments"] and all(
+        f["evidence"] for f in with_quotes["fragments"]
+    )
+    assert [f["chunk_id"] for f in without["fragments"]] == [
+        f["chunk_id"] for f in with_quotes["fragments"]
+    ]
+    assert all(f["evidence"] == [] for f in without["fragments"])
 
 
 def test_assemble_partial_failure_stays_200(
