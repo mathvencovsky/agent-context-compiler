@@ -50,8 +50,11 @@ def detect_charset(
     """Resolve the charset to decode ``body`` with.
 
     Precedence: an explicit charset from the Content-Type header wins; otherwise
-    a byte-order mark at the start of the body is honored; otherwise ``default``
-    ("utf-8"). This never decodes the body — it only names the codec to use.
+    a byte-order mark at the start of the body is honored; otherwise a
+    ``<meta charset>`` / ``http-equiv`` declaration in the first 1024 bytes (as
+    browsers prescan; GBK and Shift_JIS pages often declare only there);
+    otherwise ``default`` ("utf-8"). This never decodes the body — it only
+    names the codec to use.
     """
     if content_type_charset:
         return content_type_charset
@@ -60,7 +63,30 @@ def detect_charset(
     if bom_charset is not None:
         return bom_charset
 
-    return default
+    return _sniff_meta(body) or default
+
+
+#: ``<meta charset=x>`` or ``<meta http-equiv=... content="...; charset=x">``.
+_META_CHARSET = re.compile(
+    rb"<meta[^>]*?charset\s*=\s*[\"']?\s*([a-z0-9_.:-]+)", re.IGNORECASE
+)
+
+
+def _sniff_meta(body: bytes) -> str | None:
+    """The charset a ``<meta>`` declares in the first 1024 bytes, if Python knows it.
+
+    A declared UTF-16/32 is read as UTF-8, as the HTML standard prescribes: the
+    declaration was itself readable as ASCII, so the bytes are not UTF-16.
+    """
+    match = _META_CHARSET.search(body[:1024])
+    if match is None:
+        return None
+    name = match.group(1).decode("ascii").lower()
+    try:
+        codec = codecs.lookup(name).name
+    except LookupError:
+        return None
+    return "utf-8" if codec.startswith("utf-16") or codec.startswith("utf-32") else name
 
 
 def _sniff_bom(body: bytes) -> str | None:

@@ -58,3 +58,28 @@ def test_bom_sniffing(bom: bytes, expected: str) -> None:
     assert (
         detect.detect_charset(content_type_charset=None, body=bom + b"data") == expected
     )
+
+
+def test_meta_charset_is_used_after_header_and_bom() -> None:
+    page = b'<html><head><meta charset="GBK"></head>'
+    assert detect.detect_charset(content_type_charset=None, body=page) == "gbk"
+    assert detect.detect_charset(content_type_charset="big5", body=page) == "big5"
+    equiv = b'<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">'
+    assert detect.detect_charset(content_type_charset=None, body=equiv) == "shift_jis"
+
+
+def test_meta_charset_unknown_late_or_utf16_falls_back_to_utf8() -> None:
+    assert (
+        detect.detect_charset(
+            content_type_charset=None, body=b'<meta charset="x-nope">'
+        )
+        == "utf-8"
+    )
+    late = b" " * 1024 + b'<meta charset="gbk">'
+    assert detect.detect_charset(content_type_charset=None, body=late) == "utf-8"
+    assert (
+        detect.detect_charset(
+            content_type_charset=None, body=b'<meta charset="utf-16">'
+        )
+        == "utf-8"
+    )
