@@ -7,6 +7,13 @@ sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
 de agente foi feita no M10.
 
+### M10a — trilha A, A2 código inteiro para perguntas de código (2026-10-17, rejeitado)
+
+`uv run python -m bench.m10a_code --half A` (0 chamadas pagas): dar bônus aos
+pedaços com bloco de código inteiro não melhorou a cobertura das tarefas de
+código em 4k nem em 8k. Rejeitado sem abrir a metade B. Trilha A fechada: A3 e
+A4 aceitos, A1 e A2 rejeitados.
+
 ### M10a — trilha A, A4 sem fragmentos repetidos (2026-10-17)
 
 `assemble` aceita `exclude_chunk_ids`: numa chamada seguinte, o agente passa os

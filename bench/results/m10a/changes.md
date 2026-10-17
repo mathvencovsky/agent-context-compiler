@@ -116,3 +116,13 @@ the 0.5 pt tolerance. The mildest, an absolute cut at 0.1, saves 4% of tokens at
 cuts lose more. Half B was not opened; `app/` unchanged. The rerank score is not
 a reliable stop signal here: low-scored chunks still carry parts of the answer
 section.
+
+## A2. Favor whole code blocks for code questions (rejected on half A, 2026-10-17)
+
+Rule fixed first (DECISIONS.md 2026-10-17). Half A (138 tasks, 82 code; cache
+only, 0 paid calls; `code_A.md`): no variant raises code-task coverage at 4k or
+8k. Boosts of 0.1 and 0.2 keep overall coverage within tolerance but move
+code-task coverage by -0.5 to -0.7 pt at 4k and 0 at 8k; 0.3 breaks the overall
+tolerance. The query detector flags 127 of 138 queries (precision 0.60 against
+`task_type == code`): almost every Stack Overflow question looks like code.
+Half B was not opened; `app/` unchanged.
