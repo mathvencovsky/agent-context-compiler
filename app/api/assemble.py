@@ -50,6 +50,7 @@ from app.api.schemas import (
     EvidenceItem,
     FragmentModel,
     FragmentScoresModel,
+    HintModel,
     SourceStatusModel,
     TokenUsage,
 )
@@ -59,6 +60,7 @@ from app.providers.embeddings.openai import OpenAIEmbeddingProvider
 from app.providers.rerank.base import RerankProvider
 from app.providers.rerank.jina import JinaRerankProvider
 from app.retrieve.assemble import AssembleResult, assemble_context
+from app.retrieve.hints import build_hints
 from app.retrieve.render import render_concise
 
 # Bearer auth gates /v1/context/assemble too (no-op in dev — SPEC §8); the M9
@@ -132,6 +134,7 @@ def _to_concise(result: AssembleResult) -> ConciseAssembleResponse:
         ),
         coverage=result.coverage,  # type: ignore[arg-type]
         warnings=result.warnings,
+        hints=[HintModel.model_validate(h) for h in build_hints(result)],
     )
 
 
@@ -169,6 +172,7 @@ def _to_response(result: AssembleResult) -> AssembleResponse:
         ),
         coverage=result.coverage,  # type: ignore[arg-type]
         warnings=result.warnings,
+        hints=[HintModel.model_validate(h) for h in build_hints(result)],
     )
 
 

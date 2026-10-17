@@ -7,6 +7,15 @@ sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
 de agente foi feita no M10.
 
+### M10a — trilha A, A3 dicas acionáveis (2026-10-17)
+
+O `assemble` devolve `hints` (fonte que falhou e por quê, cobertura baixa,
+orçamento que cortou fragmentos relevantes), só com dados do NINA, separados do
+texto das páginas; no conciso, num bloco final marcado. As ferramentas MCP
+passam a mostrar o erro da API ao agente. SPEC §8/§9 e DECISIONS atualizados.
+Para verificar: o harness do M10 detecta erro de infraestrutura por
+`startswith("Server error '500")`, mas o SDK do MCP prefixa o texto.
+
 ### M10a — trilha A, A1 orçamento adaptativo (2026-10-17, rejeitado)
 
 `uv run python -m bench.m10a_adaptive --half A` (0 chamadas pagas): nenhum corte

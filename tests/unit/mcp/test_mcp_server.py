@@ -12,6 +12,8 @@ import json
 from typing import Any
 
 import httpx
+import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app.mcp_server.client import NinaApiClient
 from app.mcp_server.server import UNTRUSTED_NOTICE, build_server
@@ -149,3 +151,31 @@ async def test_assemble_context_defaults_to_concise_text_only() -> None:
     assert result.content[0].text == _CONCISE_PAYLOAD["context"]  # type: ignore[union-attr]
     # no second copy of the payload as structured content
     assert result.structured_content is None
+
+
+async def test_api_errors_reach_the_agent_with_status_and_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            422,
+            json={
+                "error": {
+                    "code": "all_sources_failed",
+                    "message": "every source URL failed to resolve",
+                    "details": {},
+                }
+            },
+        )
+
+    client = NinaApiClient(
+        base_url="http://nina.local",
+        api_key="test-key",
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(ToolError) as info:
+        await build_server(client=client).call_tool(
+            "assemble_context", {"query": "q", "urls": ["https://docs.example.com/a"]}
+        )
+
+    text = str(info.value)
+    assert "Client error '422" in text
+    assert "all_sources_failed: every source URL failed to resolve" in text

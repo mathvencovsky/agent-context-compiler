@@ -212,6 +212,8 @@ class ConciseAssembleResponse:
     token_usage: TokenUsage
     coverage: str
     warnings: list[dict[str, Any]] = field(default_factory=list)
+    #: NINA's actionable notes (``code``, ``message``, ``details``); never page text.
+    hints: list[dict[str, Any]] = field(default_factory=list)
     trust: str = "untrusted_source"
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -223,6 +225,7 @@ class ConciseAssembleResponse:
             token_usage=TokenUsage.from_dict(data.get("token_usage", {})),
             coverage=str(data.get("coverage", "")),
             warnings=data.get("warnings", []),
+            hints=data.get("hints", []),
             trust=str(data.get("trust", "untrusted_source")),
             raw=data,
         )
@@ -243,6 +246,8 @@ class AssembleResponse:
     token_usage: TokenUsage
     coverage: str
     warnings: list[dict[str, Any]] = field(default_factory=list)
+    #: NINA's actionable notes (``code``, ``message``, ``details``); never page text.
+    hints: list[dict[str, Any]] = field(default_factory=list)
     trust: str = "untrusted_source"
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -255,6 +260,7 @@ class AssembleResponse:
             token_usage=TokenUsage.from_dict(data.get("token_usage", {})),
             coverage=str(data.get("coverage", "")),
             warnings=data.get("warnings", []),
+            hints=data.get("hints", []),
             trust=str(data.get("trust", "untrusted_source")),
             raw=data,
         )

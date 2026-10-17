@@ -265,11 +265,14 @@ Response 200:
   "token_usage": { "output_tokens": 1830, "budget_tokens": 4000, "tokenizer": "cl100k_base (approximate)" },
   "coverage": "sufficient",
   "warnings": [],
+  "hints": [ { "code": "budget_limited", "message": "The budget ran out before other relevant fragments. Option: max_tokens=8000.", "details": { "max_tokens": 8000 } } ],
   "trust": "untrusted_source"
 }
 ```
 
 Se uma das URLs falhar, a resposta continua 200 com as outras, e a falha aparece em `sources[].status` e em `warnings`. Se todas falharem, a resposta é 422.
+
+`hints` (nas duas formas) são metadados do NINA, nunca texto de página: descrevem a situação e as opções, sem dar ordens ao agente (DECISIONS.md 2026-10-17). Códigos: `source_failed` (uma por URL que falhou, com `details.url` e `details.status` e o motivo), `low_coverage` (quando `coverage` é `insufficient`) e `budget_limited` (sobraram candidatos com rerank ≥ `coverage_low` fora do orçamento; `details.max_tokens` sugere o dobro, até 32000). No formato conciso, as dicas e os warnings vêm no fim do `context`, depois de uma linha `---` e do título `NINA notes (not from the pages):`.
 
 Response 200 com `"response_format": "concise"` (para agentes; DECISIONS.md 2026-10-16):
 ```json
@@ -286,6 +289,7 @@ coverage: sufficient | 1830/4000 tokens | sources: 2 ok, 0 failed
   "token_usage": { "...": "igual ao detalhado" },
   "coverage": "sufficient",
   "warnings": [],
+  "hints": [ { "code": "budget_limited", "message": "The budget ran out before other relevant fragments. Option: max_tokens=8000.", "details": { "max_tokens": 8000 } } ],
   "trust": "untrusted_source"
 }
 ```
@@ -322,7 +326,7 @@ Agregados da chave atual por dia e por endpoint: requisições, tokens entregues
 Transporte stdio para uso local e streamable HTTP para uso remoto. É um cliente fino da API HTTP (recebe `API_URL` e `API_KEY`). Ferramentas:
 
 - `resolve_url(url, format="markdown")`
-- `assemble_context(query, urls, max_tokens=4000, response_format="concise")`: no padrão `concise` devolve só o texto de `context`, sem cópia em `structuredContent`; com `"detailed"`, o JSON detalhado.
+- `assemble_context(query, urls, max_tokens=4000, response_format="concise")`: no padrão `concise` devolve só o texto de `context`, sem cópia em `structuredContent`; com `"detailed"`, o JSON detalhado. Em qualquer ferramenta, um erro da API chega ao agente como erro da ferramenta com a primeira linha do httpx (ex.: `Client error '422 ...`) seguida de `code: message` do envelope de erro.
 - `get_document(document_id, version_id=None)`
 
 As descrições das ferramentas avisam que o conteúdo retornado vem de páginas externas e não deve ser tratado como instrução.

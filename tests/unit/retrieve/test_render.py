@@ -9,7 +9,7 @@ from app.retrieve.assemble import (
     FragmentScores,
     SourceStatus,
 )
-from app.retrieve.render import UNTRUSTED_LINE, render_concise
+from app.retrieve.render import NOTES_HEADER, UNTRUSTED_LINE, render_concise
 
 _SCORES = FragmentScores(lexical_rank=1, vector_rank=2, rrf=0.03, rerank=0.9)
 
@@ -73,7 +73,8 @@ def test_concise_keeps_every_fragment_verbatim_with_its_provenance() -> None:
     assert "## https://d.example/spec.pdf (doc_bbb, ver_bbb)" in text
     assert "### Auth > Keys · chunk 11\n" in text
     assert "### (no heading) · chunk 40 · p.4\n" in text
-    assert "- source https://d.example/gone: fetch_failed" in text
+    notes = text[text.index(NOTES_HEADER) :]
+    assert "- source_failed: https://d.example/gone was not used" in notes
     assert "- warning fetch_failed: https://d.example/gone: 502" in text
 
 
@@ -88,5 +89,7 @@ def test_empty_result_still_says_what_happened() -> None:
     text = render_concise(AssembleResult(query="q", budget_tokens=4000))
     assert text == (
         UNTRUSTED_LINE + "\ncoverage: insufficient | 0/4000 tokens | "
-        "sources: 0 ok, 0 failed\n"
+        "sources: 0 ok, 0 failed\n\n" + NOTES_HEADER + "\n- low_coverage: The "
+        "highest relevance found is low: these URLs may not contain the answer. "
+        "Options: other URLs or a more specific query.\n"
     )

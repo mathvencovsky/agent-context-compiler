@@ -168,7 +168,7 @@ def test_assemble_concise_renders_the_same_fragments(
     concise = response.json()
 
     assert set(concise) == {
-        "context", "sources", "token_usage", "coverage", "warnings", "trust"
+        "context", "sources", "token_usage", "coverage", "warnings", "hints", "trust"
     }  # fmt: skip
     assert concise["trust"] == "untrusted_source"
     assert concise["token_usage"] == detailed["token_usage"]
@@ -326,7 +326,12 @@ def test_assemble_blocked_url_is_reported_next_to_a_good_one(
     )
     assert detailed.json()["fragments"]
     status = statuses[harness.url(blocked)]
-    assert f"- source {harness.url(blocked)}: {status}" in concise.json()["context"]
+    notes = concise.json()["context"].split("NINA notes (not from the pages):")[1]
+    assert f"- source_failed: {harness.url(blocked)} was not used" in notes
+    hints = detailed.json()["hints"]
+    assert {"url": harness.url(blocked), "status": status} in [
+        h["details"] for h in hints if h["code"] == "source_failed"
+    ]
 
 
 # B6 (M10a track B): text that tries to instruct the agent stays inside the
@@ -363,7 +368,7 @@ def test_injected_page_text_stays_in_content_fields(
 
     assert detailed["trust"] == concise["trust"] == "untrusted_source"
     assert any(_INJECTION in f["md"] for f in detailed["fragments"])
-    for field in ("query", "sources", "token_usage", "coverage", "warnings"):
+    for field in ("query", "sources", "token_usage", "coverage", "warnings", "hints"):
         assert _INJECTION not in str(detailed[field]), field
     for frag in detailed["fragments"]:
         assert _INJECTION not in str(
@@ -373,7 +378,7 @@ def test_injected_page_text_stays_in_content_fields(
                 if k not in {"md", "heading_path", "evidence"}
             }
         )
-    for field in ("sources", "token_usage", "coverage", "warnings"):
+    for field in ("sources", "token_usage", "coverage", "warnings", "hints"):
         assert _INJECTION not in str(concise[field]), field
     # NINA's notice comes first, before any page text.
     first, second = concise["context"].splitlines()[:2]

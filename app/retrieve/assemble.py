@@ -127,6 +127,9 @@ class AssembleResult:
     budget_tokens: int = 0
     coverage: str = "insufficient"
     warnings: list[dict[str, object]] = field(default_factory=list)
+    #: Relevant candidates (rerank >= ``coverage_low``) were left out for lack of
+    #: budget; feeds the ``budget_limited`` hint (SPEC §8).
+    budget_limited: bool = False
 
 
 @dataclass
@@ -443,6 +446,11 @@ def assemble_context(
     rerank_scores = [s for s in rerank_by_key.values() if s is not None]
     max_rerank = max(rerank_scores) if rerank_scores else None
     result.coverage = _coverage(max_rerank, settings)
+    chosen = {(c.document_id, c.ord) for c in selected}
+    result.budget_limited = any(
+        key not in chosen and score is not None and score >= settings.coverage_low
+        for key, score in rerank_by_key.items()
+    )
     return result
 
 

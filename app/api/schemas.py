@@ -210,7 +210,16 @@ class AssembleResponse(BaseModel):
     token_usage: TokenUsage
     coverage: Literal["insufficient", "partial", "sufficient"]
     warnings: list[dict[str, object]]
+    hints: list[HintModel] = Field(default_factory=list)
     trust: Literal["untrusted_source"] = "untrusted_source"
+
+
+class HintModel(BaseModel):
+    """One actionable hint: NINA's metadata, never page text (SPEC §8)."""
+
+    code: str
+    message: str
+    details: dict[str, object] = Field(default_factory=dict)
 
 
 class ConciseAssembleResponse(BaseModel):
@@ -227,6 +236,7 @@ class ConciseAssembleResponse(BaseModel):
     token_usage: TokenUsage
     coverage: Literal["insufficient", "partial", "sufficient"]
     warnings: list[dict[str, object]]
+    hints: list[HintModel] = Field(default_factory=list)
     trust: Literal["untrusted_source"] = "untrusted_source"
 
 

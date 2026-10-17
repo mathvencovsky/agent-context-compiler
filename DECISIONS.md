@@ -10,6 +10,11 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: A3 — `hints` acionáveis no `assemble` e erros da API visíveis no MCP
+Contexto: issues dos concorrentes mostram resultados vazios em silêncio (`firecrawl/firecrawl#4241`) e "instruções" injetadas no texto das ferramentas (`upstash/context7#2663`, `#2673`). No NINA, o agente via só "Error executing tool assemble_context" quando a API falhava.
+Decisão (humano, 2026-10-17): campo aditivo `hints` (`code`, `message`, `details`) nas respostas detalhada e concisa, gerado por `app/retrieve/hints.py` só com dados do NINA (URL do chamador, status, números): `source_failed`, `low_coverage`, `budget_limited` (sinal novo em `AssembleResult`). No conciso, dicas e warnings ficam num bloco final marcado `NINA notes (not from the pages):`, que substitui as linhas soltas de fontes e warnings. As três ferramentas MCP repassam o erro da API (`Client error '422 ...: all_sources_failed: ...`). SPEC §8 e §9 atualizadas.
+Consequências: a cobertura entregue não muda, então não há metade A/B. O SDK do MCP põe "Error executing tool <nome>: " antes do texto do erro; o harness do M10 procura erros de infraestrutura com `startswith("Server error '500")`, o que pode não casar com esse prefixo (a verificar no harness).
+
 ## 2026-10-17: A1 (orçamento adaptativo) — regra de aceite, antes de qualquer medição
 Contexto: com λ = 0 a seleção enche o orçamento. O A1 corta candidatos de baixa relevância do rerank. Variantes na metade A: corte absoluto (τ = 0,1/0,2/0,3), relativo à maior nota (r = 0,3/0,5) e cotovelo (para quando a nota cai mais de 50% em relação à escolha anterior). Medição só com cache, com a extração anterior à correção do `<pre>` aplicada no script (todas as variantes usam os mesmos candidatos).
 Decisão (humano, 2026-10-17): na metade B, a variante escolhida passa se (1) em 1k/2k/4k/8k a cobertura média cai no máximo 0,5 pt e o acerto no máximo 1 pt; (2) os tokens médios caem pelo menos 5% em 4k e em 8k; (3) a cobertura por mil tokens fica acima da do strong_rag em todos os orçamentos. Na metade A escolhe-se a que mais economiza tokens entre as que passam em (1) e (3); se nenhuma passar, o A1 é rejeitado sem abrir a metade B.
