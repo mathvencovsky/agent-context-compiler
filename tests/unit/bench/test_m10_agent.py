@@ -666,3 +666,48 @@ def test_a_refused_judge_key_stops_the_run(tmp_path: Path, store: CorpusStore) -
     ctx = _ctx(tmp_path, store, FakeQuery(_session()), FailingJudge(Unauthorized()))
     with pytest.raises(HarnessError):
         run_session(_task(), "full_page", ctx)
+
+
+def test_infra_tool_errors_are_found_behind_the_mcp_sdk_prefix() -> None:
+    """The MCP SDK prefixes every tool error; detection must look past it."""
+    import asyncio
+
+    import httpx
+    from mcp.server.mcpserver import MCPServer
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    from app.mcp_server.client import NinaApiClient
+    from app.mcp_server.server import build_server
+    from bench.m10_agent import is_infra_tool_error
+    from bench.m10_tools import INFRA_ERROR
+
+    def wire_text(server: MCPServer, name: str, args: dict[str, object]) -> str:
+        try:
+            asyncio.run(server.call_tool(name, args))
+        except ToolError as exc:
+            return str(exc)  # the text the client receives
+        raise AssertionError("expected a tool error")
+
+    harness: MCPServer = MCPServer(name="docs")
+
+    @harness.tool()
+    def broken() -> str:
+        raise ToolError(f"{INFRA_ERROR}: OSError")
+
+    text = wire_text(harness, "broken", {})
+    assert text.startswith("Error executing tool broken: ")
+    assert is_infra_tool_error(text)
+
+    nina = build_server(
+        NinaApiClient(
+            base_url="http://nina.local",
+            api_key="k",
+            transport=httpx.MockTransport(lambda r: httpx.Response(500)),
+        )
+    )
+    text = wire_text(
+        nina, "assemble_context", {"query": "q", "urls": ["https://a.test/"]}
+    )
+    assert is_infra_tool_error(text)
+
+    assert not is_infra_tool_error("Error executing tool fetch_page: page not found: x")

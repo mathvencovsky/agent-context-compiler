@@ -10,6 +10,11 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: M10 — falhas de infraestrutura detectadas atrás do prefixo do SDK do MCP
+Contexto: o harness (`bench/m10_agent.py`) reconhece uma falha de infraestrutura (PREREG §10) pelo início do texto do erro da ferramenta (`infrastructure error`, `Server error '500`, ...). Mas o SDK do MCP entrega todo erro de ferramenta como "Error executing tool <nome>: <mensagem>", então nenhum erro dos servidores montados com ele (`bench/m10_tools.py` e o servidor do `nina`) casava: uma falha de infraestrutura contaria como resposta errada do agente.
+Decisão (pedido do humano para corrigir o que estava em aberto, 2026-10-17): `is_infra_tool_error` tira esse prefixo antes de comparar. Teste com o texto real que sai do SDK, para o servidor de teste e para o servidor do `nina` respondendo 500.
+Consequências: corrige a implementação da regra do PREREG §10, sem mudar a regra. Nenhuma sessão de agente tinha rodado.
+
 ## 2026-10-17: C1 — modo de demonstração `PROVIDERS=fake` e erro explícito sem chave
 Contexto: medido do `git clone` ao primeiro resultado (`docs/ONBOARDING.md`): o primeiro `assemble` exigia chaves pagas da OpenAI e da Jina, e sem elas a resposta era `500 internal server error`.
 Decisão (humano, 2026-10-17): `PROVIDERS=fake` (padrão `real`; recusado com `ENV=production`) faz a API usar os provedores falsos e determinísticos dos testes, e a resposta traz o warning `demo_providers`. A falta de chave (`MissingAPIKey`) vira `503 provider_not_configured`, com a mensagem que diz qual variável definir; o código entrou na tabela de erros da SPEC §8. Opções de modo leve escritas em `docs/MODO_LEVE.md`, sem construir.

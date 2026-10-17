@@ -54,6 +54,7 @@ import csv
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -170,6 +171,20 @@ _INFRA_TOOL_ERRORS = (
 )
 #: Context7 refusing the run's key or quota, sent as plain text: stop the run.
 _STOP_TOOL_TEXTS = ("Invalid API key", "Rate limited or quota exceeded")
+#: The MCP SDK sends a tool's error as "Error executing tool <name>: <message>".
+_SDK_TOOL_ERROR = re.compile(r"^Error executing tool [^:]+: ")
+
+
+def is_infra_tool_error(text: str) -> bool:
+    """A tool error that is the harness's or a service's failure (PREREG §10).
+
+    The prefix the MCP SDK puts on every tool error is skipped first; without
+    that, no error from the servers built here (``bench.m10_tools``, the
+    ``nina`` MCP server) could ever match.
+    """
+    return _SDK_TOOL_ERROR.sub("", text, count=1).startswith(_INFRA_TOOL_ERRORS)
+
+
 #: The one inherited Claude variable kept: Claude Code on Windows may need it to
 #: find Git Bash, and it changes nothing the agent sees.
 _KEEP_ENV = {"CLAUDE_CODE_GIT_BASH_PATH"}
@@ -423,7 +438,7 @@ async def run_attempt(
                                 _STOP_TOOL_TEXTS
                             ):
                                 attempt.halt = f"Context7 refused the run: {text[:200]}"
-                            elif block.is_error and text.startswith(_INFRA_TOOL_ERRORS):
+                            elif block.is_error and is_infra_tool_error(text):
                                 error = f"tool failure: {text[:200]}"
                     elif isinstance(message, ResultMessage):
                         result = message
