@@ -93,6 +93,13 @@ class FetchFailedError(NinaError):
     code = "fetch_failed"
 
 
+class UpstreamStatusError(NinaError):
+    """The site answered with an HTTP error instead of the page (SPEC §8
+    ``upstream_status``; ``details["upstream_status"]`` has the status)."""
+
+    code = "upstream_status"
+
+
 class TimeoutError(NinaError):  # noqa: A001 — the SPEC §8 code is literally "timeout"
     """Connect or total timeout was exceeded (SPEC §8 ``timeout``)."""
 
@@ -157,6 +164,7 @@ _ERROR_BY_CODE: dict[str, type[NinaError]] = {
         UnsupportedContentTypeError,
         ExtractionEmptyError,
         FetchFailedError,
+        UpstreamStatusError,
         TimeoutError,
         NotFoundError,
         AllSourcesFailedError,

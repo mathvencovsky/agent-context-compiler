@@ -10,6 +10,11 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: O1 — página de erro nunca vira documento (`upstream_status`, 502)
+Contexto: `app/fetch/client.fetch` devolve qualquer resposta final, e o `resolve` extraía e guardava o corpo HTML de um 404, de um 500 ou de um 3xx sem `Location` como se fosse a página (o mesmo defeito de `jina-ai/reader#1103` e `firecrawl/firecrawl#2316`). O `assemble` podia montar contexto com "Page not found".
+Decisão (humano, 2026-10-17): o `resolve` só aceita status 2xx (o 304 com versão em cache continua como antes); o resto levanta `upstream_status` (HTTP 502, código novo na SPEC §8) com `details.upstream_status`. O cliente de fetch não mudou, porque o robots.txt depende do status. No `assemble`, a URL aparece em `sources` como `upstream_status`, o warning traz o número HTTP e a dica explica 404 contra 5xx. O SDK ganhou `UpstreamStatusError`.
+Alternativa: reaproveitar `fetch_failed`, que hoje significa falha de transporte; misturaria os dois casos.
+
 ## 2026-10-17: C1 — bucket criado pelo próprio SeaweedFS; `make setup` e script para Windows
 Contexto: a imagem do aws-cli (567 MB) existia só para criar o bucket; no Windows não há `make`; e `make migrate` podia rodar antes do Postgres ficar pronto (`docs/ONBOARDING.md`).
 Decisão (pedido do humano para corrigir o que estava em aberto, 2026-10-17): o contêiner do SeaweedFS cria o bucket com `weed shell` ao subir (idempotente) e só fica saudável quando o bucket responde; o serviço `s3-init` saiu do compose (`weed shell` rodando em outro contêiner travava na segunda execução). A porta do S3 é configurável (`S3_PORT`, padrão 8333). `make setup` e `scripts/setup.ps1` fazem sync, `.env` (nunca por cima de um existente), serviços e migrações; `make up` usa `--wait --remove-orphans`.

@@ -135,3 +135,41 @@ def test_extraction_empty(harness: Harness) -> None:
         "/v1/documents/resolve", json={"url": harness.url(_PATH)}
     )
     _assert_error_envelope(response, "extraction_empty", 422)
+
+
+# O1: an error page is never a document (jina-ai/reader#1103,
+# firecrawl/firecrawl#2316). The bodies are real HTML, so they would extract.
+_ERROR_PAGE = (
+    b"<html><head><title>Page not found</title></head><body><main>"
+    + b"<h1>Page not found</h1>"
+    + b"<p>Sorry, the page you were looking for does not exist anymore.</p>" * 5
+    + b"</main></body></html>"
+)
+
+
+@pytest.mark.parametrize(
+    ("status", "headers"),
+    [(404, {}), (500, {}), (302, {}), (410, {})],
+    ids=["404", "500", "302-without-location", "410"],
+)
+def test_error_status_is_upstream_status_and_stores_nothing(
+    harness: Harness, status: int, headers: dict[str, str]
+) -> None:
+    def error_page() -> httpx.Response:
+        return httpx.Response(
+            status,
+            content=_ERROR_PAGE,
+            headers={"content-type": "text/html; charset=utf-8", **headers},
+        )
+
+    harness.transport.set(_PATH, error_page)
+    response = harness.client.post(
+        "/v1/documents/resolve", json={"url": harness.url(_PATH)}
+    )
+
+    _assert_error_envelope(response, "upstream_status", 502)
+    assert response.json()["error"]["details"]["upstream_status"] == status
+    with harness.session_factory() as session:
+        from app.store.models import DocumentVersion
+
+        assert session.query(DocumentVersion).count() == 0

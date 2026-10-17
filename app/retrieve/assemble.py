@@ -192,10 +192,12 @@ def _resolve_and_index(
                     status=code,
                 )
             )
+            upstream = getattr(exc, "details", {}).get("upstream_status")
+            reason = f"{code} (HTTP {upstream})" if upstream else code
             warnings.append(
                 {
                     "code": code,
-                    "message": f"failed to resolve {url}: {code}",
+                    "message": f"failed to resolve {url}: {reason}",
                     "url": url,
                 }
             )

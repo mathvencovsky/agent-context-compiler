@@ -33,6 +33,7 @@ from nina_client.errors import (
     TooLargeError,
     UnauthorizedError,
     UnsupportedContentTypeError,
+    UpstreamStatusError,
 )
 from nina_client.models import (
     AssembleResponse,
@@ -59,6 +60,7 @@ __all__ = [
     "UnsupportedContentTypeError",
     "ExtractionEmptyError",
     "FetchFailedError",
+    "UpstreamStatusError",
     "TimeoutError",
     "NotFoundError",
     "AllSourcesFailedError",

@@ -501,3 +501,55 @@ def test_demo_providers_mode_warns_that_ranking_is_not_meaningful(
 
     assert body["fragments"]
     assert "demo_providers" in [w["code"] for w in body["warnings"]]
+
+
+# O1: a 404 page is reported as a failed source, never assembled as content.
+_NOT_FOUND = (
+    b"<html><body><main><h1>Page not found</h1>"
+    + b"<p>Sorry, the page you were looking for does not exist anymore.</p>" * 5
+    + b"</main></body></html>"
+)
+
+
+def _not_found() -> httpx.Response:
+    return httpx.Response(
+        404, content=_NOT_FOUND, headers={"content-type": "text/html; charset=utf-8"}
+    )
+
+
+def test_assemble_reports_a_404_page_instead_of_using_it(
+    assemble_harness: AssembleHarness,
+) -> None:
+    harness = assemble_harness
+    gone = "/gone"
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+    harness.transport.set(gone, _not_found)
+
+    body = _post(
+        harness,
+        {
+            "query": "How are classes defined and used?",
+            "urls": [harness.url(_AUTH_PATH), harness.url(gone)],
+            "selection": "truncate",
+        },
+    ).json()
+
+    assert {s["url"]: s["status"] for s in body["sources"]}[
+        harness.url(gone)
+    ] == "upstream_status"
+    assert all("Page not found" not in f["md"] for f in body["fragments"])
+    assert any("(HTTP 404)" in w["message"] for w in body["warnings"])
+    hint = next(h for h in body["hints"] if h["code"] == "source_failed")
+    assert "404: the URL is wrong or moved" in hint["message"]
+
+
+def test_assemble_with_only_a_404_page_is_all_sources_failed(
+    assemble_harness: AssembleHarness,
+) -> None:
+    harness = assemble_harness
+    harness.transport.set(_AUTH_PATH, _not_found)
+    response = _post(harness, {"query": "q", "urls": [harness.url(_AUTH_PATH)]})
+    assert response.status_code == 422
+    assert response.json()["error"]["details"]["sources"] == [
+        {"url": harness.url(_AUTH_PATH), "status": "upstream_status"}
+    ]

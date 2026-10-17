@@ -271,7 +271,7 @@ Response 200:
 }
 ```
 
-Se uma das URLs falhar, a resposta continua 200 com as outras, e a falha aparece em `sources[].status` e em `warnings`. Se todas falharem, a resposta é 422.
+Só uma resposta 2xx do site vira documento: uma página de erro (404, 500, 3xx sem `Location`, 304 sem versão em cache) dá `upstream_status` (502), com `details.upstream_status` igual ao status recebido, e nada é guardado. Se uma das URLs falhar, a resposta continua 200 com as outras, e a falha aparece em `sources[].status` e em `warnings`. Se todas falharem, a resposta é 422.
 
 `hints` (nas duas formas) são metadados do NINA, nunca texto de página: descrevem a situação e as opções, sem dar ordens ao agente (DECISIONS.md 2026-10-17). Códigos: `source_failed` (uma por URL que falhou, com `details.url` e `details.status` e o motivo), `low_coverage` (quando `coverage` é `insufficient`) e `budget_limited` (sobraram candidatos com rerank ≥ `coverage_low` fora do orçamento; `details.max_tokens` sugere o dobro, até 32000). No formato conciso, as dicas e os warnings vêm no fim do `context`, depois de uma linha `---` e do título `NINA notes (not from the pages):`.
 
@@ -320,6 +320,7 @@ Agregados da chave atual por dia e por endpoint: requisições, tokens entregues
 | unsupported_content_type | 415 |
 | extraction_empty | 422 |
 | fetch_failed | 502 |
+| upstream_status | 502 |
 | timeout | 504 |
 | provider_not_configured | 503 |
 

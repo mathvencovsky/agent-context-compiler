@@ -29,6 +29,9 @@ _SOURCE_OPTIONS = {
     "specific page",
     "unsupported_content_type": "the content type is neither HTML nor PDF",
     "extraction_empty": "the page has no extractable text",
+    "upstream_status": "the site answered with an HTTP error instead of the page "
+    "(404: the URL is wrong or moved; 5xx: the options are retrying later or "
+    "another URL)",
     "timeout": "the site did not answer in time; the options are retrying later "
     "or another URL",
     "fetch_failed": "the site refused or failed the request; the options are "

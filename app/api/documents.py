@@ -60,7 +60,7 @@ from app.extract.to_markdown import to_markdown
 from app.fetch.client import Transport
 from app.fetch.client import fetch as default_fetch
 from app.fetch.detect import detect_charset, parse_content_type, should_render
-from app.fetch.errors import UnsupportedContentType
+from app.fetch.errors import UnsupportedContentType, UpstreamStatus
 from app.fetch.guard import GuardResult, Resolver, validate_url
 from app.fetch.render import RENDERED_WITH_BROWSER_WARNING_CODE, render_url
 from app.fetch.robots import RobotsChecker
@@ -397,6 +397,14 @@ def resolve_document(
             )
             session.commit()
             return response
+
+        # (6b) Only a 2xx answer is a document: an error page (404, 500, a 3xx
+        # without Location, a 304 with nothing cached) is never extracted.
+        if not 200 <= result.status < 300:
+            raise UpstreamStatus(
+                f"{result.final_url} answered HTTP {result.status}",
+                details={"url": result.final_url, "upstream_status": result.status},
+            )
 
         # (7) content hash + dedup.
         content_hash = hashlib.sha256(result.body).hexdigest()

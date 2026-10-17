@@ -103,6 +103,15 @@ class FetchFailed(FetchError):
     http_status = 502
 
 
+class UpstreamStatus(FetchError):
+    """The site answered with a non-success status (404, 500, a 3xx without
+    ``Location``...): its body is an error page, never a document (SPEC §8).
+    ``details.upstream_status`` carries the status the site sent."""
+
+    code = "upstream_status"
+    http_status = 502
+
+
 class Timeout(FetchError):
     """Connect or total timeout was exceeded."""
 
