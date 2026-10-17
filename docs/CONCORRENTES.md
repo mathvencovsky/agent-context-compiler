@@ -32,7 +32,8 @@ fragmentos úteis dentro de um orçamento, com proveniência.
 que o agente recebe pelo MCP custa **+104% de tokens em 4k e +77% em 8k** sobre o
 texto dos fragmentos: ids `doc_`/`ver_`/`chunk_id`, quatro scores, um trecho de
 evidência que repete o próprio texto, a pergunta ecoada e o Markdown escapado
-dentro do JSON. É a lição mais cara que ainda não aplicamos.
+dentro do JSON. Aplicada em `23b887f`: o formato conciso, padrão no MCP, corta
+42% a 61% desses tokens.
 
 ### 2. Mais texto não é melhor
 
@@ -71,8 +72,8 @@ O Firecrawl passou `onlyMainContent` a padrão na v1 e depois adicionou um
 fallback porque o filtro às vezes cortava demais.
 
 **No NINA:** foi exatamente o item 4 da Fase 3 (aceito): o readability guardava
-só um bloco nas páginas sem `<main>`. Falta transformar a medida de retenção por
-site num teste de regressão, para o próximo site novo não cair no mesmo buraco.
+só um bloco nas páginas sem `<main>`. A medida de retenção por site virou uma
+checagem de regressão (`uv run python -m bench.extract_retention --check`).
 
 ### 6. Contexto no pedaço antes de indexar; rerank profundo
 
@@ -197,8 +198,8 @@ Percentuais sobre as issues que não são formulário: Context7 1.085, Firecrawl
    - No Crawl4AI, log escrito no stdout quebrou o transporte stdio do MCP
      (`unclecode/crawl4ai#1968`).
    - No NINA os logs vão para o stderr (`logging.StreamHandler()` padrão), e o
-     servidor MCP nem configura logging. Mas nenhum teste garante isso, e é um
-     teste barato de acrescentar.
+     servidor MCP nem configura logging. Um teste garante isso desde a trilha B
+     (`tests/unit/mcp/test_stdio_clean.py`).
 4. **Ferramenta de documentação vira alvo de prompt injection.**
    - No Context7, respostas do `query-docs` vieram com um "aviso do sistema" e
      conteúdo de injeção anexado (`upstash/context7#2663`, `#2673`). Também
@@ -263,21 +264,23 @@ Percentuais sobre as issues que não são formulário: Context7 1.085, Firecrawl
 | # | mudança | lição | como medir sem custo | mexe no contrato? |
 |---|---|---|---|---|
 | 1 | `response_format` conciso no `assemble` e no MCP: Markdown com um cabeçalho por documento, caminho de seções, referência curta por fragmento; sem scores, sem evidência duplicada, sem ecoar a pergunta. **Feito (`23b887f`).** | 1 | tokens na metade A, com o mesmo conteúdo | sim (SPEC §8) |
-| 2 | teste de regressão da retenção de texto por site no corpus congelado | 5 | roda local | não |
-| 3 | dicas acionáveis quando a cobertura é baixa ou o orçamento corta, separadas do texto das páginas e marcadas como metadados do NINA | 9; achado 4 | testes de unidade | sim, aditivo |
-| 4 | excluir fragmentos já entregues (parâmetro opcional) | 3 | testes; ganho real só no M10 | sim, aditivo |
-| 5 | teste de que o servidor MCP via stdio não escreve nada no stdout além do protocolo | achado 3 | teste de unidade | não |
-| 6 | testes de extração para bloco de código (quebras de linha), tabela, link relativo e texto repetido | achado 6 | fixtures pequenas, local | não |
-| 7 | `assemble` sobre uma página de centenas de milhares de tokens termina sem erro e dentro do orçamento | achado 1 | corpus congelado, local | não |
-| 8 | falha explícita e acionável para página bloqueada ou proibida pelo robots.txt | achado 7; lição 9 | testes de unidade | sim, aditivo |
+| 2 | teste de regressão da retenção de texto por site no corpus congelado. **Feito (`fcea16d`).** | 5 | roda local | não |
+| 3 | dicas acionáveis quando a cobertura é baixa ou o orçamento corta, separadas do texto das páginas e marcadas como metadados do NINA. **Feito (`158e0ca`).** | 9; achado 4 | testes de unidade | sim, aditivo |
+| 4 | excluir fragmentos já entregues (parâmetro opcional). **Feito (`23bd3ac`).** | 3 | testes; ganho real só no M10 | sim, aditivo |
+| 5 | teste de que o servidor MCP via stdio não escreve nada no stdout além do protocolo. **Feito (`ed94811`).** | achado 3 | teste de unidade | não |
+| 6 | testes de extração para bloco de código (quebras de linha), tabela, link relativo e texto repetido. **Feito (`c11182c`, `6819766`).** | achado 6 | fixtures pequenas, local | não |
+| 7 | `assemble` sobre uma página de centenas de milhares de tokens termina sem erro e dentro do orçamento. **Feito (`0f4c969`).** | achado 1 | corpus congelado, local | não |
+| 8 | falha explícita e acionável para página bloqueada ou proibida pelo robots.txt. **Feito (`edf579f`, `158e0ca`).** | achado 7; lição 9 | testes de unidade | sim, aditivo |
 
 O item 1 era o de maior ganho econômico: o conteúdo é o mesmo, só muda a
 embalagem. Foi medido em −48% de tokens em 4k e −42% em 8k. O risco é a
 qualidade da resposta mudar com o formato; sem gastar, essa verificação fica
 para as sessões de agente do M10, que já vão medir o custo por tarefa resolvida.
 
-Fica para depois (custa ou exige medir respostas): rerank mais profundo,
-orçamento adaptativo, modo local de provedores.
+Fica para depois (custa ou exige medir respostas): rerank mais profundo e modo
+local de provedores. O orçamento adaptativo foi medido sem custo e rejeitado na
+metade A (A1, `cd80170`): todo corte por relevância perdia mais cobertura do que
+economizava.
 
 ## Fontes
 

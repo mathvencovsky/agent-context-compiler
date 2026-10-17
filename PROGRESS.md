@@ -1,11 +1,15 @@
 # PROGRESS
 
-Marco atual: **M10a (aprofundar o NINA antes do piloto) — Fase 3 em andamento**
-(trilha 1: itens 1 e 4 aceitos, 2 e 3 rejeitados). Próximo passo: plano da
-trilha 2 (qualidade da resposta). Da Fase 3 do M10 estão prontos o custo por
-sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
-seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
-de agente foi feita no M10.
+Marco atual: **M10a (aprofundar o NINA antes do piloto), melhorias sem custo**.
+Feitos: trilha 1 da Fase 3 (itens 1 e 4 aceitos, 2 e 3 rejeitados), formato
+conciso, índice reaproveitado, trilhas B, A e C (Emenda 10 recongelou `app/`) e
+O1 (páginas de erro nunca viram documento). Em andamento, uma frente por vez:
+limpeza dos documentos, robots.txt no snapshot, descrições das ferramentas MCP,
+busca léxica mais leve, versão e atualidade, calculadora de ROI e as peças
+gratuitas do M10; termina com nova emenda de recongelamento. A trilha 2 (medir
+respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
+custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
+seis braços. Nenhuma sessão de agente foi feita no M10.
 
 ### M10a — pendências fechadas (2026-10-17)
 
@@ -31,8 +35,8 @@ C1 (`docs/ONBOARDING.md`): do `git clone` ao `/health` em ~1,5 minuto mais
 ~1,4 GB de imagens. O primeiro `assemble` sem chaves dava 500 opaco; agora dá
 `503 provider_not_configured`, e `PROVIDERS=fake` (só dev) permite testar sem
 chave. No Windows, `uv sync` falha com cache em caminho longo (README avisa).
-Cortes propostos e não feitos: bucket criado pela API (−567 MB), `make setup`
-e script para Windows. C2 (`docs/MODO_LEVE.md`): três opções de modo leve, com
+Cortes feitos depois (ver "pendências fechadas"): o SeaweedFS cria o próprio
+bucket (−567 MB), `make setup` e `scripts/setup.ps1`. C2 (`docs/MODO_LEVE.md`): três opções de modo leve, com
 recomendação de tirar o S3 primeiro; decisão do humano.
 
 ### M10a — trilha A, A2 código inteiro para perguntas de código (2026-10-17, rejeitado)
@@ -74,10 +78,10 @@ página bloqueada no `assemble` (B5), texto de injeção só nos campos de conte
 (B6), `assemble` numa página sintética de ~500 mil tokens em 22 s e dentro do
 orçamento (B4), e `uv run python -m bench.extract_retention --check` contra a
 linha de base por site em `bench/extract_retention_baseline.json` (B1).
-Pendente, decisão do humano: quebras de linha de código dentro de `<pre>` (por
-`<br>` ou por linhas em `<div>`, como no react.dev) se perdem; corrigir muda o
-texto dos pedaços de ~154 páginas do corpus. Os testes estão prontos fora do
-repositório. O `app/` mudou (charset): entra na emenda de recongelamento.
+Quebras de linha de código dentro de `<pre>` (por `<br>` ou por linhas em
+`<div>`, como no react.dev) se perdiam: corrigido depois, com aprovação do
+humano (testes em `tests/unit/extract/test_code_line_breaks.py`; as 33 tarefas
+afetadas foram remedidas). O `app/` mudou e entrou na Emenda 10.
 
 ### M10a — índice reaproveitado entre chamadas (2026-10-16)
 
@@ -96,8 +100,9 @@ MCP o mandava duas vezes (texto e `structuredContent`). Agora `assemble` aceita
 o MCP usa o conciso por padrão e não manda a cópia estruturada, e o SDK tem
 `assemble_concise`. `uv run python -m bench.m10a_format` (offline): −48% de
 tokens em 4k e −42% em 8k, sem perder texto. SPEC §8/§9 e DECISIONS atualizados.
-Achados para depois: `include_evidence` não tem efeito; cada `assemble`
-re-indexa as URLs e recalcula embeddings (custo e latência a cada chamada).
+Os dois achados desta etapa (`include_evidence` sem efeito; `assemble`
+re-indexando e recalculando embeddings a cada chamada) foram corrigidos na
+seção "índice reaproveitado entre chamadas".
 
 ### M10a Fase 3 — item 4: perdas de extração (2026-10-16, aceito)
 
@@ -277,8 +282,9 @@ cache. Saída local em `bench/results/m10a/baseline_real.{csv,md}`.
   conectam. O Context7 conecta até com chave vazia ou errada: a recusa da chave
   só aparece na primeira chamada de ferramenta ("Invalid API key…"), e aí a
   rodada para.
-- **Conferir no piloto:** se o WebFetch cobra o `claude-haiku-5-5` (outro
-  modelo, sem preço, para a rodada depois da primeira sessão do braço); o texto
+- **Conferir no piloto:** se o WebFetch cobra o `claude-haiku-5-5` (já tem
+  preços de entrada, saída e cache no `bench/prices.yaml`; o humano confere os
+  valores antes do piloto); o texto
   de erro do WebFetch quando a leitura da página falha por sobrecarga da API
   (hoje contaria como erro do agente).
 - **Antes do piloto (humano), além da lista da seção abaixo:**

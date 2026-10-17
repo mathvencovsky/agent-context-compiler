@@ -1,7 +1,8 @@
-"""Code line breaks in <pre> (jina-ai/reader#77): pending a decision.
+"""Code line breaks in <pre> (jina-ai/reader#77).
 
-The fix changes the chunk text of ~154 corpus pages (react.dev, MDN), so it is
-held until the human decides; see the M10a track B report.
+Fixed in ``app.extract.html._raw_code`` (DECISIONS.md 2026-10-17); the fix
+changed the chunks of ~154 corpus pages (react.dev, MDN), and the dev tasks that
+cite them were re-measured (``bench/m10a_pre_remeasure.py``).
 """
 
 from __future__ import annotations

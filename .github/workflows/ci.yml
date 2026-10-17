@@ -52,8 +52,8 @@ jobs:
       # Object storage is SeaweedFS (Apache-2.0, S3-compatible). GitHub Actions
       # service containers cannot override the image command, and this image's
       # entrypoint does not start the S3 gateway by default, so we bring the
-      # whole verified compose stack up in-job instead (Postgres + SeaweedFS +
-      # one-shot bucket init). See DECISIONS.md.
+      # whole verified compose stack up in-job instead (Postgres + SeaweedFS,
+      # which creates its own bucket). See DECISIONS.md.
       - name: Start infrastructure
         run: |
           cp .env.example .env
