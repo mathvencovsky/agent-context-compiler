@@ -125,6 +125,9 @@ class AssembleRequest(BaseModel):
     max_tokens: int = Field(default=4000, ge=256, le=32000)
     include_evidence: bool = True
     response_format: ResponseFormat = "detailed"
+    #: Chunk ids the caller already has; they are left out before the rerank, so
+    #: the budget goes to new fragments. Unknown ids are ignored (SPEC §8).
+    exclude_chunk_ids: list[str] = Field(default_factory=list, max_length=1000)
     # Ablation flags (SPEC §6; non-production only, enforced by the handler).
     use_lexical: bool = True
     use_vector: bool = True

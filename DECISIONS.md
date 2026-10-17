@@ -10,6 +10,11 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: A4 — `exclude_chunk_ids` para não repetir fragmentos
+Contexto: o agente chama `assemble` várias vezes nas mesmas URLs e recebia de novo os mesmos fragmentos. Ref e Context7 evitam repetição guardando estado de sessão (docs/CONCORRENTES.md, lição 3).
+Decisão (humano, 2026-10-17): parâmetro opcional e sem estado `exclude_chunk_ids` (até 1000) na API, no MCP e no SDK. Os ids saem da lista fundida antes do rerank, então os próximos candidatos entram no top-30. Ids desconhecidos são ignorados. Os `chunk_id` são estáveis por versão desde 2026-10-16 e aparecem no formato conciso.
+Consequências: sem o parâmetro nada muda (benchmark igual). Numa segunda chamada igual, os tokens repetidos caem de mais de zero para zero (teste de integração). O braço `nina` do M10 vê o parâmetro na descrição da ferramenta: entra na emenda de recongelamento.
+
 ## 2026-10-17: A3 — `hints` acionáveis no `assemble` e erros da API visíveis no MCP
 Contexto: issues dos concorrentes mostram resultados vazios em silêncio (`firecrawl/firecrawl#4241`) e "instruções" injetadas no texto das ferramentas (`upstash/context7#2663`, `#2673`). No NINA, o agente via só "Error executing tool assemble_context" quando a API falhava.
 Decisão (humano, 2026-10-17): campo aditivo `hints` (`code`, `message`, `details`) nas respostas detalhada e concisa, gerado por `app/retrieve/hints.py` só com dados do NINA (URL do chamador, status, números): `source_failed`, `low_coverage`, `budget_limited` (sinal novo em `AssembleResult`). No conciso, dicas e warnings ficam num bloco final marcado `NINA notes (not from the pages):`, que substitui as linhas soltas de fontes e warnings. As três ferramentas MCP repassam o erro da API (`Client error '422 ...: all_sources_failed: ...`). SPEC §8 e §9 atualizadas.

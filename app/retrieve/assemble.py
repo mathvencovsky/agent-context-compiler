@@ -372,6 +372,11 @@ def assemble_context(
     ranked_lists: list[list[Key]] = [lexical_ranked, vector_ranked]
     weights: list[float] = [settings.lexical_weight, 1.0]
     fused = rrf_fuse(ranked_lists, k=settings.rrf_k, weights=weights)
+    # Fragments the caller already has leave before the rerank, so the next
+    # candidates take their places in the top-30 (SPEC §8 exclude_chunk_ids).
+    if req.exclude_chunk_ids:
+        excluded = set(req.exclude_chunk_ids)
+        fused = [(k, v) for k, v in fused if str(chunk_by_key[k].id) not in excluded]
     rrf_by_key = dict(fused)
 
     # (5) Rerank the top-30 and derive each candidate's selection value.

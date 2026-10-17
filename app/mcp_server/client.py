@@ -96,6 +96,7 @@ class NinaApiClient:
         urls: list[str],
         max_tokens: int,
         response_format: str = "detailed",
+        exclude_chunk_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Call ``POST /v1/context/assemble`` and return the JSON body."""
         return self._post_json(
@@ -105,6 +106,7 @@ class NinaApiClient:
                 "urls": urls,
                 "max_tokens": max_tokens,
                 "response_format": response_format,
+                "exclude_chunk_ids": exclude_chunk_ids or [],
             },
         )
 

@@ -7,6 +7,12 @@ sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
 de agente foi feita no M10.
 
+### M10a — trilha A, A4 sem fragmentos repetidos (2026-10-17)
+
+`assemble` aceita `exclude_chunk_ids`: numa chamada seguinte, o agente passa os
+ids que já tem e recebe só fragmentos novos (API, MCP e SDK). Teste de
+integração com duas chamadas: nenhum fragmento repetido.
+
 ### M10a — trilha A, A3 dicas acionáveis (2026-10-17)
 
 O `assemble` devolve `hints` (fonte que falhou e por quê, cobertura baixa,

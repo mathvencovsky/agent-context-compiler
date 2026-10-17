@@ -120,6 +120,7 @@ class NinaClient:
         *,
         max_tokens: int = 4000,
         include_evidence: bool = True,
+        exclude_chunk_ids: list[str] | None = None,
     ) -> AssembleResponse:
         """Assemble a token-budgeted context package (``POST /v1/context/assemble``)."""
         payload: dict[str, Any] = {
@@ -127,12 +128,18 @@ class NinaClient:
             "urls": urls,
             "max_tokens": max_tokens,
             "include_evidence": include_evidence,
+            "exclude_chunk_ids": exclude_chunk_ids or [],
         }
         body = self._request("POST", "/v1/context/assemble", json=payload)
         return AssembleResponse.from_dict(body)
 
     def assemble_concise(
-        self, query: str, urls: list[str], *, max_tokens: int = 4000
+        self,
+        query: str,
+        urls: list[str],
+        *,
+        max_tokens: int = 4000,
+        exclude_chunk_ids: list[str] | None = None,
     ) -> ConciseAssembleResponse:
         """The same context as Markdown for an agent (``response_format="concise"``)."""
         payload: dict[str, Any] = {
@@ -140,6 +147,7 @@ class NinaClient:
             "urls": urls,
             "max_tokens": max_tokens,
             "response_format": "concise",
+            "exclude_chunk_ids": exclude_chunk_ids or [],
         }
         body = self._request("POST", "/v1/context/assemble", json=payload)
         return ConciseAssembleResponse.from_dict(body)

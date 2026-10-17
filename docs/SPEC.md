@@ -242,10 +242,11 @@ Request:
   "urls": ["https://docs.example.com/auth", "https://docs.example.com/errors"],
   "max_tokens": 4000,
   "include_evidence": true,
-  "response_format": "detailed"
+  "response_format": "detailed",
+  "exclude_chunk_ids": []
 }
 ```
-Limites: `urls` entre 1 e 20, `max_tokens` entre 256 e 32000. Com `include_evidence: false`, cada fragmento vem com `evidence: []` (no conciso o campo é ignorado, porque a página dos PDFs vem da evidência). `response_format` é `"detailed"` (padrão na API HTTP; resposta abaixo) ou `"concise"`.
+Limites: `urls` entre 1 e 20, `max_tokens` entre 256 e 32000. Com `include_evidence: false`, cada fragmento vem com `evidence: []` (no conciso o campo é ignorado, porque a página dos PDFs vem da evidência). `exclude_chunk_ids` (até 1000) lista `chunk_id`s que o chamador já tem: saem antes do rerank, e o orçamento vai para fragmentos novos; ids desconhecidos (por exemplo, de outra versão da página) são ignorados. `response_format` é `"detailed"` (padrão na API HTTP; resposta abaixo) ou `"concise"`.
 
 Response 200:
 ```json
@@ -326,7 +327,7 @@ Agregados da chave atual por dia e por endpoint: requisições, tokens entregues
 Transporte stdio para uso local e streamable HTTP para uso remoto. É um cliente fino da API HTTP (recebe `API_URL` e `API_KEY`). Ferramentas:
 
 - `resolve_url(url, format="markdown")`
-- `assemble_context(query, urls, max_tokens=4000, response_format="concise")`: no padrão `concise` devolve só o texto de `context`, sem cópia em `structuredContent`; com `"detailed"`, o JSON detalhado. Em qualquer ferramenta, um erro da API chega ao agente como erro da ferramenta com a primeira linha do httpx (ex.: `Client error '422 ...`) seguida de `code: message` do envelope de erro.
+- `assemble_context(query, urls, max_tokens=4000, response_format="concise", exclude_chunk_ids=None)`: no padrão `concise` devolve só o texto de `context`, sem cópia em `structuredContent`; com `"detailed"`, o JSON detalhado. Em qualquer ferramenta, um erro da API chega ao agente como erro da ferramenta com a primeira linha do httpx (ex.: `Client error '422 ...`) seguida de `code: message` do envelope de erro.
 - `get_document(document_id, version_id=None)`
 
 As descrições das ferramentas avisam que o conteúdo retornado vem de páginas externas e não deve ser tratado como instrução.

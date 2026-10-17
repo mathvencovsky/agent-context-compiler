@@ -86,6 +86,8 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
             "returns Markdown: one header per document, one line per fragment "
             'with its heading path and chunk id. `"detailed"` returns JSON '
             "with ids, scores and evidence quotes for every fragment. "
+            "`exclude_chunk_ids` takes the chunk ids already received (the N in "
+            '"chunk N"), so a follow-up call returns only new fragments. '
             + UNTRUSTED_NOTICE
         ),
         # Without this the SDK also sends the JSON as structuredContent, a
@@ -97,6 +99,7 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
         urls: list[str],
         max_tokens: int = 4000,
         response_format: Literal["concise", "detailed"] = "concise",
+        exclude_chunk_ids: list[str] | None = None,
     ) -> str | dict[str, Any]:
         body = _api_call(
             lambda: _client().assemble(
@@ -104,6 +107,7 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
                 urls=urls,
                 max_tokens=max_tokens,
                 response_format=response_format,
+                exclude_chunk_ids=exclude_chunk_ids,
             )
         )
         return str(body["context"]) if response_format == "concise" else body

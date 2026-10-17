@@ -430,3 +430,58 @@ def test_assemble_on_a_huge_page_stays_within_budget(
     assert body["fragments"]
     assert body["token_usage"]["output_tokens"] <= 4000
     assert elapsed < 300, f"assemble took {elapsed:.0f}s"
+
+
+# A4 (M10a track A): a follow-up call that passes the chunk ids it already has
+# gets only new fragments, so no tokens go to repeats.
+
+
+def test_second_call_with_exclude_chunk_ids_repeats_nothing(
+    assemble_harness: AssembleHarness,
+) -> None:
+    harness = assemble_harness
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+    body = {
+        "query": "How are classes defined and used?",
+        "urls": [harness.url(_AUTH_PATH)],
+        "max_tokens": 1000,
+    }
+    first = _post(harness, body).json()["fragments"]
+    seen = [f["chunk_id"] for f in first]
+    assert seen
+
+    again = _post(harness, body).json()["fragments"]
+    wasted = sum(f["tokens"] for f in again if f["chunk_id"] in seen)
+    assert wasted > 0  # without the parameter the same fragments come back
+
+    follow = _post(harness, {**body, "exclude_chunk_ids": seen}).json()["fragments"]
+    assert follow
+    assert not {f["chunk_id"] for f in follow} & set(seen)
+    assert sum(f["tokens"] for f in follow if f["chunk_id"] in seen) == 0
+
+
+def test_unknown_excluded_ids_are_ignored(assemble_harness: AssembleHarness) -> None:
+    harness = assemble_harness
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+    body = {"query": "How are classes used?", "urls": [harness.url(_AUTH_PATH)]}
+    plain = _post(harness, body).json()["fragments"]
+    response = _post(
+        harness, {**body, "exclude_chunk_ids": ["no-such-id", "999999999"]}
+    )
+    assert response.status_code == 200
+    assert response.json()["fragments"] == plain
+
+
+def test_too_many_excluded_ids_is_a_validation_error(
+    assemble_harness: AssembleHarness,
+) -> None:
+    harness = assemble_harness
+    response = _post(
+        harness,
+        {
+            "query": "q",
+            "urls": [harness.url(_AUTH_PATH)],
+            "exclude_chunk_ids": [str(n) for n in range(1001)],
+        },
+    )
+    assert response.status_code in {400, 422}
