@@ -127,6 +127,25 @@ def fetch_error_handler(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+def missing_key_handler(request: Request, exc: Exception) -> JSONResponse:
+    """A provider without its API key: an explicit ``503`` saying what to set.
+
+    The message names the environment variable, never a key value; before this a
+    first ``assemble`` without keys was an opaque ``500`` (C1, 2026-10-17).
+    """
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": {
+                "code": "provider_not_configured",
+                "message": f"{exc} For a demo without keys, set PROVIDERS=fake "
+                "(dev only).",
+                "details": {},
+            }
+        },
+    )
+
+
 def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Serialize any uncaught exception into a generic ``500`` (no leak)."""
     return JSONResponse(

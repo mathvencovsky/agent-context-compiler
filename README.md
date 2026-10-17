@@ -75,6 +75,13 @@ make dev                 # API at http://localhost:8000
 curl http://localhost:8000/health   # {"status":"ok","db":"ok","blobs":"ok"}, or 503 naming the broken dependency
 ```
 
+- `assemble` needs an OpenAI key (`EMBEDDINGS_API_KEY`) and a Jina key
+  (`RERANKER_API_KEY`); without them it answers `503 provider_not_configured`.
+  To try it with no keys, set `PROVIDERS=fake` in `.env` (dev only): the
+  fragment ranking is then not meaningful, and the response says so.
+- First run takes about 1.5 minutes plus ~1.4 GB of Docker images
+  (`docs/ONBOARDING.md`). On Windows, if `uv sync` fails building `jstyleson`,
+  enable long paths or set a short `UV_CACHE_DIR`.
 - Auth is off when `ENV=dev`.
 - The OpenAPI schema is at `/openapi.json`; interactive docs are at `/docs`.
 - SPA rendering and the `browser` tests need Chromium:

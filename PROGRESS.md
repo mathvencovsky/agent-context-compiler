@@ -7,6 +7,16 @@ sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
 de agente foi feita no M10.
 
+### M10a — trilha C, atrito de adoção (2026-10-17)
+
+C1 (`docs/ONBOARDING.md`): do `git clone` ao `/health` em ~1,5 minuto mais
+~1,4 GB de imagens. O primeiro `assemble` sem chaves dava 500 opaco; agora dá
+`503 provider_not_configured`, e `PROVIDERS=fake` (só dev) permite testar sem
+chave. No Windows, `uv sync` falha com cache em caminho longo (README avisa).
+Cortes propostos e não feitos: bucket criado pela API (−567 MB), `make setup`
+e script para Windows. C2 (`docs/MODO_LEVE.md`): três opções de modo leve, com
+recomendação de tirar o S3 primeiro; decisão do humano.
+
 ### M10a — trilha A, A2 código inteiro para perguntas de código (2026-10-17, rejeitado)
 
 `uv run python -m bench.m10a_code --half A` (0 chamadas pagas): dar bônus aos

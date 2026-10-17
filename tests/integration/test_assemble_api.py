@@ -485,3 +485,19 @@ def test_too_many_excluded_ids_is_a_validation_error(
         },
     )
     assert response.status_code in {400, 422}
+
+
+def test_demo_providers_mode_warns_that_ranking_is_not_meaningful(
+    assemble_harness: AssembleHarness, settings: Settings
+) -> None:
+    harness = assemble_harness
+    demo = settings.model_copy(update={"providers": "fake"})
+    harness.client.app.dependency_overrides[documents.provide_settings] = lambda: demo  # type: ignore[attr-defined]
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+
+    body = _post(
+        harness, {"query": "How are classes used?", "urls": [harness.url(_AUTH_PATH)]}
+    ).json()
+
+    assert body["fragments"]
+    assert "demo_providers" in [w["code"] for w in body["warnings"]]

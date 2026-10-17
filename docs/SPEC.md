@@ -321,6 +321,7 @@ Agregados da chave atual por dia e por endpoint: requisições, tokens entregues
 | extraction_empty | 422 |
 | fetch_failed | 502 |
 | timeout | 504 |
+| provider_not_configured | 503 |
 
 ## 9. Servidor MCP
 

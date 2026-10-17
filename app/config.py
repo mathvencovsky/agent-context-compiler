@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     env: Literal["dev", "production"] = "dev"
+    # "fake": the deterministic test providers instead of OpenAI and Jina, so a
+    # first assemble works with no paid key (demo only; refused in production;
+    # DECISIONS.md 2026-10-17).
+    providers: Literal["real", "fake"] = "real"
 
     # Postgres (discrete fields; database_url is computed below).
     postgres_host: str = "localhost"

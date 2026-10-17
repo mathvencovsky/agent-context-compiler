@@ -18,12 +18,17 @@ from sqlalchemy import create_engine, text
 
 from app.api.assemble import router as assemble_router
 from app.api.documents import router as documents_router
-from app.api.errors import fetch_error_handler, generic_exception_handler
+from app.api.errors import (
+    fetch_error_handler,
+    generic_exception_handler,
+    missing_key_handler,
+)
 from app.api.usage import UsageMiddleware
 from app.api.usage import router as usage_router
 from app.config import Settings, get_settings
 from app.fetch.errors import FetchError
 from app.logging import RequestIdMiddleware, configure_logging, logger
+from app.providers.llm.openai import MissingAPIKey
 
 CheckStatus = Literal["ok", "error"]
 
@@ -117,6 +122,7 @@ def create_app() -> FastAPI:
             route.dependency_overrides_provider = app
             route.app = request_response(route.get_route_handler())
     app.add_exception_handler(FetchError, fetch_error_handler)
+    app.add_exception_handler(MissingAPIKey, missing_key_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
 
     @app.get("/health")

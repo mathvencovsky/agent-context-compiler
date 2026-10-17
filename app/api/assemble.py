@@ -55,9 +55,12 @@ from app.api.schemas import (
     TokenUsage,
 )
 from app.api.usage import require_quota, set_usage_units
+from app.config import Settings
 from app.providers.embeddings.base import EmbeddingProvider
+from app.providers.embeddings.fake import FakeEmbeddingProvider
 from app.providers.embeddings.openai import OpenAIEmbeddingProvider
 from app.providers.rerank.base import RerankProvider
+from app.providers.rerank.fake import FakeRerankProvider
 from app.providers.rerank.jina import JinaRerankProvider
 from app.retrieve.assemble import AssembleResult, assemble_context
 from app.retrieve.hints import build_hints
@@ -71,14 +74,20 @@ router = APIRouter(dependencies=[Depends(require_api_key), Depends(require_quota
 # --------------------------------------------------------------------------- #
 # Provider dependency seams (overridable in tests via app.dependency_overrides)
 # --------------------------------------------------------------------------- #
-def provide_embeddings() -> EmbeddingProvider:
-    """Return the real OpenAI embeddings provider (fake in tests)."""
-    return OpenAIEmbeddingProvider()
+def _demo(settings: Settings) -> bool:
+    if settings.providers == "fake" and settings.env == "production":
+        raise RuntimeError("PROVIDERS=fake is a demo mode and is refused in production")
+    return settings.providers == "fake"
 
 
-def provide_reranker() -> RerankProvider:
-    """Return the real Jina reranker (fake in tests)."""
-    return JinaRerankProvider()
+def provide_embeddings(settings: SettingsDep) -> EmbeddingProvider:
+    """The real OpenAI embeddings provider, or the fake in demo mode and tests."""
+    return FakeEmbeddingProvider() if _demo(settings) else OpenAIEmbeddingProvider()
+
+
+def provide_reranker(settings: SettingsDep) -> RerankProvider:
+    """The real Jina reranker, or the fake in demo mode and tests."""
+    return FakeRerankProvider() if _demo(settings) else JinaRerankProvider()
 
 
 EmbeddingsDep = Annotated[EmbeddingProvider, Depends(provide_embeddings)]
@@ -230,6 +239,14 @@ def assemble(
     # MVP choice); only resolve meters a browser render.
     set_usage_units(request, {"output_tokens": result.output_tokens, "renders": 0})
 
+    if settings.providers == "fake":
+        result.warnings.append(
+            {
+                "code": "demo_providers",
+                "message": "PROVIDERS=fake: deterministic stand-ins replace the "
+                "embeddings and the reranker, so the ranking is not meaningful",
+            }
+        )
     if req.response_format == "concise":
         return _to_concise(result)
     return _to_response(result)
