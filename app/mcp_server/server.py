@@ -19,11 +19,12 @@ client.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from pydantic import Field
 
 from app.mcp_server.client import NinaApiClient
 
@@ -70,36 +71,54 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
     def _client() -> NinaApiClient:
         return client if client is not None else NinaApiClient.from_env()
 
+    # Descriptions steer the agent: what each tool costs and when to use it (the
+    # Anthropic tool-writing guide; upstash/context7#1419). Tool errors and the
+    # second structured copy of results are handled as in assemble_context.
     @server.tool(
         description=(
-            "Resolve a single URL into an agent-ready document (markdown or "
-            "structured blocks) via the NINA API. " + UNTRUSTED_NOTICE
-        )
+            "Return one whole page as Markdown. A whole page is often ~10x the "
+            "tokens of assemble_context (corpus mean ~45k vs ~4k); use it only when "
+            "you need the full page, such as an entire table. To answer a question, "
+            "call assemble_context. " + UNTRUSTED_NOTICE
+        ),
+        structured_output=False,
     )
-    def resolve_url(url: str, format: str = "markdown") -> dict[str, Any]:
+    def resolve_url(
+        url: Annotated[str, Field(description="Public http(s) page URL.")],
+        format: Annotated[
+            str, Field(description='"markdown" (default) or "blocks".')
+        ] = "markdown",
+    ) -> dict[str, Any]:
         return _api_call(lambda: _client().resolve(url, formats=[format]))
 
     @server.tool(
         description=(
-            "Assemble a token-budgeted context answering `query` from the given "
-            '`urls` via the NINA API. `response_format="concise"` (default) '
-            "returns Markdown: one header per document, one line per fragment "
-            'with its heading path and chunk id. `"detailed"` returns JSON '
-            "with ids, scores and evidence quotes for every fragment. "
-            "`exclude_chunk_ids` takes the chunk ids already received (the N in "
-            '"chunk N"), so a follow-up call returns only new fragments. '
-            + UNTRUSTED_NOTICE
+            "Answer a question from documentation pages: returns only the most "
+            "relevant fragments of `urls`, within `max_tokens`, as Markdown (one "
+            "header per page, one line per fragment with its chunk id). Ask one "
+            "short, focused question per call. For a follow-up on the same pages, "
+            'pass the chunk ids you already have (the N in "chunk N") in '
+            "`exclude_chunk_ids`. Raise `max_tokens` only when the NINA notes at "
+            "the end say budget_limited. " + UNTRUSTED_NOTICE
         ),
         # Without this the SDK also sends the JSON as structuredContent, a
         # second copy of the same payload (DECISIONS.md 2026-10-16).
         structured_output=False,
     )
     def assemble_context(
-        query: str,
-        urls: list[str],
-        max_tokens: int = 4000,
-        response_format: Literal["concise", "detailed"] = "concise",
-        exclude_chunk_ids: list[str] | None = None,
+        query: Annotated[str, Field(description="One short, focused question.")],
+        urls: Annotated[list[str], Field(description="1-20 documentation URLs.")],
+        max_tokens: Annotated[
+            int, Field(description="Budget for the fragments (256-32000).")
+        ] = 4000,
+        response_format: Annotated[
+            Literal["concise", "detailed"],
+            Field(description='"detailed": JSON with ids, scores and evidence.'),
+        ] = "concise",
+        exclude_chunk_ids: Annotated[
+            list[str] | None,
+            Field(description="Chunk ids already received; not returned again."),
+        ] = None,
     ) -> str | dict[str, Any]:
         body = _api_call(
             lambda: _client().assemble(
@@ -114,11 +133,18 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
 
     @server.tool(
         description=(
-            "Fetch a previously resolved document from NINA storage by id "
-            "(optionally a specific version), without re-fetching. " + UNTRUSTED_NOTICE
-        )
+            "Return a document NINA already stored, by `document_id` (doc_...), "
+            "without fetching it again. Like resolve_url it is the whole page. "
+            + UNTRUSTED_NOTICE
+        ),
+        structured_output=False,
     )
-    def get_document(document_id: str, version_id: str | None = None) -> dict[str, Any]:
+    def get_document(
+        document_id: Annotated[str, Field(description="Id like doc_...")],
+        version_id: Annotated[
+            str | None, Field(description="A version like ver_...; default latest.")
+        ] = None,
+    ) -> dict[str, Any]:
         return _api_call(
             lambda: _client().get_document(document_id, version_id=version_id)
         )

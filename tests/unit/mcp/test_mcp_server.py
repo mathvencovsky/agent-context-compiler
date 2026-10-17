@@ -179,3 +179,43 @@ async def test_api_errors_reach_the_agent_with_status_and_reason() -> None:
     text = str(info.value)
     assert "Client error '422" in text
     assert "all_sources_failed: every source URL failed to resolve" in text
+
+
+async def test_descriptions_steer_the_agent_and_stay_short() -> None:
+    import json as _json
+
+    from app.index.tokens import count_tokens
+
+    tools = {t.name: t for t in await _build().list_tools()}
+    resolve = tools["resolve_url"].description or ""
+    assemble = tools["assemble_context"].description or ""
+    assert "whole page" in resolve.lower() and "assemble_context" in resolve
+    assert "focused question" in assemble
+    assert "exclude_chunk_ids" in assemble and "budget_limited" in assemble
+    for tool in tools.values():
+        assert UNTRUSTED_NOTICE in (tool.description or "")
+        params = tool.input_schema["properties"]
+        assert all(p.get("description") for p in params.values()), tool.name
+    schema = [t.model_dump(exclude_none=True) for t in tools.values()]
+    assert count_tokens(_json.dumps(schema)) <= 800  # sent on every agent turn
+
+
+async def test_no_tool_sends_a_second_structured_copy() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"markdown": "# Doc", "trust": "untrusted_source"}
+        )
+
+    client = NinaApiClient(
+        base_url="http://nina.local",
+        api_key="test-key",
+        transport=httpx.MockTransport(handler),
+    )
+    server = build_server(client=client)
+    for name, args in (
+        ("resolve_url", {"url": "https://docs.example.com/a"}),
+        ("get_document", {"document_id": "doc_abc"}),
+    ):
+        result = await server.call_tool(name, args)
+        assert result.structured_content is None, name
+        assert [c.type for c in result.content] == ["text"]

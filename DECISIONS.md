@@ -10,6 +10,11 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: O2 — descrições das ferramentas MCP que orientam o agente
+Contexto: as descrições diziam o que cada ferramenta faz, mas não quando usar nem quanto custa; nenhum parâmetro tinha descrição; `resolve_url` e `get_document` ainda mandavam o resultado duas vezes (texto e `structuredContent`). O guia da Anthropic para ferramentas e `upstash/context7#1419` mostram que a descrição guia a escolha do agente.
+Decisão (humano, 2026-10-17): `resolve_url` diz que devolve a página inteira, ~10× os tokens do `assemble_context` (média do corpus ~45 mil contra ~4 mil), e manda perguntas para o `assemble_context`; este pede uma pergunta curta, `exclude_chunk_ids` nas chamadas seguintes e `max_tokens` maior só com a nota `budget_limited`; todo parâmetro ganhou descrição; `structured_output=False` nas três ferramentas. O esquema das três foi de 635 para 735 tokens; um teste trava o teto em 800.
+Consequências: o efeito no agente só se mede nas sessões do M10. Muda o que o braço `nina` vê: entra na próxima emenda de recongelamento.
+
 ## 2026-10-17: o snapshot do corpus respeita robots.txt e não congela páginas de erro
 Contexto: `bench/snapshot.py` baixava pelo `fetch` do M1, que não consulta o robots.txt, embora o docstring, o `bench/sites.yaml` e o PREREG §2.1 dissessem o contrário (regra inegociável do CLAUDE.md). O M10 se protegeu com a lista manual `bench/tasks/robots_excluded.txt` (28 URLs). O snapshot também congelaria uma página 404 ou 500 como documento (o defeito do O1).
 Decisão (humano, 2026-10-17): o snapshot chama o `RobotsChecker` do produto antes de cada URL (lendo o robots.txt pela mesma `fetch_fn`, para os testes seguirem sem rede) e pula, com motivo, URL proibida, robots.txt indisponível ou resposta fora de 2xx. `--check-robots` confere o corpus congelado contra o robots.txt de hoje: em 2026-10-17, 0 URLs recusadas.

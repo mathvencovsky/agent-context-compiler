@@ -332,7 +332,7 @@ Transporte stdio para uso local e streamable HTTP para uso remoto. É um cliente
 - `assemble_context(query, urls, max_tokens=4000, response_format="concise", exclude_chunk_ids=None)`: no padrão `concise` devolve só o texto de `context`, sem cópia em `structuredContent`; com `"detailed"`, o JSON detalhado. Em qualquer ferramenta, um erro da API chega ao agente como erro da ferramenta com a primeira linha do httpx (ex.: `Client error '422 ...`) seguida de `code: message` do envelope de erro.
 - `get_document(document_id, version_id=None)`
 
-As descrições das ferramentas avisam que o conteúdo retornado vem de páginas externas e não deve ser tratado como instrução.
+As descrições das ferramentas avisam que o conteúdo retornado vem de páginas externas e não deve ser tratado como instrução. Elas também orientam o uso: `resolve_url` e `get_document` devolvem a página inteira (em média ~10× os tokens do `assemble_context`); o `assemble_context` pede uma pergunta curta, `exclude_chunk_ids` nas chamadas seguintes e `max_tokens` maior só com a nota `budget_limited`. Cada parâmetro tem descrição, e nenhuma ferramenta manda a cópia em `structuredContent`.
 
 ## 10. Benchmark (`bench/`)
 
