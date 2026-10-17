@@ -1,7 +1,14 @@
-.PHONY: up down migrate check test bench dev
+.PHONY: setup up down migrate check test bench dev
+
+# First run: dependencies, .env (never over an existing one), services, schema.
+setup:
+	uv sync
+	test -f .env || cp .env.example .env
+	docker compose up -d --wait --remove-orphans
+	uv run alembic upgrade head
 
 up:
-	docker compose up -d
+	docker compose up -d --wait --remove-orphans
 
 down:
 	docker compose down

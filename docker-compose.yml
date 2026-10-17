@@ -25,38 +25,29 @@ services:
   # SeaweedFS S3 gateway. `server -s3` brings up master+volume+filer+S3 on 8333.
   # Default dev mode allows anonymous S3 access (no static credentials file),
   # so S3_ACCESS_KEY/S3_SECRET_KEY are ignored locally and only matter against
-  # real AWS in production.
+  # real AWS in production. The same container creates the bucket with
+  # `weed shell` (idempotent), replacing a 567 MB aws-cli init image
+  # (docs/ONBOARDING.md); it is healthy only once the bucket answers.
   seaweedfs:
     image: chrislusf/seaweedfs:3.80
     # -ip.bind=0.0.0.0 makes the S3 gateway listen on loopback too, so the
     # in-container healthcheck can reach it via localhost.
-    command: server -s3 -dir=/data -ip.bind=0.0.0.0
-    ports:
-      - "8333:8333"
-    volumes:
-      - seaweed_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8333/ || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-  # One-shot bucket creation via boto3-compatible aws-cli (Apache-2.0), no `mc`.
-  # Idempotent: `aws s3 mb` on an existing bucket is treated as success.
-  s3-init:
-    image: amazon/aws-cli:2.17.0
-    depends_on:
-      seaweedfs:
-        condition: service_healthy
-    environment:
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
-      AWS_DEFAULT_REGION: ${S3_REGION}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
-        aws --endpoint-url http://seaweedfs:8333 s3 mb s3://${S3_BUCKET}
-        || aws --endpoint-url http://seaweedfs:8333 s3 ls s3://${S3_BUCKET}
+        weed server -s3 -dir=/data -ip.bind=0.0.0.0 &
+        until echo "s3.bucket.list" | weed shell 2>/dev/null | grep -qw "${S3_BUCKET}"; do
+        echo "s3.bucket.create -name ${S3_BUCKET}" | weed shell >/dev/null 2>&1; sleep 2;
+        done; wait
+    ports:
+      - "${S3_PORT:-8333}:8333"
+    volumes:
+      - seaweed_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8333/${S3_BUCKET} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
 volumes:
   pg_data:

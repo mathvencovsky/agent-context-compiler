@@ -10,6 +10,11 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: C1 — bucket criado pelo próprio SeaweedFS; `make setup` e script para Windows
+Contexto: a imagem do aws-cli (567 MB) existia só para criar o bucket; no Windows não há `make`; e `make migrate` podia rodar antes do Postgres ficar pronto (`docs/ONBOARDING.md`).
+Decisão (pedido do humano para corrigir o que estava em aberto, 2026-10-17): o contêiner do SeaweedFS cria o bucket com `weed shell` ao subir (idempotente) e só fica saudável quando o bucket responde; o serviço `s3-init` saiu do compose (`weed shell` rodando em outro contêiner travava na segunda execução). A porta do S3 é configurável (`S3_PORT`, padrão 8333). `make setup` e `scripts/setup.ps1` fazem sync, `.env` (nunca por cima de um existente), serviços e migrações; `make up` usa `--wait --remove-orphans`.
+Consequências: o primeiro download cai de ~1,4 GB para ~0,8 GB, sem mudança em `app/`. Testado duas vezes numa pilha isolada e na pilha de desenvolvimento; a suíte inteira passou com o SeaweedFS novo.
+
 ## 2026-10-17: M10 — falhas de infraestrutura detectadas atrás do prefixo do SDK do MCP
 Contexto: o harness (`bench/m10_agent.py`) reconhece uma falha de infraestrutura (PREREG §10) pelo início do texto do erro da ferramenta (`infrastructure error`, `Server error '500`, ...). Mas o SDK do MCP entrega todo erro de ferramenta como "Error executing tool <nome>: <mensagem>", então nenhum erro dos servidores montados com ele (`bench/m10_tools.py` e o servidor do `nina`) casava: uma falha de infraestrutura contaria como resposta errada do agente.
 Decisão (pedido do humano para corrigir o que estava em aberto, 2026-10-17): `is_infra_tool_error` tira esse prefixo antes de comparar. Teste com o texto real que sai do SDK, para o servidor de teste e para o servidor do `nina` respondendo 500.

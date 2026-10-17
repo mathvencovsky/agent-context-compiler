@@ -7,6 +7,16 @@ sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
 de agente foi feita no M10.
 
+### M10a — pendências fechadas (2026-10-17)
+
+- Harness do M10: falhas de infraestrutura agora são reconhecidas atrás do
+  prefixo "Error executing tool …:" que o SDK do MCP põe em todo erro.
+- Instalação: `make setup` e `scripts/setup.ps1`; o SeaweedFS cria o próprio
+  bucket (sem a imagem de 567 MB do aws-cli); `make up` espera os serviços.
+- Em aberto, depende de gasto: remedir as 33 tarefas do dev afetadas pela
+  correção do `<pre>` (~US$ 0,003 de embeddings e até ~0,63 mi de tokens Jina
+  por variante).
+
 ### M10a — recongelamento do `app/` (Emenda 10 do PREREG, 2026-10-17)
 
 As trilhas B, A e C fecharam sem chamadas pagas. A Emenda 10 congela `app/` e

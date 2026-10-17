@@ -40,13 +40,16 @@ máquina. O que trava é o que exige decisão de quem instala.
 4. **567 MB só para criar o bucket.** O serviço `s3-init` usa a imagem do
    aws-cli para um único `s3 mb`.
 
-## Cortes propostos (ainda não feitos)
+## Cortes feitos (2026-10-17)
 
-| corte | ganho | custo |
-|---|---|---|
-| a API cria o bucket na subida, em dev, e o `s3-init` sai do compose | −567 MB de download | pequeno; mexe em `app/store/blobs.py` |
-| `scripts/setup.ps1` e `make setup` (sync, `.env`, up, migrate) | um comando em vez de quatro, também no Windows | pequeno |
-| nota no README sobre caminhos longos no Windows | evita a falha do passo 2 | nenhum |
+| corte | ganho |
+|---|---|
+| o próprio contêiner do SeaweedFS cria o bucket (`weed shell`), e o `s3-init` com aws-cli saiu do compose | −567 MB de download; nenhuma mudança em `app/` |
+| `make setup` e `scripts/setup.ps1` (sync, `.env`, serviços, migrações) | um comando em vez de quatro, também no Windows |
+| `make up` espera os serviços ficarem prontos (`--wait`) | a migração não roda antes do Postgres |
+| nota no README sobre caminhos longos no Windows | evita a falha do passo 2 |
+
+Download das imagens na primeira vez: de ~1,4 GB para ~0,8 GB.
 
 ## Como repetir
 
