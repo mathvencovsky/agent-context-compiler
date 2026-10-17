@@ -172,8 +172,81 @@ def test_snapshot_append_keeps_frozen_entries_and_fetches_only_new_urls(
         [more], corpus, fetch_fn=fake_fetch, render_fn=fake_render, append=True
     )
 
-    assert fetched == ["https://example.test/new"]
+    # robots.txt is read first (fresh checker), then only the new page.
+    assert fetched == ["https://example.test/robots.txt", "https://example.test/new"]
     assert second["created_at"] == first["created_at"]
     assert second["entries"][:2] == first["entries"]
     assert second["entries"][2]["url"] == "https://example.test/new"
     assert CorpusStore(corpus).content_type("https://example.test/new") == "text/html"
+
+
+def test_snapshot_respects_robots_txt_and_skips_error_pages(
+    sites: list[SiteConfig], tmp_path: Path
+) -> None:
+    """A Disallow in robots.txt and a 404 page are both skipped, never stored."""
+    fetched: list[str] = []
+
+    def fake_fetch(url: str) -> FetchResult:
+        fetched.append(url)
+        if url == "https://example.test/robots.txt":
+            return FetchResult(
+                final_url=url,
+                status=200,
+                headers=httpx.Headers({"content-type": "text/plain"}),
+                body=b"User-agent: *\nDisallow: /blocked\n",
+                content_type="text/plain",
+                redirects=0,
+                elapsed_ms=1,
+            )
+        if url == "https://spa.test/robots.txt":
+            return _html_result(url, "")
+        if url.endswith("/app"):
+            return FetchResult(
+                final_url=url,
+                status=404,
+                headers=httpx.Headers({"content-type": "text/html"}),
+                body=b"<html><body><h1>Page not found</h1></body></html>",
+                content_type="text/html",
+                redirects=0,
+                elapsed_ms=1,
+            )
+        return _html_result(url, _RICH_HTML)
+
+    def fake_render(url: str) -> RenderResult:
+        raise AssertionError("nothing here should be rendered")
+
+    corpus = tmp_path / "corpus"
+    manifest = snapshot(sites, corpus, fetch_fn=fake_fetch, render_fn=fake_render)
+    by_url = {e["url"]: e for e in manifest["entries"]}
+
+    blocked = by_url["https://example.test/blocked"]
+    assert blocked["status"] == "skipped" and "robots_disallowed" in blocked["reason"]
+    assert "https://example.test/blocked" not in fetched  # never downloaded
+    missing = by_url["https://spa.test/app"]
+    assert missing["status"] == "skipped" and "upstream_status" in missing["reason"]
+    assert missing["raw_path"] == ""
+    assert by_url["https://example.test/ok"]["status"] == "ok"
+
+
+def test_disallowed_now_lists_frozen_urls_robots_refuses_today() -> None:
+    from app.fetch.robots import RobotsChecker
+    from bench.snapshot import disallowed_now
+
+    def fake_fetch(url: str) -> FetchResult:
+        return FetchResult(
+            final_url=url,
+            status=200,
+            headers=httpx.Headers({"content-type": "text/plain"}),
+            body=b"User-agent: *\nDisallow: /old/\n",
+            content_type="text/plain",
+            redirects=0,
+            elapsed_ms=1,
+        )
+
+    entries = [
+        {"url": "https://example.test/old/page", "status": "ok"},
+        {"url": "https://example.test/new/page", "status": "ok"},
+        {"url": "https://example.test/old/skipped", "status": "skipped"},
+    ]
+    refused = disallowed_now(entries, RobotsChecker(fetch_fn=fake_fetch))
+    assert refused == [("https://example.test/old/page", "robots_disallowed")]

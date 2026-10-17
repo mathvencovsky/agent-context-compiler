@@ -10,6 +10,11 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: o snapshot do corpus respeita robots.txt e não congela páginas de erro
+Contexto: `bench/snapshot.py` baixava pelo `fetch` do M1, que não consulta o robots.txt, embora o docstring, o `bench/sites.yaml` e o PREREG §2.1 dissessem o contrário (regra inegociável do CLAUDE.md). O M10 se protegeu com a lista manual `bench/tasks/robots_excluded.txt` (28 URLs). O snapshot também congelaria uma página 404 ou 500 como documento (o defeito do O1).
+Decisão (humano, 2026-10-17): o snapshot chama o `RobotsChecker` do produto antes de cada URL (lendo o robots.txt pela mesma `fetch_fn`, para os testes seguirem sem rede) e pula, com motivo, URL proibida, robots.txt indisponível ou resposta fora de 2xx. `--check-robots` confere o corpus congelado contra o robots.txt de hoje: em 2026-10-17, 0 URLs recusadas.
+Consequências: o corpus atual não muda. A afirmação do PREREG §2.1 só pode ser corrigida por emenda; entra na próxima emenda de recongelamento.
+
 ## 2026-10-17: O1 — página de erro nunca vira documento (`upstream_status`, 502)
 Contexto: `app/fetch/client.fetch` devolve qualquer resposta final, e o `resolve` extraía e guardava o corpo HTML de um 404, de um 500 ou de um 3xx sem `Location` como se fosse a página (o mesmo defeito de `jina-ai/reader#1103` e `firecrawl/firecrawl#2316`). O `assemble` podia montar contexto com "Page not found".
 Decisão (humano, 2026-10-17): o `resolve` só aceita status 2xx (o 304 com versão em cache continua como antes); o resto levanta `upstream_status` (HTTP 502, código novo na SPEC §8) com `details.upstream_status`. O cliente de fetch não mudou, porque o robots.txt depende do status. No `assemble`, a URL aparece em `sources` como `upstream_status`, o warning traz o número HTTP e a dica explica 404 contra 5xx. O SDK ganhou `UpstreamStatusError`.

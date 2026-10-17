@@ -3,10 +3,12 @@
 ``snapshot.py`` is the WRITE side of the frozen-corpus contract. For every URL
 in ``bench/sites.yaml`` it:
 
-1. fetches the URL through the M1 secure client (``app.fetch.client.fetch`` —
-   guard + robots.txt), so a robots-disallowed or unreachable URL is SKIPPED
-   (recorded with ``status="skipped"`` and a ``reason``) without aborting the
-   rest of the snapshot;
+1. checks robots.txt with the product's ``RobotsChecker`` (CLAUDE.md: the
+   fetcher respects ``Disallow``), then fetches the URL through the M1 secure
+   client (``app.fetch.client.fetch``, the SSRF guard). A robots-disallowed,
+   unreachable or non-2xx URL is SKIPPED (recorded with ``status="skipped"`` and
+   a ``reason``) without aborting the rest of the snapshot. As in ``resolve``,
+   robots.txt is checked for the requested URL, not a redirect's target;
 2. decides whether a browser render is needed — ``render: always`` from the
    site config, or the M4 heuristic ``app.fetch.detect.should_render`` on an
    ``auto`` site — and if so renders it with ``app.fetch.render.render_url``;
@@ -36,8 +38,9 @@ import yaml
 
 from app.fetch.client import FetchResult, fetch
 from app.fetch.detect import RenderDecision, parse_content_type, should_render
-from app.fetch.errors import FetchError
+from app.fetch.errors import FetchError, UpstreamStatus
 from app.fetch.render import RenderResult, render_url
+from app.fetch.robots import RobotsChecker
 
 #: Default corpus directory (gitignored; written by the human snapshot run).
 DEFAULT_CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
@@ -142,6 +145,7 @@ def snapshot(
     fetch_fn: FetchFn = fetch,
     render_fn: RenderFn = render_url,
     append: bool = False,
+    robots: RobotsChecker | None = None,
 ) -> dict[str, Any]:
     """Freeze every site URL into ``corpus_dir`` and write ``manifest.json``.
 
@@ -157,6 +161,9 @@ def snapshot(
     the frozen corpus under earlier tasks never changes. A URL already listed,
     even as ``skipped``, is not fetched again.
 
+    ``robots`` defaults to a ``RobotsChecker`` that reads robots.txt through
+    ``fetch_fn`` too, so tests stay offline with one fake.
+
     Returns the manifest as a plain dict (also written to disk) so a caller/test
     can assert on it without re-reading the file.
     """
@@ -171,6 +178,7 @@ def snapshot(
     if append and manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     known = {entry["url"] for entry in manifest["entries"]}
+    robots = robots or RobotsChecker(fetch_fn=fetch_fn)
     for site in sites:
         site_dir = corpus_dir / site.key
         for url in site.urls:
@@ -185,6 +193,7 @@ def snapshot(
                     corpus_dir=corpus_dir,
                     fetch_fn=fetch_fn,
                     render_fn=render_fn,
+                    robots=robots,
                 )
             )
 
@@ -203,6 +212,7 @@ def _snapshot_url(
     corpus_dir: Path,
     fetch_fn: FetchFn,
     render_fn: RenderFn,
+    robots: RobotsChecker,
 ) -> dict[str, Any]:
     """Fetch (and maybe render) one URL, returning its manifest entry dict."""
     base: dict[str, Any] = {
@@ -213,7 +223,13 @@ def _snapshot_url(
     }
 
     try:
+        robots.is_allowed(url)
         result = fetch_fn(url)
+        if not 200 <= result.status < 300:  # an error page is never frozen
+            raise UpstreamStatus(
+                f"{result.final_url} answered HTTP {result.status}",
+                details={"url": result.final_url, "upstream_status": result.status},
+            )
     except FetchError as exc:
         return {
             **base,
@@ -264,11 +280,45 @@ def _snapshot_url(
     }
 
 
-def main() -> None:
+def disallowed_now(
+    store_entries: list[dict[str, Any]], robots: RobotsChecker
+) -> list[tuple[str, str]]:
+    """``(url, reason)`` for every frozen ``ok`` URL that robots.txt now refuses."""
+    refused = []
+    for entry in store_entries:
+        if entry["status"] != "ok":
+            continue
+        try:
+            robots.is_allowed(entry["url"])
+        except FetchError as exc:
+            refused.append((entry["url"], exc.code))
+    return refused
+
+
+def main(argv: list[str] | None = None) -> None:
     """Human entry point: snapshot every site in ``sites.yaml`` into the corpus.
 
-    Reaches the public web; NOT run by the test suite.
+    ``--check-robots`` instead reads each corpus domain's robots.txt (no page is
+    fetched) and lists the frozen URLs it refuses today. Reaches the public web;
+    NOT run by the test suite.
     """
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check-robots", action="store_true")
+    args = parser.parse_args(argv)
+    if args.check_robots:
+        manifest = json.loads(
+            (Path(DEFAULT_CORPUS_DIR) / "manifest.json").read_text(encoding="utf-8")
+        )
+        refused = disallowed_now(manifest["entries"], RobotsChecker())
+        excluded = Path("bench/tasks/robots_excluded.txt").read_text(encoding="utf-8")
+        listed = {line.strip() for line in excluded.splitlines()}
+        for url, reason in refused:
+            mark = "listed" if url in listed else "NOT in robots_excluded.txt"
+            print(f"{reason}: {url} ({mark})")
+        print(f"{len(refused)} frozen URLs refused by robots.txt today")
+        return
     sites = load_sites()
     manifest = snapshot(sites, DEFAULT_CORPUS_DIR)
     ok = sum(1 for e in manifest["entries"] if e["status"] == "ok")

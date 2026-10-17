@@ -1,6 +1,6 @@
 # Corpus do benchmark NINA — sites de documentação técnica pública.
 # Preenchido pelo humano (2026-10-11). Lido por bench/snapshot.py, que baixa as
-# URLs via o fetcher seguro do M1 (respeita robots.txt) e as congela em
+# URLs via o fetcher seguro do M1 (depois de checar o robots.txt) e as congela em
 # bench/corpus/ com um manifest.json.
 #
 # IMPORTANTE sobre categorias:
@@ -14,8 +14,11 @@
 #     para o snapshot capturar também a versão renderizada; "never" é possível.
 #   - `content`: html | pdf — dica para o snapshot (PDFs vão direto ao pdfplumber).
 #
-# robots.txt: o snapshot usa o fetcher do M1, que respeita Disallow. URLs
-# bloqueadas são puladas no snapshot e reportadas para substituição.
+# robots.txt: desde 2026-10-17 o snapshot checa o robots.txt com o RobotsChecker
+# do produto antes de cada URL (antes disso não checava, e o M10 usou a lista
+# manual bench/tasks/robots_excluded.txt). URLs bloqueadas são puladas e
+# reportadas para substituição. `python -m bench.snapshot --check-robots` confere
+# o corpus já congelado contra o robots.txt de hoje.
 
 sites:
   - site: Python Documentation
