@@ -528,6 +528,37 @@ data had been seen.
   session had run. The M10a measurements used only the development slice, which
   Amendment 6 keeps out of the evaluation.
 
+### Amendment 10 — 2026-10-17: `app/` re-frozen after the zero-cost M10a tracks
+
+- **What changed:** from this amendment on, every M10 run uses `app/` and
+  `migrations/` as of the commit that adds this amendment, replacing the freeze
+  of Amendment 9. Five commits changed the code since then, all from M10a:
+  1. `3748d6e`: pages that declare their charset only in `<meta>` (GBK,
+     Shift_JIS) are decoded with it instead of UTF-8.
+  2. `6819766`: code inside `<pre>` keeps the line breaks drawn by `<br>` and by
+     per-line `<div>`/`<p>` markup (react.dev, MDN).
+  3. `158e0ca`: `assemble` returns `hints` (failed source, low coverage, budget
+     cut), never page text; in the concise format they close the context under
+     a marked "NINA notes" block. MCP tool errors now carry the API's status,
+     code and message.
+  4. `23bd3ac`: `assemble` and the MCP tool accept `exclude_chunk_ids`; the
+     tool description mentions it, so the `nina` arm's agent can use it.
+  5. `f70676b`: `PROVIDERS=fake` demo mode (refused in production; runs use the
+     default `real`), and a missing provider key answers
+     `503 provider_not_configured` instead of a generic 500.
+  Two candidate changes were rejected on half A of the development slice and
+  left `app/` untouched (A1 adaptive budget, A2 code-aware selection).
+- **Effective settings:** as in Amendment 9; `PROVIDERS` is not set in the
+  project owner's local `.env`, so it takes the code default `real`. A run with
+  `PROVIDERS=fake` is invalid.
+- **Why:** each change was developed and checked on the development slice
+  (Amendment 6) or with tests, never on pilot, evaluation-pool or bridge tasks.
+  Without a new freeze, the code named by Amendment 9 would no longer be the
+  product under test.
+- **Data seen:** none from any arm. The repository records no agent session,
+  screen, pilot or main-run session since Amendment 9. All M10a measurements
+  used only the development slice, from the provider cache, with no paid call.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

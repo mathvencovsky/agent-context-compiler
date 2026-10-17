@@ -7,6 +7,13 @@ sessão, o tamanho de página, os arquivos de saída e o harness do agente nos
 seis braços (os quatro do corpus congelado e os dois ao vivo). Nenhuma sessão
 de agente foi feita no M10.
 
+### M10a — recongelamento do `app/` (Emenda 10 do PREREG, 2026-10-17)
+
+As trilhas B, A e C fecharam sem chamadas pagas. A Emenda 10 congela `app/` e
+`migrations/` no commit que a adiciona, com as cinco mudanças de código desde a
+Emenda 9 (charset em `<meta>`, quebras de linha em `<pre>`, `hints` e erros
+visíveis no MCP, `exclude_chunk_ids`, modo `PROVIDERS=fake` e 503 sem chave).
+
 ### M10a — trilha C, atrito de adoção (2026-10-17)
 
 C1 (`docs/ONBOARDING.md`): do `git clone` ao `/health` em ~1,5 minuto mais
