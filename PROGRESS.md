@@ -13,9 +13,10 @@ de agente foi feita no M10.
   prefixo "Error executing tool …:" que o SDK do MCP põe em todo erro.
 - Instalação: `make setup` e `scripts/setup.ps1`; o SeaweedFS cria o próprio
   bucket (sem a imagem de 567 MB do aws-cli); `make up` espera os serviços.
-- Em aberto, depende de gasto: remedir as 33 tarefas do dev afetadas pela
-  correção do `<pre>` (~US$ 0,003 de embeddings e até ~0,63 mi de tokens Jina
-  por variante).
+- Remedidas as 33 tarefas do dev afetadas pela correção do `<pre>`
+  (`uv run python -m bench.m10a_pre_remeasure`): mesma cobertura em 1k, 4k e
+  8k; em 2k uma tarefa perde o acerto (IC inclui zero). Custo: 5 chamadas de
+  embedding e 2 de rerank.
 
 ### M10a — recongelamento do `app/` (Emenda 10 do PREREG, 2026-10-17)
 

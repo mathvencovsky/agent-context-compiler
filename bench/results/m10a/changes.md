@@ -126,3 +126,12 @@ code-task coverage by -0.5 to -0.7 pt at 4k and 0 at 8k; 0.3 breaks the overall
 tolerance. The query detector flags 127 of 138 queries (precision 0.60 against
 `task_type == code`): almost every Stack Overflow question looks like code.
 Half B was not opened; `app/` unchanged.
+
+## `<pre>` line-break fix: affected dev tasks re-measured (2026-10-17)
+
+33 keyed dev tasks cite one of the 154 pages whose chunks changed (10 in half A,
+23 in half B). NINA before vs after the fix (`pre_remeasure.md`): same coverage
+and hits at 1k, 4k and 8k; at 2k one task loses its hit (-3.0 pts, 95% CI
+[-9.1, 0.0]). The section-coverage metric barely sees the fix, which matters for
+how readable the code is to the agent. Cost: 5 embedding calls and 2 rerank
+calls (authorized).
