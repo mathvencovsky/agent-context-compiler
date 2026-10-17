@@ -10,6 +10,10 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-17: A2 (seleção que favorece código inteiro) — regra de aceite, antes de qualquer medição
+Contexto: 181 das 313 tarefas com gabarito são do tipo `code` (82 na metade A, 99 na B). Variantes: multiplicar o valor do rerank por (1 + β), β = 0,1/0,2/0,3, nos pedaços com bloco de código inteiro (cercado e não partido pelo chunker), só quando uma regra sobre a consulta a marca como de código; e β = 0,1 sem essa regra. Só seleção; medição só com cache, com a extração anterior à correção do `<pre>` aplicada no script.
+Decisão (humano, 2026-10-17): na metade B a variante passa se (1) nas tarefas `code` a cobertura média sobe em 4k e em 8k (estimativa pontual > 0) e não cai mais de 0,5 pt em 1k e 2k; (2) em todas as tarefas, em cada orçamento, a cobertura cai no máximo 0,5 pt e o acerto no máximo 1 pt; (3) a cobertura por mil tokens fica acima da do strong_rag em todos os orçamentos. Na metade A escolhe-se o maior ganho nas tarefas `code` entre as que passam em (2); se nenhuma melhora as tarefas `code` sem violar (2), o A2 é rejeitado sem abrir a metade B.
+
 ## 2026-10-17: A4 — `exclude_chunk_ids` para não repetir fragmentos
 Contexto: o agente chama `assemble` várias vezes nas mesmas URLs e recebia de novo os mesmos fragmentos. Ref e Context7 evitam repetição guardando estado de sessão (docs/CONCORRENTES.md, lição 3).
 Decisão (humano, 2026-10-17): parâmetro opcional e sem estado `exclude_chunk_ids` (até 1000) na API, no MCP e no SDK. Os ids saem da lista fundida antes do rerank, então os próximos candidatos entram no top-30. Ids desconhecidos são ignorados. Os `chunk_id` são estáveis por versão desde 2026-10-16 e aparecem no formato conciso.
