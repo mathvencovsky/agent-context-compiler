@@ -69,4 +69,8 @@ def test_stdout_carries_only_json_rpc(tmp_path: Path) -> None:
     assert set(by_id) == {1, 2, 3}
     names = {t["name"] for t in by_id[2]["result"]["tools"]}
     assert "assemble_context" in names
+    for tool in by_id[2]["result"]["tools"]:  # D3: the hints reach the client
+        assert tool["title"], tool["name"]
+        assert tool["annotations"]["readOnlyHint"] is True, tool["name"]
+        assert tool["annotations"]["openWorldHint"] is True, tool["name"]
     assert by_id[3]["result"]["isError"] is True  # the failure is a tool error
