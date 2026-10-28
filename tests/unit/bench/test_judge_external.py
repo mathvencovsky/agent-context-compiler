@@ -69,10 +69,11 @@ def _task(**extra: object) -> ExternalTask:
     return ExternalTask(**(fields | extra))
 
 
-def test_rubric_is_the_prereg_appendix_b_text_verbatim() -> None:
+def test_rubric_is_the_prereg_amendment_13_text_verbatim() -> None:
     text = _PREREG.read_text(encoding="utf-8")
     block = re.search(
-        r"Judge rubric, used by both judges and by the human graders:"
+        r"Judge rubric from Amendment 13, used by both judges and by the human "
+        r"graders:"
         r"\s*```\n(.*?)\n```",
         text,
         re.DOTALL,
@@ -166,3 +167,17 @@ def test_blind_masks_qualified_mcp_tool_names() -> None:
     assert blind("mcp__context7__query-docs said") == "mcp__[tool]__[tool] said"
     assert blind("the context7_live arm") == "the [tool]_live arm"
     assert blind("ninax and xnina stay") == "ninax and xnina stay"
+
+
+def test_verdict_carries_the_abstention_flag_when_the_judge_gives_it() -> None:
+    reply = '{"reason": "says the docs lack it", "abstained": true, "correct": false}'
+    verdict = judge(_task(), "The pages do not say.", ScriptedJudge(reply))
+    assert (verdict.correct, verdict.abstained) == (False, True)
+    assert verdict.reason == "says the docs lack it"
+    old_style = judge(_task(), "x", ScriptedJudge('{"correct": true, "reason": "r"}'))
+    assert old_style.abstained is None  # left out: unknown, not False
+
+
+def test_rubric_asks_for_reasoning_before_the_verdict() -> None:
+    json_line = RUBRIC.splitlines()[RUBRIC.splitlines().index("QUESTION:") - 2]
+    assert json_line.index('"reason"') < json_line.index('"correct"')

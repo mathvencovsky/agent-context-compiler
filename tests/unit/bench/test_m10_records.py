@@ -26,6 +26,7 @@ def test_results_csv_appends_rows_under_one_header(tmp_path: Path) -> None:
     rows = list(csv.DictReader(lines))
     assert (rows[0]["correct"], rows[0]["cost_usd"]) == ("1", "0.01230000")
     assert rows[1]["correct"] == ""  # excluded session: no verdict
+    assert rows[0]["abstained"] == "" and "abstained" in lines[0]  # Amendment 13
     assert done_pairs(path) == {("so-1", "nina"), ("so-1", "full_page")}
     assert done_pairs(tmp_path / "missing.csv") == set()
 

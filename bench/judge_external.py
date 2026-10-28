@@ -1,8 +1,10 @@
 """Grade M10 agent answers against the accepted answer (PREREG §9, Appendix B).
 
 Both judges (primary ``gpt-6.1-sol``, second ``claude-opus-5-5``) and the human
-graders apply :data:`RUBRIC`, the PREREG Appendix B text verbatim; a test checks
-it against ``bench/PREREG.md``. The candidate is the agent's final answer, taken
+graders apply :data:`RUBRIC`, the PREREG Amendment 13 text verbatim (it replaces
+the Appendix B rubric); a test checks it against ``bench/PREREG.md``. The judge
+reasons before its verdict, a list of alternatives with a wrong one is
+incorrect, and ``abstained`` records an answer that only says it cannot answer. The candidate is the agent's final answer, taken
 from its last message by the PREREG §4 rule (:func:`final_answer`).
 
 A judge reply that is not a JSON object with a boolean ``correct`` is asked for
@@ -33,15 +35,19 @@ from bench.answer import AnswerResult, _parse_citations
 from bench.external_tasks import SEED
 from bench.tasks_schema import ExternalTask
 
-#: PREREG Appendix B judge rubric, verbatim (used by both judges and the humans).
+#: PREREG Amendment 13 judge rubric, verbatim (used by both judges and the humans).
 RUBRIC = """You are the judge. Decide whether the CANDIDATE answer resolves the developer's QUESTION.
 The REFERENCE is the answer the asker accepted on Stack Overflow; treat what it says as correct.
 Mark the candidate correct if its core answer (the fact, setting, API or fix that resolves the question)
 agrees with the reference, even if shorter or worded differently, or if it is a different solution that
 clearly resolves the question as asked.
 Mark it incorrect if its core answer is wrong, contradicts the reference, is missing, or only says the
-information is unavailable. Ignore style, length and citations.
-Return a single JSON object: {"correct": true|false, "reason": "<short reason>"}
+information is unavailable. Also mark it incorrect if it offers several alternative core answers and any
+of them is wrong or contradicts the reference. Ignore style, length and citations.
+Set "abstained" to true only if the candidate gives no core answer and says that the information is
+unavailable or that it does not know.
+Write your reasoning first, then the verdict, as a single JSON object:
+{"reason": "<short reasoning>", "abstained": true|false, "correct": true|false}
 
 QUESTION:
 <question title and body>
@@ -51,6 +57,14 @@ REFERENCE:
 
 CANDIDATE:
 <candidate answer>"""
+
+#: The rubric's lines for judges only (abstention flag and JSON); humans skip them.
+JUDGE_ONLY_LINES = (
+    'Set "abstained" to true only if the candidate gives no core answer and says that the information is\n'
+    "unavailable or that it does not know.\n"
+    "Write your reasoning first, then the verdict, as a single JSON object:\n"
+    '{"reason": "<short reasoning>", "abstained": true|false, "correct": true|false}\n'
+)
 
 #: Extra judge attempts after an unparseable reply (PREREG Amendment 5).
 RETRIES = 2
@@ -85,6 +99,7 @@ class Verdict:
     reason: str
     model: str
     attempts: int
+    abstained: bool | None = None  # None when the reply leaves it out
 
 
 def judge_prompt(task: ExternalTask, candidate: str) -> str:
@@ -143,11 +158,13 @@ def judge(
             continue
         if isinstance(payload, dict) and isinstance(payload.get("correct"), bool):
             reason = payload.get("reason")
+            abstained = payload.get("abstained")
             return Verdict(
                 correct=payload["correct"],
                 reason=reason if isinstance(reason, str) else "",
                 model=provider.model,
                 attempts=attempt + 1,
+                abstained=abstained if isinstance(abstained, bool) else None,
             )
     return Verdict(None, "unparseable verdict", provider.model, 1 + retries)
 
