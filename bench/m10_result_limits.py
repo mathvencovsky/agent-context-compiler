@@ -61,6 +61,26 @@ def count(
     )
 
 
+def over_ceiling(
+    tasks: Iterable[tuple[str, list[str]]], chars_of: Callable[[str], int]
+) -> list[str]:
+    """Ids of the tasks, given as ``(id, urls)``, with a listed page over the cap.
+
+    PREREG Amendment 14 excludes them from every arm: the ``full_page`` arm
+    could not read such a page, and keeping them would favor NINA.
+    """
+    cache: dict[str, int] = {}
+    out = []
+    for task_id, urls in tasks:
+        for url in urls:
+            if url not in cache:
+                cache[url] = chars_of(url)
+            if cache[url] > CEILING:
+                out.append(task_id)
+                break
+    return out
+
+
 def report(c: LimitCounts) -> str:
     return (
         f"pages: {c.pages}; over 50,000 chars (saved to file without the "
