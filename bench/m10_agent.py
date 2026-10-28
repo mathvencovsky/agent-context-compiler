@@ -21,7 +21,12 @@ web (the SPEC §10.1 exception). Every session:
   key auth): a mismatch stops the run, since every later session would break
   PREREG §4 the same way;
 * gets whole tool results: ``MAX_MCP_OUTPUT_TOKENS`` is pinned to the 1M
-  context for every arm (PREREG Amendment 7).
+  context for every arm (PREREG Amendment 7);
+* sees every tool definition from the first turn: ``ENABLE_TOOL_SEARCH`` is
+  pinned to ``false`` (PREREG Amendment 11). By default the CLI defers MCP tool
+  definitions behind a tool-search step, decided by remote flags, which only
+  the MCP arms would pay and the agent could not take (``ToolSearch`` is not
+  allowed).
 
 Each session becomes one ``results.csv`` row (:mod:`bench.m10_records`) with
 billed usage (WebFetch also bills its page-reading model,
@@ -140,6 +145,9 @@ RETRIES = 2
 SESSION_TIMEOUT_S = 1800
 #: Amendment 7: no arm's tool output is cut below the 1M context.
 MAX_MCP_OUTPUT_TOKENS = 1_000_000
+#: Amendment 11: "false" selects the CLI's standard mode (every definition
+#: loaded up front); a falsy value also overrides a remote "force" flag.
+ENABLE_TOOL_SEARCH = "false"
 #: The MCP server key of every arm, so the tools are ``mcp__docs__<name>``.
 SERVER = "docs"
 PRIMARY_JUDGE = "gpt-6.1-sol"
@@ -305,6 +313,7 @@ def session_options(
             "ANTHROPIC_API_KEY": api_key,
             "CLAUDE_CONFIG_DIR": str(config_dir),  # no stored login or memory
             "MAX_MCP_OUTPUT_TOKENS": str(MAX_MCP_OUTPUT_TOKENS),
+            "ENABLE_TOOL_SEARCH": ENABLE_TOOL_SEARCH,
         },
     )
 
