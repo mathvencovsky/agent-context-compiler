@@ -21,7 +21,7 @@ import pytest
 
 from app.config import Settings
 from app.fetch import render
-from app.fetch.errors import Timeout, TooLarge
+from app.fetch.errors import BlockedDestination, Timeout, TooLarge
 from tests.unit.fetch._local_servers import (
     Reply,
     counting_server,
@@ -57,23 +57,52 @@ def _redirect(location: str) -> Reply:
 
 
 def test_navigation_redirect_to_metadata_is_refused() -> None:
-    """C1: the entry page 302s to the metadata IP; the hop must not connect."""
+    """C1: the entry page 302s to the metadata IP; the hop must not connect,
+    and the refusal is an explicit BlockedDestination, never a document."""
     with (
         counting_server() as meta,
         scripted_server(
             {"/redir": _redirect(f"http://{_META}/latest/meta-data")}
         ) as page,
     ):
-        result = render.render_url(
-            f"http://{_HOST}/redir",
-            resolver=FakeResolver({_HOST: [_PUBLIC_IP]}),
-            **_route(
-                f"MAP {_HOST} 127.0.0.1:{_port(page.base_url)}",
-                f"MAP {_META} 127.0.0.1:{_port(meta.base_url)}",
-            ),
-        )
+        with pytest.raises(BlockedDestination):
+            render.render_url(
+                f"http://{_HOST}/redir",
+                resolver=FakeResolver({_HOST: [_PUBLIC_IP]}),
+                **_route(
+                    f"MAP {_HOST} 127.0.0.1:{_port(page.base_url)}",
+                    f"MAP {_META} 127.0.0.1:{_port(meta.base_url)}",
+                ),
+            )
     assert meta.counter.count == 0
-    assert "COUNTED" not in result.html
+
+
+def test_script_navigation_to_metadata_is_refused() -> None:
+    """A page that loads fine and then sends the main frame to the metadata
+    IP must fail explicitly instead of returning the proxy's refusal page."""
+    body = f"<p>first</p><script>location.href='http://{_META}/latest';</script>"
+    with counting_server() as meta, scripted_server({"/": _html(body)}) as page:
+        with pytest.raises(BlockedDestination):
+            render.render_url(
+                f"http://{_HOST}/",
+                resolver=FakeResolver({_HOST: [_PUBLIC_IP]}),
+                **_route(
+                    f"MAP {_HOST} 127.0.0.1:{_port(page.base_url)}",
+                    f"MAP {_META} 127.0.0.1:{_port(meta.base_url)}",
+                ),
+            )
+    assert meta.counter.count == 0
+
+
+def test_render_refuses_when_playwright_loopback_bypass_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With this variable Playwright stops proxying loopback: fail closed."""
+    monkeypatch.setenv("PLAYWRIGHT_DISABLE_FORCED_CHROMIUM_PROXIED_LOOPBACK", "1")
+    with pytest.raises(RuntimeError, match="egress proxy"):
+        render.render_url(
+            f"http://{_HOST}/", resolver=FakeResolver({_HOST: [_PUBLIC_IP]})
+        )
 
 
 def test_subrequest_redirect_to_metadata_is_refused() -> None:
