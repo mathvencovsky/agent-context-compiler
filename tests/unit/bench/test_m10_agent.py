@@ -295,6 +295,32 @@ def test_webfetch_may_fetch_the_documentation_hosts_only(tmp_path: Path) -> None
     assert not any("stackoverflow" in rule for rule in rules)
 
 
+def test_paid_retrieval_arms_log_their_provider_calls(tmp_path: Path) -> None:
+    """Front F L3: nina and strong_rag log embedding and rerank calls."""
+    usage = tmp_path / "usage.jsonl"
+    for arm in ("nina", "strong_rag"):
+        server = m10_agent.tool_server(arm, tmp_path, tmp_path / "log", usage=usage)
+        args = server["args"]  # type: ignore[index]
+        assert args[args.index("--usage") + 1] == str(usage)
+    server = m10_agent.tool_server("full_page", tmp_path, tmp_path / "l", usage=usage)
+    assert "--usage" not in server["args"]  # type: ignore[index]
+    # nina keeps its candidate log; strong_rag never had one
+    nina = m10_agent.tool_server("nina", tmp_path, tmp_path / "log", usage=usage)
+    assert "--log" in nina["args"]  # type: ignore[index]
+
+
+def test_a_session_writes_its_provider_usage_beside_the_candidates(
+    tmp_path: Path, store: CorpusStore
+) -> None:
+    query = FakeQuery(_session("strong_rag"))
+    run_session(_task(), "strong_rag", _ctx(tmp_path, store, query))
+    server = query.options[0].mcp_servers["docs"]  # type: ignore[index]
+    args = server["args"]
+    usage = Path(args[args.index("--usage") + 1])
+    assert usage.parent == tmp_path / "m10" / "provider_usage"
+    assert usage.name.endswith("__strong_rag__0.jsonl")
+
+
 def test_context7_is_the_hosted_server_with_the_key() -> None:
     server = m10_agent.tool_server("context7_live", Path("d"), Path("l"), "ctx7sk-1")
     assert server == {

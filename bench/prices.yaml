@@ -56,3 +56,24 @@ models:
     # Same table: 5-minute writes (1-hour: 8.00), hits at 0.05x input.
     cache_write_usd_per_1m: 5.00
     cache_read_usd_per_1m: 0.20
+
+# ---- Provedores de recuperação (frente F, L3: "CPT completo") ----
+# Embeddings e rerank que cada sessão de `nina` e `strong_rag` gera
+# (bench/m10_tools.usage_logged), precificados por bench/full_cpt.py como
+# sensibilidade ao lado do CPT do §6. Fica fora de `models` de propósito: não é
+# custo do agente e não entra em bench/session_cost.py.
+#
+# TODO (humano, antes do piloto): nenhum dos dois preços foi conferido numa página
+# oficial (openai.com e jina.ai estão bloqueados no ambiente que escreveu isto).
+# Enquanto o valor for "TODO", bench/full_cpt.py se recusa a calcular, em vez de
+# usar 0 em silêncio. Fontes a conferir, em USD por 1M de tokens:
+#   - text-embedding-3-small (tokens de entrada): https://openai.com/api/pricing/
+#   - jina-reranker-v2-base-multilingual (tokens cobrados pela API de rerank):
+#     https://jina.ai/reranker/ e https://jina.ai/api-dashboard/
+retrieval:
+  text-embedding-3-small:
+    provider: openai
+    usd_per_1m_tokens: TODO
+  jina-reranker-v2-base-multilingual:
+    provider: jina
+    usd_per_1m_tokens: TODO
