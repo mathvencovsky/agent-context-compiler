@@ -12,6 +12,9 @@ Pure and deterministic: no I/O, no LLM.
 
 from __future__ import annotations
 
+import re
+from urllib.parse import urlsplit
+
 from app.retrieve.assemble import AssembleResult
 
 #: Upper bound of ``max_tokens`` (SPEC §8).
@@ -39,8 +42,53 @@ _SOURCE_OPTIONS = {
 }
 
 
+#: A path segment that names a documentation release: ``3.12``, ``v1.30``,
+#: ``16``, ``2.3.x``, or a moving label such as ``stable``.
+_VERSION_SEGMENT = re.compile(
+    r"^(v?\d+(\.\d+)*(\.x)?|current|stable|latest|dev|devel|main|master|nightly)$",
+    re.IGNORECASE,
+)
+
+
+def version_label(url: str) -> tuple[str, str] | None:
+    """``(host, label)`` of the first version-like path segment, if any."""
+    parts = urlsplit(url)
+    for segment in parts.path.split("/"):
+        if _VERSION_SEGMENT.match(segment):
+            return parts.netloc.lower(), segment.lower()
+    return None
+
+
+def _mixed_versions(result: AssembleResult) -> list[dict[str, object]]:
+    """One hint per site whose delivered fragments span several releases.
+
+    Fragments of different releases can contradict each other, the "context
+    clash" failure mode (docs/CONTEXT_ENGINEERING.md, P7).
+    """
+    labels: dict[str, set[str]] = {}
+    for frag in result.fragments:
+        found = version_label(frag.source_url)
+        if found is not None:
+            labels.setdefault(found[0], set()).add(found[1])
+    hints: list[dict[str, object]] = []
+    for host in sorted(labels):
+        versions = sorted(labels[host])
+        if len(versions) < 2:
+            continue
+        hints.append(
+            {
+                "code": "mixed_versions",
+                "message": f"The fragments come from different versions of the "
+                f"{host} documentation ({', '.join(versions)}) and may disagree. "
+                "Option: the URLs of one version only.",
+                "details": {"host": host, "versions": versions},
+            }
+        )
+    return hints
+
+
 def build_hints(result: AssembleResult) -> list[dict[str, object]]:
-    """The hints for ``result``: failed sources, low coverage, budget cut."""
+    """The hints for ``result``: failed sources, low coverage, budget, versions."""
     hints: list[dict[str, object]] = []
     for src in result.sources:
         if src.status == "ok":
@@ -72,4 +120,5 @@ def build_hints(result: AssembleResult) -> list[dict[str, object]]:
                 "details": {"max_tokens": suggested},
             }
         )
+    hints += _mixed_versions(result)
     return hints

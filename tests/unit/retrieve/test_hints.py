@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from app.retrieve.assemble import AssembleResult, SourceStatus
-from app.retrieve.hints import build_hints
+from app.retrieve.assemble import (
+    AssembleResult,
+    Fragment,
+    FragmentScores,
+    SourceStatus,
+)
+from app.retrieve.hints import build_hints, version_label
 
 
 def _codes(result: AssembleResult) -> list[str]:
@@ -58,3 +63,66 @@ def test_hints_never_carry_page_text() -> None:
         budget_limited=True,
     )
     assert page_text not in str(build_hints(result))
+
+
+def _frag(url: str) -> Fragment:
+    return Fragment(
+        chunk_id="1",
+        document_id="doc_a",
+        version_id="ver_a",
+        source_url=url,
+        heading_path=[],
+        md="text",
+        tokens=1,
+        scores=FragmentScores(lexical_rank=1, vector_rank=1, rrf=0.0, rerank=0.0),
+        evidence=[],
+    )
+
+
+def test_version_label_reads_the_first_release_segment() -> None:
+    assert version_label("https://docs.python.org/3.12/library/re.html") == (
+        "docs.python.org",
+        "3.12",
+    )
+    assert version_label("https://www.postgresql.org/docs/current/sql.html") == (
+        "www.postgresql.org",
+        "current",
+    )
+    assert version_label("https://flask.palletsprojects.com/en/2.3.x/api/") == (
+        "flask.palletsprojects.com",
+        "2.3.x",
+    )
+    assert version_label("https://developer.mozilla.org/en-US/docs/Web/API") is None
+    assert version_label("https://www.rfc-editor.org/rfc/rfc9110.html") is None
+
+
+def test_fragments_of_different_releases_get_a_mixed_versions_hint() -> None:
+    result = AssembleResult(
+        query="q",
+        coverage="sufficient",
+        fragments=[
+            _frag("https://docs.python.org/3.11/library/re.html"),
+            _frag("https://docs.python.org/3.12/library/re.html"),
+            _frag("https://docs.python.org/3.12/library/os.html"),
+            _frag("https://www.postgresql.org/docs/16/sql.html"),
+        ],
+    )
+    hints = build_hints(result)
+    assert _codes(result) == ["mixed_versions"]  # postgresql has one release
+    assert hints[0]["details"] == {
+        "host": "docs.python.org",
+        "versions": ["3.11", "3.12"],
+    }
+    assert "may disagree" in str(hints[0]["message"])
+
+
+def test_one_release_per_site_has_no_version_hint() -> None:
+    result = AssembleResult(
+        query="q",
+        coverage="sufficient",
+        fragments=[
+            _frag("https://docs.python.org/3.12/library/re.html"),
+            _frag("https://developer.mozilla.org/en-US/docs/Web/API"),
+        ],
+    )
+    assert build_hints(result) == []
