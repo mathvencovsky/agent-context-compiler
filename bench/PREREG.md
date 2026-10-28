@@ -693,6 +693,39 @@ CANDIDATE:
     cited page with another task; in a random sample of 349 about 35% do.
 - **Data seen:** none. No judge call, agent session or human label existed.
 
+### Amendment 14 — 2026-10-28: pages over the result cap, NINA's whole-page tools, no remote flags
+
+- **What changed:**
+  1. **Pages over the cap** (closes Amendment 12 point 3). A task with any
+     listed URL whose page Markdown is longer than 500,000 characters is
+     excluded from every arm, before the screen and the main run. The harness
+     writes the excluded ids to `excluded_over_ceiling.json` and the report
+     gives their count. Pilot tasks follow the same rule.
+  2. **NINA's whole-page tools.** `resolve_url` and `get_document` keep the
+     Claude Code default: a result over 50,000 characters is saved to a file,
+     which the `nina` arm cannot read. The shipped server is not changed for
+     the benchmark (§3: payload unchanged).
+  3. **No remote flags.** Every session also sets
+     `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`: no feature-flag fetching,
+     auto-update or telemetry during a run.
+- **Why:**
+  - Point 1 keeps the arm definitions intact (§3). It is the only option that
+    does not give `full_page` a different tool, and it removes the longest
+    pages, where §7's Amendment 4 prediction expects NINA's advantage to be
+    largest. The bias it introduces runs against the claim, not for it.
+  - Point 2: for a real user, saving a huge page to a file is Claude Code's
+    protection, since the agent then reads only the part it needs. That is the
+    product's intended behavior, and changing it only for the benchmark would
+    test a different product. In M10 it can only hurt the `nina` arm, whose
+    main path is `assemble_context`.
+  - Point 3: Amendments 11 and 12 pinned the behaviors known to depend on
+    remote flags. This removes the flags themselves, so nothing fetched during
+    a run can change the CLI between the pilot and the main run. In CLI
+    2.1.301, WebFetch's domain check does not depend on this setting (read in
+    the CLI's code).
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

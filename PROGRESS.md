@@ -14,6 +14,20 @@ respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
 
+### M10a/M10 — decisões abertas fechadas (2026-10-28)
+
+Pelo critério do humano ("seguro e eficiente"), Emenda 14 do PREREG:
+- tarefas com página listada acima de 500 mil caracteres saem de todos os
+  braços (`drop_over_ceiling`, lista em `excluded_over_ceiling.json`);
+- `resolve_url`/`get_document` do NINA sem anotação de tamanho (proteção do
+  usuário; no M10 só pesa contra o NINA);
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` nas sessões;
+- skill `skills/nina-docs/SKILL.md` para agentes (produto), citada no
+  QUICKSTART.
+
+Pendente: as medições do dev (humano) e, depois delas, a emenda de
+recongelamento do `app/`.
+
 ### M10a/M10 — propostas da pesquisa implementadas (2026-10-28)
 
 - **Formato conciso imune a falsificação (C3):** `<document>`, `<fragment>` e
