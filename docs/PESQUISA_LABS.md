@@ -293,6 +293,12 @@ resto veio de resumos de busca.
 
 ## 3. Decisões suas
 
+**Atualização (2026-10-28):** implementados, a pedido do humano: C3 (formato
+com tags, imune a falsificação), A1 (bootstrap por agrupamento), A2, U1 e A5
+(rubrica nova, Emenda 13), A4 (preços), M3 (`searchHint`) e U2 (script do
+experimento de versão). Continuam abertos os itens 1, 2 e 5 abaixo.
+
+
 1. **Tarefas com página acima de 500 mil caracteres.** Primeiro rode o
    `bench/m10_result_limits.py`. Opções:
    - (a) excluir essas tarefas de todos os braços, com contagem relatada;

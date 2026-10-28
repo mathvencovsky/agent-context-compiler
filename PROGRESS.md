@@ -14,6 +14,24 @@ respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
 
+### M10a/M10 — propostas da pesquisa implementadas (2026-10-28)
+
+- **Formato conciso imune a falsificação (C3):** `<document>`, `<fragment>` e
+  `<nina_notes>`, com as tags neutralizadas no texto das páginas; +3,7% de
+  tokens. SPEC §8/§9; testes em `tests/unit/retrieve/test_render.py` e na
+  integração.
+- **Rubrica nova (Emenda 13):** raciocínio antes do veredicto, lista com
+  alternativa errada é incorreta, `abstained` registrado (coluna nova no
+  `results.csv`).
+- **Análise (A1):** `bench/m10_analysis.py`, H1/H2 por tarefa e por grupo de
+  página.
+- **Preços de cache** do Sonnet/Opus 5.5 no `bench/prices.yaml` (A4).
+- **`searchHint`** nas ferramentas MCP (M3).
+- **Experimento de versão (U2):** `bench/m10a_version.py`; falta rodar:
+  `uv run python -m bench.m10a_version --half A`.
+
+O `app/` mudou: nenhuma sessão de agente antes da emenda de recongelamento.
+
 ### M10a/M10 — pesquisa nas grandes empresas de IA (2026-10-28)
 
 `docs/PESQUISA_LABS.md`: textos da Anthropic, doc do Claude Code, OpenAI (via
