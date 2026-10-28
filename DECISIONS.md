@@ -10,6 +10,31 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: propostas de context engineering P1–P7 (aprovadas pelo humano)
+Contexto: `docs/CONTEXT_ENGINEERING.md` (leitura completa dos textos da Anthropic sobre engenharia de contexto e dos estudos ligados). O humano aprovou as sete propostas em 2026-10-28.
+Decisão:
+- P1 (harness): `ENABLE_TOOL_SEARCH=false` no ambiente de cada sessão do M10; o CLI 2.1.301 adia as definições das ferramentas MCP por padrão, por variável e flags remotas, o que só os braços MCP pagariam e o agente talvez nem conseguisse resolver (sem `ToolSearch` permitido). Emenda 11 do PREREG.
+- P2 (produto): `instructions` no servidor MCP (77 tokens `cl100k`, teto de 100 em teste) e "documentation" em toda descrição, porque com o adiamento o agente vê só nomes e instruções e busca por palavra. Esquema das três ferramentas: 735 → 757 tokens (teto de 800 mantido).
+- P3 (medição): `bench/m10a_section_expand.py` mede o teto de expandir o melhor fragmento para a seção (`section`) ou para a seção com subseções (`subtree`), contra dar ao NINA os mesmos tokens como orçamento. Regra fixada antes de medir: na metade A, em 4k, a expansão precisa resgatar ≥ 10% das falhas do NINA; senão o P3 para sem mudar o contrato. Na metade B, a variante passa se, em 2k e 4k, o acerto supera o de tokens iguais com limite inferior do IC 95% pareado > 0. Só então se propõe o parâmetro no contrato (SPEC §8/§9), com nova aprovação.
+- P4 (produto): a descrição de `exclude_chunk_ids` diz que fragmentos apagados do contexto voltam numa chamada sem eles (compressão restaurável, lição do Manus).
+- P5 (bench): `bench/roi.py`, o modelo da Emenda 4 com o cenário de limpeza de resultados depois de J turnos.
+- P6: as frases de posicionamento ficam em `docs/CONTEXT_ENGINEERING.md` §8 e só entram no README depois dos números do M10, conferidas no texto completo dos artigos.
+- P7 (produto): hint `mixed_versions` quando os fragmentos entregues vêm de versões diferentes da mesma documentação (primeiro segmento da URL com cara de versão), contra o modo de falha "choque".
+Alternativas: deixar o modo de ferramentas ao padrão do CLI (comparação entre braços desigual e instável); `_meta anthropic/alwaysLoad` no servidor (resolve só para o NINA, não para os outros braços); expansão automática para a seção (já rejeitada como item 3).
+Consequências: SPEC §8 (código `mixed_versions`) e §9 (instruções, descrições) atualizadas. P2, P4 e P7 mudam o `app/` depois da Emenda 10: nenhuma sessão de agente antes da próxima emenda de recongelamento.
+
+## 2026-10-28: itens 4 e 5 da pesquisa sem custo (ordem dos documentos, quase-duplicatas) — regras de aceite, antes de qualquer medição
+Contexto: plano aprovado pelo humano em 2026-10-28 (sete frentes tiradas de estudos e publicações). Item 4: modelos usam pior o que fica no meio do contexto ("Lost in the Middle", Liu et al., TACL 2024), e o NINA emite os documentos na ordem de `document_id`, arbitrária. Item 5: texto parecido com a resposta atrapalha mais que texto irrelevante ("Context Rot", Chroma, 2025), e λ = 0 desligou a penalidade de diversidade. Script: `bench/m10a_order_dedup.py`, só seleção, só cache.
+Decisão (regras fixadas pelo agente antes de medir, dentro do plano aprovado; o humano pode trocá-las antes da metade B): quase-duplicata = Jaccard dos 5-gramas de palavras ≥ 0,8. Item 5: se na metade A menos de 5% das seleções atuais (tarefa × orçamento, no pior orçamento) tiverem um par, o item é rejeitado sem abrir a metade B. Senão, `dedup` passa na metade B se (1) em 1k/2k/4k/8k a cobertura média cai no máximo 0,5 pt e o acerto no máximo 1 pt; (2) a precisão por token sobe (estimativa pontual > 0) em 4k e 8k; (3) a cobertura por mil tokens fica acima da do strong_rag em todos os orçamentos. Item 4: `order` passa na metade B se, em cada orçamento, entre as tarefas com acerto nas duas variantes, a fração com a seção no primeiro fragmento sobe com limite inferior do IC 95% pareado > 0, e a cobertura média não cai mais de 0,5 pt.
+Alternativas: medir a ordem pela qualidade da resposta (exige chamadas de LLM; fica para o M10); remover duplicatas pelo embedding (já existe como λ, e λ > 0 foi pior no item 1).
+Consequências: nada muda em `app/` até um item passar na metade B. Se passar, a mudança mexe na SPEC §6 (ordem da saída ou seleção), precisa de aprovação do humano e entra na emenda de recongelamento.
+
+## 2026-10-28: precisão por token como métrica de desperdício
+Contexto: a cobertura da seção mede se a resposta chegou, não quanto do contexto pago era resposta. A tese do produto é eficiência.
+Decisão: `bench.section_recall.token_precision` (precisão e IoU por token, como no relatório de chunking da Chroma, 2024). Um trecho do contexto conta como da seção se tiver 4 ou mais palavras e estiver no texto normalizado da seção; cada trecho conta uma vez (repetição é desperdício). Entra como coluna na linha de base do M10a (`bench/m10a_baseline.py`), que relê o cache sem custo.
+Alternativas: precisão por fragmento inteiro (um fragmento com uma frase da seção contaria inteiro).
+Consequências: nenhuma em `app/`; é métrica de desenvolvimento, nunca evidência da tese (PREREG Emenda 6).
+
 ## 2026-10-17: O2 — descrições das ferramentas MCP que orientam o agente
 Contexto: as descrições diziam o que cada ferramenta faz, mas não quando usar nem quanto custa; nenhum parâmetro tinha descrição; `resolve_url` e `get_document` ainda mandavam o resultado duas vezes (texto e `structuredContent`). O guia da Anthropic para ferramentas e `upstash/context7#1419` mostram que a descrição guia a escolha do agente.
 Decisão (humano, 2026-10-17): `resolve_url` diz que devolve a página inteira, ~10× os tokens do `assemble_context` (média do corpus ~45 mil contra ~4 mil), e manda perguntas para o `assemble_context`; este pede uma pergunta curta, `exclude_chunk_ids` nas chamadas seguintes e `max_tokens` maior só com a nota `budget_limited`; todo parâmetro ganhou descrição; `structured_output=False` nas três ferramentas. O esquema das três foi de 635 para 735 tokens; um teste trava o teto em 800.

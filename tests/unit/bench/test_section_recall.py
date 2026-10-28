@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from bench.section_recall import HIT, coverage, first_hit, normalize, units
+from app.index.tokens import count_tokens
+from bench.section_recall import (
+    HIT,
+    coverage,
+    first_hit,
+    normalize,
+    token_precision,
+    units,
+)
 
 _SECTION = (
     "LIMIT Clause\n"
@@ -40,3 +48,29 @@ def test_first_hit_counts_url_fragments() -> None:
     )
     assert first_hit(units(_SECTION), context) == 2
     assert first_hit(units(_SECTION), "[URL] https://d/1\nnope") is None
+
+
+def test_token_precision_counts_only_section_sentences_once() -> None:
+    section = "The timeout is set in seconds. Use the retry flag to try again."
+    context = (
+        "[URL] https://d.test/p\n"
+        "The timeout is set in seconds.\n"
+        "Unrelated text about other matters entirely.\n"
+        "The timeout is set in seconds.\n"
+    )
+    tp = token_precision(section, context)
+    one = count_tokens("The timeout is set in seconds.")
+    assert tp.on_section == one  # the repeat is waste, not answer
+    assert tp.context == count_tokens(context)
+    assert tp.precision == one / tp.context
+    assert tp.iou == one / (tp.context + count_tokens(section) - one)
+
+
+def test_token_precision_is_zero_for_an_empty_context() -> None:
+    tp = token_precision("Some section text here today.", "")
+    assert (tp.on_section, tp.context, tp.precision, tp.iou) == (0, 0, 0.0, 0.0)
+
+
+def test_token_precision_is_one_when_the_context_is_the_section() -> None:
+    section = "Pass end equal to an empty string to print."
+    assert token_precision(section, section).precision == 1.0

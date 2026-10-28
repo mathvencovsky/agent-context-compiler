@@ -158,3 +158,11 @@ def test_blind_masks_arm_revealing_names_in_the_candidate() -> None:
     )
     assert blind("via web_fetch") == "via [tool]"
     assert blind("the pagination API") == "the pagination API"  # whole words only
+
+
+def test_blind_masks_qualified_mcp_tool_names() -> None:
+    # `\b` does not split on "_", so these leaked the arm before.
+    assert blind("I called mcp__docs__assemble_context") == "I called mcp__docs__[tool]"
+    assert blind("mcp__context7__query-docs said") == "mcp__[tool]__[tool] said"
+    assert blind("the context7_live arm") == "the [tool]_live arm"
+    assert blind("ninax and xnina stay") == "ninax and xnina stay"

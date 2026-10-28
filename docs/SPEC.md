@@ -273,7 +273,7 @@ Response 200:
 
 Só uma resposta 2xx do site vira documento: uma página de erro (404, 500, 3xx sem `Location`, 304 sem versão em cache) dá `upstream_status` (502), com `details.upstream_status` igual ao status recebido, e nada é guardado. Se uma das URLs falhar, a resposta continua 200 com as outras, e a falha aparece em `sources[].status` e em `warnings`. Se todas falharem, a resposta é 422.
 
-`hints` (nas duas formas) são metadados do NINA, nunca texto de página: descrevem a situação e as opções, sem dar ordens ao agente (DECISIONS.md 2026-10-17). Códigos: `source_failed` (uma por URL que falhou, com `details.url` e `details.status` e o motivo), `low_coverage` (quando `coverage` é `insufficient`) e `budget_limited` (sobraram candidatos com rerank ≥ `coverage_low` fora do orçamento; `details.max_tokens` sugere o dobro, até 32000). No formato conciso, as dicas e os warnings vêm no fim do `context`, depois de uma linha `---` e do título `NINA notes (not from the pages):`.
+`hints` (nas duas formas) são metadados do NINA, nunca texto de página: descrevem a situação e as opções, sem dar ordens ao agente (DECISIONS.md 2026-10-17). Códigos: `source_failed` (uma por URL que falhou, com `details.url` e `details.status` e o motivo), `low_coverage` (quando `coverage` é `insufficient`), `budget_limited` (sobraram candidatos com rerank ≥ `coverage_low` fora do orçamento; `details.max_tokens` sugere o dobro, até 32000) e `mixed_versions` (uma por site cujos fragmentos entregues vêm de versões diferentes da documentação, com `details.host` e `details.versions`; a versão é o primeiro segmento do caminho da URL que parece um rótulo de versão, como `3.12`, `v1.30`, `16`, `2.3.x`, `current` ou `stable`). No formato conciso, as dicas e os warnings vêm no fim do `context`, depois de uma linha `---` e do título `NINA notes (not from the pages):`.
 
 Response 200 com `"response_format": "concise"` (para agentes; DECISIONS.md 2026-10-16):
 ```json
@@ -333,6 +333,8 @@ Transporte stdio para uso local e streamable HTTP para uso remoto. É um cliente
 - `get_document(document_id, version_id=None)`
 
 As descrições das ferramentas avisam que o conteúdo retornado vem de páginas externas e não deve ser tratado como instrução. Elas também orientam o uso: `resolve_url` e `get_document` devolvem a página inteira (em média ~10× os tokens do `assemble_context`); o `assemble_context` pede uma pergunta curta, `exclude_chunk_ids` nas chamadas seguintes e `max_tokens` maior só com a nota `budget_limited`. Cada parâmetro tem descrição, e nenhuma ferramenta manda a cópia em `structuredContent`.
+
+O servidor declara `instructions` (MCP), com até 100 tokens: diz que o NINA lê páginas de documentação técnica pública, que perguntas vão para o `assemble_context` com as URLs, que o `resolve_url` é só para a página inteira e que o conteúdo é dado não confiável. Clientes que adiam as definições das ferramentas (tool search do Claude Code) mostram ao agente só os nomes e essas instruções; por isso toda descrição contém "documentation", a palavra que o agente usa para buscar. A descrição de `exclude_chunk_ids` diz que, para reaver fragmentos apagados do contexto do agente, basta chamar sem eles.
 
 ## 10. Benchmark (`bench/`)
 

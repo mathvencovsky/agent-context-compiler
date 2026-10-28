@@ -33,3 +33,35 @@ def cohen_kappa(a: Sequence[bool], b: Sequence[bool]) -> float:
 def judge_is_reliable(kappa: float) -> bool:
     """The PREREG §9 gate (an undefined kappa does not pass)."""
     return kappa >= KAPPA_GATE
+
+
+def disagreement_by_length(
+    rows: Sequence[tuple[str, bool, bool]], bins: int = 3
+) -> list[dict[str, float]]:
+    """Judge-vs-human disagreement per answer-length bin (judge bias check).
+
+    Each row is ``(answer, judge_correct, human_correct)``. Rows are sorted by
+    answer length in characters and cut into ``bins`` bins of near-equal size.
+    Per bin: the longest answer, n, and the share of answers the judge passed
+    and the humans failed (``judge_lenient``) or the reverse (``judge_strict``).
+    A ``judge_lenient`` share that grows with length is the verbosity bias
+    LLM judges are known for (Zheng et al., 2023); the rubric tells the judge
+    to ignore length, and this checks it did. Description only: the PREREG
+    gate stays the kappa.
+    """
+    ordered = sorted(rows, key=lambda r: len(r[0]))
+    out = []
+    for i in range(bins):
+        part = ordered[i * len(ordered) // bins : (i + 1) * len(ordered) // bins]
+        if not part:
+            continue
+        n = len(part)
+        out.append(
+            {
+                "max_chars": float(len(part[-1][0])),
+                "n": float(n),
+                "judge_lenient": sum(j and not h for _a, j, h in part) / n,
+                "judge_strict": sum(h and not j for _a, j, h in part) / n,
+            }
+        )
+    return out

@@ -89,11 +89,14 @@ def test_measure_gives_every_system_a_row_and_finds_the_section(tmp_path: Path) 
 
 def test_summarize_reports_each_system_and_budget() -> None:
     rows = [
-        Row("so-1", "x", "nina", 1_000, 500, 1.0, True, 1, 10.0),
-        Row("so-2", "x", "nina", 1_000, 1_500, 0.0, False, None, 30.0),
+        Row("so-1", "x", "nina", 1_000, 500, 1.0, True, 1, 10.0, 0.6, 0.4),
+        Row("so-2", "x", "nina", 1_000, 1_500, 0.0, False, None, 30.0, 0.2, 0.1),
         Row("so-1", "x", "full_page", 0, 9_000, 1.0, True, 2, 5.0),
     ]
     table = summarize(rows)
-    assert "| nina | 1000 | 2 | 0.500 | 0.500 | 1,000 | 0.500 | 20 |" in table
+    assert (
+        "| nina | 1000 | 2 | 0.500 | 0.500 | 1,000 | 0.500 | 0.400 | 0.250 | 20 |"
+        in table
+    )
     assert table.index("| nina |") < table.index("| full_page |")
     assert "| full_page | page | 1 |" in table

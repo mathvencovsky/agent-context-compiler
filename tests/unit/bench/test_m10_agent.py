@@ -268,6 +268,7 @@ def test_options_meet_prereg_section_4(arm: str, tmp_path: Path) -> None:
         "ANTHROPIC_API_KEY": "k",
         "CLAUDE_CONFIG_DIR": str(tmp_path / "c"),
         "MAX_MCP_OUTPUT_TOKENS": "1000000",
+        "ENABLE_TOOL_SEARCH": "false",  # Amendment 11: no deferred tool definitions
     }
     if arm in _NO_SERVER:
         assert options.mcp_servers == {}

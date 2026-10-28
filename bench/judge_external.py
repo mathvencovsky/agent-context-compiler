@@ -61,10 +61,13 @@ _SLOTS = ("<question title and body>", "<accepted answer>", "<candidate answer>"
 _SLOT_RE = re.compile("|".join(re.escape(slot) for slot in _SLOTS))
 
 #: Names that would reveal the arm (its tools and products), masked in every
-#: candidate before a judge or a grader sees it (PREREG Amendment 5).
+#: candidate before a judge or a grader sees it (PREREG Amendment 5). A word
+#: ends at any non-alphanumeric character, ``_`` included, so the qualified
+#: names agents quote (``mcp__docs__assemble_context``) are masked too.
 _ARM_WORDS = re.compile(
-    r"\b(assemble_context|resolve_url|get_document|fetch_page|search_docs"
-    r"|resolve-library-id|get-library-docs|query-docs|web[ _-]?fetch|context7|nina)\b",
+    r"(?<![a-z0-9])(assemble_context|resolve_url|get_document|fetch_page|search_docs"
+    r"|resolve-library-id|get-library-docs|query-docs|web[ _-]?fetch|context7|nina)"
+    r"(?![a-z0-9])",
     re.IGNORECASE,
 )
 
