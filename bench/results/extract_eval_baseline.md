@@ -165,3 +165,9 @@ by humans; `main_content` is plain text, so code and table checks rely on
 ## Test looks and amendments log
 
 - 2026-10-28: baseline measured on dev and test (no product change).
+- 2026-10-28: Phase S tree (Amendment 17, `app/` tree `712e30d6`, commit
+  `0429c87`) measured on dev and PDFs only, against this baseline: ΔF1
+  −0.0004 [−0.0008, −0.0000], Δrecall −0.0007, precision, leak, glued, code,
+  tables and all 64 PDF facts unchanged; automatic gates pass. Phase P
+  changes start from that tree, so this small loss belongs to Phase S (the
+  invisible-text removal), not to Phase P. Test not looked at.
