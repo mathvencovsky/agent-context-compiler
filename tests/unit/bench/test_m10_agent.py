@@ -273,6 +273,7 @@ def test_options_meet_prereg_section_4(arm: str, tmp_path: Path) -> None:
         "CLAUDE_CODE_EFFORT_LEVEL": "medium",
         "FORCE_PROMPT_CACHING_5M": "1",
         "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",  # Amendment 14
     }
     if arm in _NO_SERVER:
         assert options.mcp_servers == {}

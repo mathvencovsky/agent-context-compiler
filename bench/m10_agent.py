@@ -150,8 +150,8 @@ MAX_MCP_OUTPUT_TOKENS = 1_000_000
 #: Amendment 11: "false" selects the CLI's standard mode (every definition
 #: loaded up front); a falsy value also overrides a remote "force" flag.
 ENABLE_TOOL_SEARCH = "false"
-#: Amendment 12: CLI behaviors that are defaults today but can change without a
-#: CLI update, pinned to those defaults so the pilot and the main run match.
+#: Amendments 12 and 14: CLI behaviors that are defaults today but can change
+#: without a CLI update, pinned so the pilot and the main run match.
 PINNED_ENV = {
     # Sonnet 5.5's documented default; an organization default or a product
     # change would otherwise move it (Anthropic's April 23 postmortem).
@@ -162,6 +162,9 @@ PINNED_ENV = {
     # A safety-classifier flag would otherwise switch the session to another
     # model mid-run; the refused request then fails like any API refusal.
     "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1",
+    # Amendment 14: no remote feature flags, auto-updates or telemetry during a
+    # run, so nothing fetched mid-run changes the CLI's behavior.
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
 }
 #: The MCP server key of every arm, so the tools are ``mcp__docs__<name>``.
 SERVER = "docs"
