@@ -72,7 +72,7 @@ migrations/
 - Portas permitidas: 80 e 443 (configurável).
 - Normalização da URL: minúsculas no host, remoção do fragmento, IDNA.
 - Rejeitar hosts que sejam IPs literais em notações alternativas (decimal, octal, hexadecimal).
-- Resolver **todos** os registros A e AAAA. Rejeitar se **qualquer** IP não for global (`ipaddress.ip_address(x).is_global` falso), incluindo IPv6 mapeado para IPv4, loopback, link-local, faixas privadas, `169.254.169.254` e `100.64.0.0/10`.
+- Resolver **todos** os registros A e AAAA. Rejeitar se **qualquer** IP não for global (`ipaddress.ip_address(x).is_global` falso), incluindo IPv6 mapeado para IPv4, loopback, link-local, faixas privadas, `169.254.169.254`, `168.63.129.16` (Azure), `fec0::/10` (site-local IPv6 obsoleto) e `100.64.0.0/10`. A mensagem de recusa não repete o IP resolvido.
 - **Conectar no IP validado**, e não resolver de novo. Com httpx, faça a requisição para o IP, com header `Host` original e a extensão `sni_hostname` para HTTPS. Isso fecha a janela de DNS rebinding. Se não for viável, pare e registre a alternativa em DECISIONS.md.
 - Redirecionamentos manuais, no máximo 5, com cada destino passando pelo guard de novo.
 - Limites: corpo de até 15 MB (lido em streaming e abortado ao passar), timeout total de 20 s, timeout de conexão de 5 s.
