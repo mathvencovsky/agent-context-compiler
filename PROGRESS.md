@@ -1,8 +1,9 @@
 # PROGRESS
 
 Marco atual: **M10a (aprofundar o NINA antes do piloto), melhorias sem custo**.
-Última etapa: pesquisa sem custo a partir de estudos e publicações (2026-10-28,
-seção abaixo); quatro medições esperam o humano rodar com corpus e cache.
+Últimas etapas (2026-10-28): pesquisa sem custo a partir de estudos e
+publicações, e as propostas de context engineering P1–P7 (seções abaixo); cinco
+medições esperam o humano rodar com corpus e cache.
 Feitos: trilha 1 da Fase 3 (itens 1 e 4 aceitos, 2 e 3 rejeitados), formato
 conciso, índice reaproveitado, trilhas B, A e C (Emenda 10 recongelou `app/`) e
 O1 (páginas de erro nunca viram documento). Em andamento, uma frente por vez:
@@ -12,6 +13,37 @@ gratuitas do M10; termina com nova emenda de recongelamento. A trilha 2 (medir
 respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
+
+### M10a — context engineering: propostas P1–P7 feitas (2026-10-28)
+
+Pesquisa em `docs/CONTEXT_ENGINEERING.md`; as sete propostas foram aprovadas pelo
+humano e feitas sem nenhuma chamada paga.
+
+- **P1, validade do M10:** o CLI 2.1.301 embutido no SDK adia as definições
+  das ferramentas MCP por padrão (flags remotas e `ENABLE_TOOL_SEARCH`); só os
+  braços MCP pagariam o passo extra, e o `ToolSearch` nem é permitido. O harness
+  agora fixa `ENABLE_TOOL_SEARCH=false` (teste em `test_m10_agent.py`); Emenda
+  11 do PREREG.
+- **P2 e P4, produto:** `instructions` no servidor MCP (77 tokens), descrições
+  com "documentation" e como reaver fragmentos apagados do contexto. Testes em
+  `tests/unit/mcp/test_mcp_server.py`; SPEC §9.
+- **P7, produto:** hint `mixed_versions` (versões diferentes da mesma doc nos
+  fragmentos). Testes em `tests/unit/retrieve/test_hints.py`; SPEC §8.
+- **P5:** `bench/roi.py` (modelo da Emenda 4, com e sem limpeza de contexto).
+- **P3:** `bench/m10a_section_expand.py`, regra de aceite no DECISIONS; falta
+  rodar.
+- **P6:** frases de posicionamento prontas; só depois do M10.
+
+**Atenção:** P2, P4 e P7 mudaram o `app/` depois da Emenda 10. Nenhuma sessão
+de agente antes da próxima emenda de recongelamento, que fecha o M10a.
+
+Para rodar (humano, máquina com corpus e cache), além da lista da seção abaixo:
+
+```
+uv run python -m bench.m10a_section_expand --half A   # só cache; confira "paid calls: 0"
+```
+
+Como testar: `uv run pytest tests/unit/mcp tests/unit/retrieve/test_hints.py tests/unit/bench -q`.
 
 ### M10a — pesquisa sem custo: estudos e publicações (2026-10-28)
 

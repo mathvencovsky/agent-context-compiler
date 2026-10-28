@@ -184,7 +184,18 @@ princípio central do texto da Anthropic, implementado de forma determinística.
 
 ## 8. Achados novos e propostas
 
-Ordenados por urgência. Nada foi implementado: cada item espera aprovação.
+Ordenados por urgência. **Aprovados pelo humano em 2026-10-28 e feitos no
+mesmo dia** (DECISIONS.md). Situação:
+
+| item | situação |
+|---|---|
+| P1 | feito: `ENABLE_TOOL_SEARCH=false` no harness, com teste; Emenda 11 do PREREG |
+| P2 | feito: `instructions` no servidor MCP e "documentation" nas descrições, com testes; SPEC §9 |
+| P3 | script pronto (`bench/m10a_section_expand.py`), regra fixada; **falta rodar** com corpus e cache |
+| P4 | feito: descrição de `exclude_chunk_ids` |
+| P5 | feito: `bench/roi.py`; roda depois da rodada principal |
+| P6 | pronto abaixo; entra no README só depois do M10 |
+| P7 | feito: hint `mixed_versions`, com testes; SPEC §8 |
 
 ### P1. Fixar o modo de carga das ferramentas no harness do M10 (urgente, validade)
 

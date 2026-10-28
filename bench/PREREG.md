@@ -559,6 +559,37 @@ data had been seen.
   screen, pilot or main-run session since Amendment 9. All M10a measurements
   used only the development slice, from the provider cache, with no paid call.
 
+### Amendment 11 — 2026-10-28: tool definitions loaded up front, and a clearing scenario in the ROI model
+
+- **What changed:**
+  1. **Harness (§4).** Every session sets `ENABLE_TOOL_SEARCH=false` for the
+     agent CLI, so every arm sees its tool definitions from the first turn.
+  2. **ROI model (Amendment 4 point 2).** Besides R(K) as defined there, the
+     calculator (`bench/roi.py`) reports a second scenario in which the client
+     clears old tool results after J turns (Anthropic's context editing): only
+     `min(K, J)` later turns re-read the tool result. It is a model, labelled
+     secondary, and never the headline.
+- **Why:**
+  - The Claude Code CLI bundled with the SDK (2.1.301) defers MCP tool
+    definitions behind a tool-search step by default, decided by
+    `ENABLE_TOOL_SEARCH` and by flags the CLI reads remotely. The frozen arms
+    get MCP tools and `webfetch_live` a built-in one, so only the MCP arms
+    would pay the extra step (inside the 15-turn limit); `ToolSearch` is not an
+    allowed tool, so the agent might not be able to load a definition at all;
+    and a remote flag could change the behaviour during the run. With `false`
+    the CLI takes its standard mode (all definitions up front), and a falsy
+    value also overrides a remote "force" flag (read in the CLI's code).
+  - Customers who clear tool results pay for a long tool result only for a few
+    turns, so the long-session extrapolation alone would overstate the gain
+    they get.
+- **App freeze:** not changed by this amendment. `app/` has changed since
+  Amendment 10 (MCP server instructions and descriptions, the `mixed_versions`
+  hint), so, as Amendment 6 point 4 provides, no agent session starts before a
+  later amendment re-freezes it.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run. The CLI behaviour was read from its code, without
+  starting a session.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
