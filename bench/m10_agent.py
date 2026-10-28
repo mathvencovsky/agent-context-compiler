@@ -22,6 +22,8 @@ web (the SPEC §10.1 exception). Every session:
   PREREG §4 the same way;
 * gets whole tool results: ``MAX_MCP_OUTPUT_TOKENS`` is pinned to the 1M
   context for every arm (PREREG Amendment 7);
+* runs with effort, cache TTL and model fallback pinned to today's defaults
+  (:data:`PINNED_ENV`, PREREG Amendment 12);
 * sees every tool definition from the first turn: ``ENABLE_TOOL_SEARCH`` is
   pinned to ``false`` (PREREG Amendment 11). By default the CLI defers MCP tool
   definitions behind a tool-search step, decided by remote flags, which only
@@ -148,6 +150,19 @@ MAX_MCP_OUTPUT_TOKENS = 1_000_000
 #: Amendment 11: "false" selects the CLI's standard mode (every definition
 #: loaded up front); a falsy value also overrides a remote "force" flag.
 ENABLE_TOOL_SEARCH = "false"
+#: Amendment 12: CLI behaviors that are defaults today but can change without a
+#: CLI update, pinned to those defaults so the pilot and the main run match.
+PINNED_ENV = {
+    # Sonnet 5.5's documented default; an organization default or a product
+    # change would otherwise move it (Anthropic's April 23 postmortem).
+    "CLAUDE_CODE_EFFORT_LEVEL": "medium",
+    # 5-minute cache writes, the rate in bench/prices.yaml; overrides any
+    # inherited ENABLE_PROMPT_CACHING_1H or CLAUDE_CODE_PROMPT_CACHE_TTL.
+    "FORCE_PROMPT_CACHING_5M": "1",
+    # A safety-classifier flag would otherwise switch the session to another
+    # model mid-run; the refused request then fails like any API refusal.
+    "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1",
+}
 #: The MCP server key of every arm, so the tools are ``mcp__docs__<name>``.
 SERVER = "docs"
 PRIMARY_JUDGE = "gpt-6.1-sol"
@@ -314,6 +329,7 @@ def session_options(
             "CLAUDE_CONFIG_DIR": str(config_dir),  # no stored login or memory
             "MAX_MCP_OUTPUT_TOKENS": str(MAX_MCP_OUTPUT_TOKENS),
             "ENABLE_TOOL_SEARCH": ENABLE_TOOL_SEARCH,
+            **PINNED_ENV,
         },
     )
 

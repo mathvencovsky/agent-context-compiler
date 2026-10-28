@@ -269,6 +269,10 @@ def test_options_meet_prereg_section_4(arm: str, tmp_path: Path) -> None:
         "CLAUDE_CONFIG_DIR": str(tmp_path / "c"),
         "MAX_MCP_OUTPUT_TOKENS": "1000000",
         "ENABLE_TOOL_SEARCH": "false",  # Amendment 11: no deferred tool definitions
+        # Amendment 12: today's defaults, pinned against product changes
+        "CLAUDE_CODE_EFFORT_LEVEL": "medium",
+        "FORCE_PROMPT_CACHING_5M": "1",
+        "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1",
     }
     if arm in _NO_SERVER:
         assert options.mcp_servers == {}
