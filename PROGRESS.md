@@ -16,6 +16,22 @@ respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
 
+### M10a/M10 — páginas que respondem 200 sem documentação (2026-10-28)
+
+A partir dos cinco PDFs sobre o Firecrawl trazidos pelo humano
+(`docs/CONCORRENTES.md`, seção própria), Emenda 16 do PREREG:
+- `bench/page_health.py` classifica página vazia, soft 404, desafio anti-bot e
+  parede de cookies (só em páginas curtas, marcador no começo para soft 404);
+- tarefa com página citada assim no snapshot sai de todos os braços
+  (`drop_unhealthy`, lista em `excluded_unhealthy.json`), depois da exclusão
+  da Emenda 14;
+- depois da rodada, `blocked_sessions` conta por braço as buscas bloqueadas,
+  os soft 404 e os erros de ferramenta; comparações com braços ao vivo saem
+  também sem essas tarefas (sensibilidade).
+- Pendente (humano): `make m10a-pending` agora também lista as exclusões, sem
+  custo. Proposta de produto para depois do M10: warning `suspect_page`.
+- Testar: `uv run pytest tests/unit/bench/test_page_health.py`.
+
 ### M10a/M10 — decisões abertas fechadas (2026-10-28)
 
 Pelo critério do humano ("seguro e eficiente"), Emenda 14 do PREREG:

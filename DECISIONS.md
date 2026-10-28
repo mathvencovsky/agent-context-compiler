@@ -10,6 +10,14 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: páginas que respondem 200 sem documentação (Emenda 16), a partir dos PDFs sobre Firecrawl
+Contexto: o humano trouxe 5 textos sobre o Firecrawl (Blott ×2, fastCRW, Jacar, ApiX-Drive). O único com conteúdo técnico novo, o do fastCRW, lista falhas que o código HTTP não mostra: soft 404 (200 com "página não encontrada"), parede de consentimento de cookies, desafio anti-bot e casca de SPA vazia. O NINA já não guarda páginas de erro HTTP (Emenda 15), mas não detecta essas quatro. O mesmo site relata que, desde 2026-09-15, a Cloudflare bloqueia por padrão crawlers de IA de uso misto em páginas com anúncios (o MDN tem anúncios).
+Decisão:
+- No benchmark (`bench/page_health.py`, Emenda 16): uma tarefa cuja página citada, no snapshot, é vazia (<200 caracteres) ou curta (<2.000) com marcador de desafio, soft 404 ou consentimento sai de todos os braços antes de qualquer sessão (`drop_unhealthy` em `bench/m10_agent.py`). Busca ao vivo bloqueada fica na análise primária (é o que o braço faz de verdade), com tabela por braço e análise de sensibilidade sem essas tarefas.
+- No produto: o detector vira proposta para depois do M10 (warning `suspect_page` no `resolve`/`assemble`, sem descartar conteúdo). O `app/` está congelado (Emenda 15) e um warning novo aparece em `<nina_notes>`, então mudaria o sistema medido.
+Alternativas: mexer no `app/` agora (exige recongelar e muda o braço `nina` sem medição no dev); excluir também tarefas com busca ao vivo bloqueada da análise primária (esconderia um custo real do concorrente e seria decidido olhando sessões); não fazer nada (tarefa defeituosa conta como erro de todos os braços de corpus e favorece o `webfetch_live`).
+Consequências: Emenda 16; `make m10a-pending` já lista as exclusões sem custo; `docs/CONCORRENTES.md` registra o que os PDFs trazem; SPEC inalterada até a proposta de produto ser aprovada depois do M10.
+
 ## 2026-10-28: `app/` recongelado agora, com o congelamento verificado pelo harness (Emenda 15)
 Contexto: o congelamento estava adiado até as medições do dev voltarem. O humano delegou a decisão ("você sabe o que seria melhor para o NINA").
 Decisão: recongelar já. Uma emenda pode ser substituída por outra antes de qualquer dado, então esperar só atrasava o piloto; se uma medição do dev for aceita, uma nova emenda recongela. O harness passa a conferir os ids de árvore git de `app/` e `migrations/` (`FROZEN_TREES` em `bench/m10_agent.py`) e se recusa a rodar com outro código; um teste confere que os ids são os da Emenda 15. Novo alvo `make m10a-pending` roda as medições sem custo que faltam.
