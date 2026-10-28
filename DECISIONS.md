@@ -10,6 +10,18 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: itens 4 e 5 da pesquisa sem custo (ordem dos documentos, quase-duplicatas) — regras de aceite, antes de qualquer medição
+Contexto: plano aprovado pelo humano em 2026-10-28 (sete frentes tiradas de estudos e publicações). Item 4: modelos usam pior o que fica no meio do contexto ("Lost in the Middle", Liu et al., TACL 2024), e o NINA emite os documentos na ordem de `document_id`, arbitrária. Item 5: texto parecido com a resposta atrapalha mais que texto irrelevante ("Context Rot", Chroma, 2025), e λ = 0 desligou a penalidade de diversidade. Script: `bench/m10a_order_dedup.py`, só seleção, só cache.
+Decisão (regras fixadas pelo agente antes de medir, dentro do plano aprovado; o humano pode trocá-las antes da metade B): quase-duplicata = Jaccard dos 5-gramas de palavras ≥ 0,8. Item 5: se na metade A menos de 5% das seleções atuais (tarefa × orçamento, no pior orçamento) tiverem um par, o item é rejeitado sem abrir a metade B. Senão, `dedup` passa na metade B se (1) em 1k/2k/4k/8k a cobertura média cai no máximo 0,5 pt e o acerto no máximo 1 pt; (2) a precisão por token sobe (estimativa pontual > 0) em 4k e 8k; (3) a cobertura por mil tokens fica acima da do strong_rag em todos os orçamentos. Item 4: `order` passa na metade B se, em cada orçamento, entre as tarefas com acerto nas duas variantes, a fração com a seção no primeiro fragmento sobe com limite inferior do IC 95% pareado > 0, e a cobertura média não cai mais de 0,5 pt.
+Alternativas: medir a ordem pela qualidade da resposta (exige chamadas de LLM; fica para o M10); remover duplicatas pelo embedding (já existe como λ, e λ > 0 foi pior no item 1).
+Consequências: nada muda em `app/` até um item passar na metade B. Se passar, a mudança mexe na SPEC §6 (ordem da saída ou seleção), precisa de aprovação do humano e entra na emenda de recongelamento.
+
+## 2026-10-28: precisão por token como métrica de desperdício
+Contexto: a cobertura da seção mede se a resposta chegou, não quanto do contexto pago era resposta. A tese do produto é eficiência.
+Decisão: `bench.section_recall.token_precision` (precisão e IoU por token, como no relatório de chunking da Chroma, 2024). Um trecho do contexto conta como da seção se tiver 4 ou mais palavras e estiver no texto normalizado da seção; cada trecho conta uma vez (repetição é desperdício). Entra como coluna na linha de base do M10a (`bench/m10a_baseline.py`), que relê o cache sem custo.
+Alternativas: precisão por fragmento inteiro (um fragmento com uma frase da seção contaria inteiro).
+Consequências: nenhuma em `app/`; é métrica de desenvolvimento, nunca evidência da tese (PREREG Emenda 6).
+
 ## 2026-10-17: O2 — descrições das ferramentas MCP que orientam o agente
 Contexto: as descrições diziam o que cada ferramenta faz, mas não quando usar nem quanto custa; nenhum parâmetro tinha descrição; `resolve_url` e `get_document` ainda mandavam o resultado duas vezes (texto e `structuredContent`). O guia da Anthropic para ferramentas e `upstash/context7#1419` mostram que a descrição guia a escolha do agente.
 Decisão (humano, 2026-10-17): `resolve_url` diz que devolve a página inteira, ~10× os tokens do `assemble_context` (média do corpus ~45 mil contra ~4 mil), e manda perguntas para o `assemble_context`; este pede uma pergunta curta, `exclude_chunk_ids` nas chamadas seguintes e `max_tokens` maior só com a nota `budget_limited`; todo parâmetro ganhou descrição; `structured_output=False` nas três ferramentas. O esquema das três foi de 635 para 735 tokens; um teste trava o teto em 800.

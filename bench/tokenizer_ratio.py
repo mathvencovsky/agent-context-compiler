@@ -12,6 +12,10 @@ one twice: with ``cl100k_base`` and with Anthropic's token-counting endpoint,
 which is free (rate-limited per minute, not billed). It reports, per site and
 for code vs prose, the ratio of the totals and the median per-chunk ratio.
 
+It also counts the NINA MCP tool definitions the way Claude bills them (the
+endpoint's ``tools`` field): they are sent on every agent turn, and the O2 test
+only caps them in ``cl100k_base`` tokens (800).
+
 Only the ``dev`` split is read (PREREG Amendment 6); no outcome is involved.
 
 Usage (needs the corpus and an Anthropic key; no paid call)::
@@ -110,7 +114,7 @@ def table(samples: Sequence[Sample]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def anthropic_counter(api_key: str, model: str = MODEL) -> Callable[[str], int]:
+def anthropic_counter(api_key: str, model: str = MODEL) -> Callable[..., int]:
     """Count with the free endpoint, minus the fixed cost of an empty message.
 
     The endpoint counts a whole user message. Its wrapper costs a fixed number
@@ -120,14 +124,50 @@ def anthropic_counter(api_key: str, model: str = MODEL) -> Callable[[str], int]:
 
     client = anthropic.Anthropic(api_key=api_key, max_retries=8)
 
-    def raw(text: str) -> int:
+    def raw(text: str, tools: list[dict[str, object]] | None = None) -> int:
+        extra = {"tools": tools} if tools else {}
         reply = client.messages.count_tokens(
-            model=model, messages=[{"role": "user", "content": text}]
+            model=model, messages=[{"role": "user", "content": text}], **extra
         )
         return int(reply.input_tokens)
 
     overhead = raw("x") - 1
-    return lambda text: raw(text) - overhead
+
+    def count(text: str, tools: list[dict[str, object]] | None = None) -> int:
+        """Tokens of ``text``; with ``tools``, the tools' cost alone."""
+        if tools:
+            return raw("x", tools) - raw("x")
+        return raw(text) - overhead
+
+    return count
+
+
+def nina_tools() -> list[dict[str, object]]:
+    """The NINA MCP tools as the Messages API receives them."""
+    import asyncio
+
+    from app.mcp_server.client import NinaApiClient
+    from app.mcp_server.server import build_server
+
+    server = build_server(
+        client=NinaApiClient(base_url="http://nina.local", api_key="x")
+    )
+    tools = asyncio.run(server.list_tools())
+    return [
+        {
+            "name": t.name,
+            "description": t.description or "",
+            "input_schema": t.input_schema,
+        }
+        for t in tools
+    ]
+
+
+def tools_line(cl100k: int, claude: int) -> str:
+    return (
+        f"NINA MCP tool definitions, sent on every turn: {cl100k} cl100k tokens, "
+        f"{claude} Claude tokens."
+    )
 
 
 def dev_chunks(data_root: Path) -> dict[str, list[str]]:  # pragma: no cover - corpus
@@ -166,8 +206,17 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - API call
     key = env.get("M10_AGENT_API_KEY") or env.get("BENCH_JUDGE_API_KEY")
     if not key:
         raise SystemExit("set M10_AGENT_API_KEY or BENCH_JUDGE_API_KEY (Anthropic)")
+    import json
+
+    counter = anthropic_counter(key)
     picked = pick(dev_chunks(args.data_root), args.per_site)
-    report = table(measure(picked, anthropic_counter(key)))
+    tools = nina_tools()
+    report = (
+        table(measure(picked, counter))
+        + "\n"
+        + tools_line(count_tokens(json.dumps(tools)), counter("", tools))
+        + "\n"
+    )
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(report, encoding="utf-8")
     print(report)

@@ -27,3 +27,19 @@ def test_table_reports_ratio_of_totals_and_the_budget_it_implies() -> None:
     assert "| 2.000 | 2.000 |" in report
     assert "about 8000 Claude tokens" in report
     assert "| kind: code | 1 |" in report and "| site: python | 2 |" in report
+
+
+def test_nina_tools_are_the_three_mcp_tools_in_messages_api_shape() -> None:
+    from bench.tokenizer_ratio import nina_tools, tools_line
+
+    tools = nina_tools()
+    assert [t["name"] for t in tools] == [
+        "resolve_url",
+        "assemble_context",
+        "get_document",
+    ]
+    assert all({"name", "description", "input_schema"} == set(t) for t in tools)
+    assert tools_line(735, 900) == (
+        "NINA MCP tool definitions, sent on every turn: 735 cl100k tokens, "
+        "900 Claude tokens."
+    )
