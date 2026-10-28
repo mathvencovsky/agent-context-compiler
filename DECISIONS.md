@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: `app/` recongelado agora, com o congelamento verificado pelo harness (Emenda 15)
+Contexto: o congelamento estava adiado até as medições do dev voltarem. O humano delegou a decisão ("você sabe o que seria melhor para o NINA").
+Decisão: recongelar já. Uma emenda pode ser substituída por outra antes de qualquer dado, então esperar só atrasava o piloto; se uma medição do dev for aceita, uma nova emenda recongela. O harness passa a conferir os ids de árvore git de `app/` e `migrations/` (`FROZEN_TREES` em `bench/m10_agent.py`) e se recusa a rodar com outro código; um teste confere que os ids são os da Emenda 15. Novo alvo `make m10a-pending` roda as medições sem custo que faltam.
+Alternativas: esperar as medições (o piloto ficaria bloqueado sem ganho); manter o congelamento só no texto (uma rodada poderia começar com código não congelado por engano).
+Consequências: o piloto pode rodar assim que houver chaves e teto de gasto. Qualquer mudança no `app/` antes do M10 exige nova emenda e novos ids.
+
 ## 2026-10-28: decisões abertas fechadas pelo critério "seguro e eficiente" (humano delegou)
 Contexto: o humano pediu para seguir "o que for mais lógico para manter a proposta do NINA segura e eficiente" nas decisões abertas de `docs/PESQUISA_LABS.md` §3.
 Decisão (critério: nunca favorecer o NINA no M10; no produto, o comportamento mais seguro e mais barato para o usuário):

@@ -726,6 +726,48 @@ CANDIDATE:
 - **Data seen:** none from any arm. No agent session, screen, pilot or
   main-run session had run.
 
+### Amendment 15 — 2026-10-28: `app/` re-frozen, and the freeze enforced by the harness
+
+- **What changed:**
+  1. **Freeze.** From this amendment on, every M10 run (pilot, screen and main
+     run) uses `app/` and `migrations/` as of the commit that adds this
+     amendment, replacing the freeze of Amendment 10. Their git tree ids are:
+     - `app/`: `69527b613ea8f7ce38949a87932818862311097e`
+     - `migrations/`: `ac062036781057653f5694b8f560c3c57b34b07b` (unchanged
+       since Amendment 10).
+  2. **Enforcement.** The harness (`bench/m10_agent.frozen_commit`) refuses to
+     start when either tree differs from the ids above, besides refusing
+     uncommitted changes and a `results.csv` made with another `app/` (§10).
+     A later re-freeze changes those ids in its own amendment.
+  3. **Changes since Amendment 10**, all from M10a and checked with tests:
+     - `9e2e745`: an HTTP error page is never stored as a document
+       (`upstream_status`, 502);
+     - `49a1176`: MCP tool descriptions say when to use each tool and what it
+       costs, every parameter is described, and no tool sends a structured
+       copy;
+     - `efc4649`: MCP server instructions, "documentation" in every tool
+       description, and how to get cleared fragments back;
+     - `2333826`: the `mixed_versions` hint;
+     - `9fea528`: the concise format marks NINA's structure with `<document>`,
+       `<fragment>` and `<nina_notes>` and neutralizes those tags in page text,
+       so a page cannot forge NINA's notes (+3.7% tokens); MCP search hints.
+- **Effective settings:** as in Amendments 9 and 10. The harness checks NINA's
+  effective retrieval and selection settings against the `app/config.py`
+  defaults when a run starts (`check_frozen_settings`), so a `.env` that
+  overrides them stops the run.
+- **Later product changes:** the development-slice experiments that have not
+  run yet (order and near duplicates, section expansion, named release) may
+  still be accepted under their pre-registered rules. If one is, it changes
+  `app/` and needs a new amendment before any agent session. Until then this
+  freeze stands and the pilot can run.
+- **Why:** the five changes were made and checked on the development slice or
+  with tests, never on pilot, evaluation-pool or bridge tasks. Without a new
+  freeze the code named by Amendment 10 would no longer be the product under
+  test, and with the freeze recorded only in prose a run could start on
+  unfrozen code by mistake.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

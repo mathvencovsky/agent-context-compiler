@@ -736,3 +736,59 @@ def test_tasks_with_a_page_over_the_result_cap_leave_every_arm(
     assert [t.id for t in kept] == ["so-2"]  # unknown pages count as 0 chars
     record = json.loads((tmp_path / "excluded_over_ceiling.json").read_text())
     assert record == {"ceiling_chars": size - 1, "task_ids": ["so-1"]}
+
+
+def _fake_git(trees: dict[str, str], dirty: str = "", run_commits: dict | None = None):
+    def git(*args: str) -> str:
+        if args[0] == "status":
+            return dirty if args[-1] in dirty.split() else ""
+        if args == ("rev-parse", "HEAD"):
+            return "head123"
+        ref = args[1]
+        commit, _, name = ref.partition(":")
+        if commit == "HEAD" or commit == "head123":
+            return trees[name]
+        return (run_commits or {})[commit]
+
+    return git
+
+
+def test_frozen_commit_accepts_only_the_frozen_trees(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import bench.m10_agent as agent
+
+    frozen = dict(agent.FROZEN_TREES)
+    monkeypatch.setattr(agent, "_git", _fake_git(frozen))
+    assert agent.frozen_commit(tmp_path / "results.csv") == "head123"
+
+    monkeypatch.setattr(agent, "_git", _fake_git({**frozen, "app": "changed"}))
+    with pytest.raises(SystemExit, match="differs from the tree frozen"):
+        agent.frozen_commit(tmp_path / "results.csv")
+
+    monkeypatch.setattr(agent, "_git", _fake_git(frozen, dirty="migrations"))
+    with pytest.raises(SystemExit, match="uncommitted"):
+        agent.frozen_commit(tmp_path / "results.csv")
+
+
+def test_frozen_commit_refuses_a_results_file_from_another_app(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import bench.m10_agent as agent
+
+    results = tmp_path / "results.csv"
+    results.write_text("task_id,git_commit\nso-1,old456\n", encoding="utf-8")
+    git = _fake_git(dict(agent.FROZEN_TREES), run_commits={"old456": "other-tree"})
+    monkeypatch.setattr(agent, "_git", git)
+    with pytest.raises(SystemExit, match="another app"):
+        agent.frozen_commit(results)
+
+
+def test_frozen_trees_are_the_ones_the_prereg_names() -> None:
+    import bench.m10_agent as agent
+
+    text = (Path(__file__).resolve().parents[3] / "bench" / "PREREG.md").read_text(
+        encoding="utf-8"
+    )
+    for tree in agent.FROZEN_TREES.values():
+        assert tree in text

@@ -679,12 +679,28 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
+#: Git tree ids of ``app/`` and ``migrations/`` as frozen by PREREG Amendment 15.
+#: A run refuses any other tree; a re-freeze changes these in its own amendment.
+FROZEN_TREES = {
+    "app": "69527b613ea8f7ce38949a87932818862311097e",
+    "migrations": "ac062036781057653f5694b8f560c3c57b34b07b",
+}
+
+
 def frozen_commit(results: Path) -> str:
-    """HEAD, if ``app/`` is committed and ``results.csv`` used the same ``app/``."""
-    if _git("status", "--porcelain", "--", "app"):
-        raise SystemExit(
-            "app/ has uncommitted changes; an M10 run uses committed app/ only (PREREG §10)"
-        )
+    """HEAD, if ``app/`` and ``migrations/`` are the frozen trees, committed, and
+    ``results.csv`` used the same ``app/``."""
+    for name, frozen in FROZEN_TREES.items():
+        if _git("status", "--porcelain", "--", name):
+            raise SystemExit(
+                f"{name}/ has uncommitted changes; an M10 run uses committed code "
+                "only (PREREG §10)"
+            )
+        if _git("rev-parse", f"HEAD:{name}") != frozen:
+            raise SystemExit(
+                f"{name}/ differs from the tree frozen by the PREREG (Amendment 15); "
+                "an M10 run uses the frozen code only"
+            )
     head = _git("rev-parse", "HEAD")
     tree = _git("rev-parse", f"{head}:app")
     if results.exists():
