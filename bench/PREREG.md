@@ -623,6 +623,76 @@ data had been seen.
   main-run session had run. The limits come from the Claude Code
   documentation and the CLI's code, read without starting a session.
 
+### Amendment 13 — 2026-10-28: judge rubric, abstention, and a clustered interval
+
+- **What changed:**
+  1. **Rubric.** The text below replaces the Appendix B judge rubric for both
+     judges and the human graders. Three changes:
+     - the judge writes its reasoning before the verdict;
+     - a candidate that offers several alternative core answers, any of them
+       wrong or contradicting the reference, is incorrect;
+     - the judge also returns `abstained`: true only when the candidate gives
+       no core answer and says the information is unavailable or that it does
+       not know.
+
+     The human graders see the same text without the two judge-only
+     instructions (the abstention flag and the JSON format), as they already
+     skipped the JSON line.
+  2. **Abstention rate.** `results.csv` gains an `abstained` column from the
+     primary judge. The share of abstentions per arm is reported as secondary
+     and descriptive. It does not change §6: an abstention stays incorrect
+     for H1 and H2.
+  3. **Clustered interval.** Next to the §6 bootstrap, Δ and R are also
+     reported with a paired bootstrap that resamples clusters of tasks (tasks
+     that share their first cited page) instead of tasks (10,000 resamples,
+     seed `20261015`). It is a sensitivity analysis. H1 and H2 are decided by
+     §6 as written, and the report states whether the clustered interval
+     would change either verdict.
+
+Judge rubric from Amendment 13, used by both judges and by the human graders:
+
+```
+You are the judge. Decide whether the CANDIDATE answer resolves the developer's QUESTION.
+The REFERENCE is the answer the asker accepted on Stack Overflow; treat what it says as correct.
+Mark the candidate correct if its core answer (the fact, setting, API or fix that resolves the question)
+agrees with the reference, even if shorter or worded differently, or if it is a different solution that
+clearly resolves the question as asked.
+Mark it incorrect if its core answer is wrong, contradicts the reference, is missing, or only says the
+information is unavailable. Also mark it incorrect if it offers several alternative core answers and any
+of them is wrong or contradicts the reference. Ignore style, length and citations.
+Set "abstained" to true only if the candidate gives no core answer and says that the information is
+unavailable or that it does not know.
+Write your reasoning first, then the verdict, as a single JSON object:
+{"reason": "<short reasoning>", "abstained": true|false, "correct": true|false}
+
+QUESTION:
+<question title and body>
+
+REFERENCE:
+<accepted answer>
+
+CANDIDATE:
+<candidate answer>
+```
+
+- **Why:**
+  - Judges that reason before they rule are more accurate and show less
+    preference for their own model's answers (arXiv 2504.03846). OpenAI's
+    BrowseComp grader and StackEval's judge, which also grades answers to
+    Stack Overflow questions against the accepted answer, reason first.
+  - OpenAI's SimpleQA grader marks a list of guesses with a wrong one as
+    incorrect. The old rubric's "a different solution that clearly resolves
+    the question" let such a list pass, and arms with more context can list
+    more options.
+  - Binary grading scores an abstention like a wrong answer ("Why Language
+    Models Hallucinate", 2025). The system prompt tells the agent to say when
+    the pages lack the answer, so the abstention rate per arm is needed to
+    read the results.
+  - Clustered questions make the naive interval too narrow (Anthropic, "Adding
+    error bars to evals"). In the holdout pool, 65% of tasks share their first
+    cited page with another task; in a random sample of 349 about 35% do.
+- **Data seen:** none. No judge call, agent session or human label existed.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

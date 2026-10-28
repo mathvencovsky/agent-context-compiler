@@ -556,14 +556,15 @@ def run_session(task: ExternalTask, arm: str, ctx: RunContext) -> SessionRecord:
         record.correct = False  # PREREG §4: hitting the limit counts as a failure
         return record
     answer = final_answer(attempt.final_text)
-    record.correct = _judge(task, arm, answer.answer, ctx.primary, "primary", ctx)
+    primary = _judge(task, arm, answer.answer, ctx.primary, "primary", ctx)
+    record.correct, record.abstained = primary.correct, primary.abstained
     if record.correct is None:  # Amendment 5: an unparseable verdict is infra
         record.infra_error = True
         return record
     if ctx.second is not None:
         record.correct_judge2 = _judge(
             task, arm, answer.answer, ctx.second, "second", ctx
-        )
+        ).correct
     if in_recheck_sample(task.id, arm):
         _judge(task, arm, answer.answer, ctx.primary, "recheck", ctx)
     if task.expected_evidence:
@@ -586,7 +587,7 @@ def _judge(
     provider: LLMProvider,
     role: str,
     ctx: RunContext,
-) -> bool | None:
+) -> Verdict:
     try:
         verdict = judge(task, answer, provider)
     except Exception as exc:  # noqa: BLE001 - a judge outage is infra (PREREG §10)
@@ -597,7 +598,7 @@ def _judge(
         ctx.out / "judgments.jsonl",
         {"task_id": task.id, "arm": arm, "role": role, **asdict(verdict)},
     )
-    return verdict.correct
+    return verdict
 
 
 def _append_jsonl(path: Path, row: Mapping[str, Any]) -> None:
