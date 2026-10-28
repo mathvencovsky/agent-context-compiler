@@ -1,6 +1,8 @@
 # PROGRESS
 
 Marco atual: **M10a (aprofundar o NINA antes do piloto), melhorias sem custo**.
+Última etapa: pesquisa sem custo a partir de estudos e publicações (2026-10-28,
+seção abaixo); quatro medições esperam o humano rodar com corpus e cache.
 Feitos: trilha 1 da Fase 3 (itens 1 e 4 aceitos, 2 e 3 rejeitados), formato
 conciso, índice reaproveitado, trilhas B, A e C (Emenda 10 recongelou `app/`) e
 O1 (páginas de erro nunca viram documento). Em andamento, uma frente por vez:
@@ -10,6 +12,49 @@ gratuitas do M10; termina com nova emenda de recongelamento. A trilha 2 (medir
 respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
+
+### M10a — pesquisa sem custo: estudos e publicações (2026-10-28)
+
+Plano de sete frentes aprovado pelo humano; tudo sem chamada paga. Feito num
+container sem o corpus e sem o cache de provedores (`bench/corpus/` e
+`bench/.cache/` ficam fora do git): as medições que dependem deles saíram como
+scripts testados, **para rodar na máquina do humano**.
+
+- **1. Auditoria ABC** (`docs/AUDITORIA_ABC.md`, checklist de Zhu et al.,
+  NeurIPS 2025): **bug corrigido** no cegamento: nomes qualificados como
+  `mcp__docs__assemble_context` passavam sem máscara (o `\b` não separa
+  palavras ligadas por `_`), e o juiz e os avaliadores veriam o braço. Novo
+  `bench/judge_probe.py`: candidatos de controle por tarefa do piloto (resposta
+  aceita, vazia, "não está na doc", pergunta repetida, injeção) nos dois juízes.
+- **2. Viés do juiz:** `bench.agreement.disagreement_by_length` (discordância
+  juiz × humanos por faixa de tamanho da resposta), para a Fase 4.
+- **3. Tokenizador:** `bench/tokenizer_ratio.py` mede quantos tokens do Claude
+  custa cada token `cl100k` do orçamento, em fragmentos reais do dev, pelo
+  `count_tokens` gratuito da Anthropic; também conta as definições das
+  ferramentas MCP como o Claude as cobra.
+- **4 e 5. Ordem e quase-duplicatas:** `bench/m10a_order_dedup.py`, com as regras
+  de aceite fixadas antes de medir (DECISIONS 2026-10-28). Um teste mostra o
+  risco: com λ = 0, dois pedaços quase iguais podem encher o orçamento.
+- **6. Desperdício:** `bench.section_recall.token_precision` (precisão e IoU por
+  token) virou coluna da linha de base do M10a.
+- **7. Custo das definições MCP:** já estava feito no O2 (735 tokens `cl100k`,
+  teste com teto de 800); faltava o número em tokens do Claude (item 3).
+
+Nada mudou em `app/`. Pendente (humano, nesta ordem, na máquina com corpus e
+cache):
+
+```
+uv run python -m bench.m10a_baseline --real          # precisão por token (só cache)
+uv run python -m bench.m10a_order_dedup --half A      # só cache; confira "paid calls: 0"
+uv run python -m bench.tokenizer_ratio                # count_tokens: grátis, chave Anthropic
+uv run python -m bench.judge_probe                    # pago: ~200 chamadas de juiz, antes do piloto
+```
+
+Depois da metade A, a metade B (`--half B --confirm order|dedup`) só para o item
+que a regra deixar seguir. Decisões abertas em `docs/AUDITORIA_ABC.md`
+(propostas A e B para a rubrica, só por emenda).
+
+Como testar: `uv run pytest tests/unit/bench -q`.
 
 ### M10a — pendências fechadas (2026-10-17)
 
