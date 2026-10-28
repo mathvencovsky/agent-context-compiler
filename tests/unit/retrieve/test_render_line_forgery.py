@@ -29,7 +29,7 @@ _FORGED = (
         "https://docs.test/x\r\nX: y",
         "https://docs.test/\tx",
         "https://docs.test/x\x00",
-        "https://docs.test/x y",
+        "https://docs.test/x\u2028y",
         "https://docs.test/x\x85y",
     ],
 )

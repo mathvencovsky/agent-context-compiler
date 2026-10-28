@@ -96,7 +96,10 @@ Os limiares ficam em `config.py`.
 ### 3.4 Renderização (Playwright)
 
 - Contexto novo e efêmero por requisição, sem persistência, sem downloads e sem permissões.
-- `page.route("**/*")` intercepta **toda** requisição da página e valida o destino pelo guard. Destinos bloqueados são abortados.
+- O Chromium só sai para a rede por um proxy de egresso local (`app/fetch/egress_proxy.py`): `--proxy-server` sem bypass de loopback, `--host-resolver-rules="MAP * ~NOTFOUND"` (o navegador não resolve nomes) e UDP não proxied do WebRTC desligado. O proxy valida cada `CONNECT` e cada requisição pelo guard e conecta **no IP validado**, o que cobre saltos de redirect, popups, iframes, workers, preconnect e fecha a janela de DNS rebinding do navegador. A renderização recusa rodar com `PLAYWRIGHT_DISABLE_FORCED_CHROMIUM_PROXIED_LOOPBACK` definido.
+- Além disso, `context.route("**/*")` e `context.route_web_socket` (no contexto, não na página) validam cada URL pelo guard e abortam destinos bloqueados; service workers ficam bloqueados e páginas extras (popups) são fechadas.
+- Se a navegação principal for recusada (entrada, salto de redirect ou navegação por script), o resultado é `blocked_destination`; uma página `chrome-error://` nunca vira documento (`fetch_failed`).
+- Prazo total de relógio por renderização (`render_total_timeout_s`, 60 s; ao estourar, o Chromium é morto e o erro é `timeout`) e DOM serializado limitado a `max_body_bytes` (`too_large`).
 - Bloquear tipos `image`, `media` e `font` para economizar.
 - Esperar `domcontentloaded` + `networkidle` com teto de 15 s, e então capturar `page.content()`.
 
@@ -137,7 +140,8 @@ class Block(BaseModel):
     page: int | None          # só para PDF, começando em 1
 
 class Warning(BaseModel):
-    code: str                 # ex.: "table_unparsed", "low_text_content", "rendered_with_browser"
+    code: str                 # ex.: "table_unparsed", "low_text_content", "rendered_with_browser",
+                              # "pdf_truncated", "invisible_text_removed", "hidden_text_present"
     message: str
     block_id: str | None
 
@@ -162,6 +166,10 @@ class Document(BaseModel):
 **Extração HTML:** `readability-lxml` isola o conteúdo principal. Em seguida, um percorredor próprio sobre lxml converte o HTML principal em blocos. Se o readability descartar tabelas ou blocos de código que existiam no `<main>` ou `<article>` original, use o `<main>`/`<article>` diretamente e registre o warning `readability_fallback`. Se a página não tiver `<main>`, `<article>` nem `role="main"`, desça a partir do `<body>` enquanto um filho tiver pelo menos 80% do texto fora de chrome; se o readability guardar menos de 80% do texto desse contêiner, use o contêiner e registre o mesmo warning (DECISIONS.md 2026-10-16). Remova `nav`, `footer`, `aside`, botões de "copiar" e âncoras de permalink (`¶`, `#`).
 
 **Extração PDF:** pdfplumber, página a página. Títulos são inferidos por tamanho de fonte relativo (os 2 maiores tamanhos acima do corpo). Tabelas via `extract_tables`. Cabeçalhos e rodapés repetidos em mais de 50% das páginas são removidos. PDF sem texto extraível gera o erro `extraction_empty` com a observação de que OCR está fora do escopo.
+
+**Limites de PDF:** no máximo `pdf_max_pages` páginas (2000) e um orçamento determinístico de bytes descomprimidos por stream (64 MiB) e por documento (256 MiB) para os filtros Flate, LZW e RunLength. Quando um limite corta a extração, o documento traz o warning `pdf_truncated` (as páginas puladas ou os streams truncados).
+
+**Texto invisível e oculto:** caracteres de tag Unicode (U+E0000–U+E007F), controles bidi de embedding/override/isolate (U+202A–U+202E, U+2066–U+2069), U+200B, U+2060, U+FEFF, sequências ANSI e os demais controles C0/C1 (exceto espaços em branco) são removidos de todo texto extraído, com um único warning `invisible_text_removed` com a contagem. U+200C/U+200D e as marcas de direção U+200E/U+200F/U+061C são mantidas. Texto escondido por marcação inline (`hidden`, `aria-hidden="true"`, `display:none`, `visibility:hidden`, `font-size:0`) não é removido; quando um elemento assim, fora de padrões de UI conhecidos (abas, `<details>`, menus, navegação, diálogos...), tem 200+ caracteres que chegaram à extração, o documento traz o warning `hidden_text_present`.
 
 **Markdown:** gerado sempre a partir da IR (`to_markdown.py`), nunca diretamente do HTML. Tabelas viram tabelas GFM, código vira bloco cercado com a linguagem.
 
