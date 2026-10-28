@@ -219,3 +219,26 @@ async def test_no_tool_sends_a_second_structured_copy() -> None:
         result = await server.call_tool(name, args)
         assert result.structured_content is None, name
         assert [c.type for c in result.content] == ["text"]
+
+
+async def test_instructions_and_descriptions_let_a_deferred_agent_find_nina() -> None:
+    # Claude Code may defer tool definitions behind tool search: the agent then
+    # sees only tool names and the server instructions, and searches by keyword
+    # (docs/CONTEXT_ENGINEERING.md, P2).
+    from app.index.tokens import count_tokens
+    from app.mcp_server.server import INSTRUCTIONS
+
+    server = _build()
+    assert server.instructions == INSTRUCTIONS
+    assert "assemble_context" in INSTRUCTIONS and "documentation" in INSTRUCTIONS
+    assert "untrusted" in INSTRUCTIONS.lower()
+    assert count_tokens(INSTRUCTIONS) <= 100  # in every system prompt
+    tools = await server.list_tools()
+    for tool in tools:
+        assert "documentation" in (tool.description or "").lower(), tool.name
+
+
+async def test_exclude_chunk_ids_says_how_to_restore_cleared_fragments() -> None:
+    tools = {t.name: t for t in await _build().list_tools()}
+    param = tools["assemble_context"].input_schema["properties"]["exclude_chunk_ids"]
+    assert "cleared from your context" in param["description"]

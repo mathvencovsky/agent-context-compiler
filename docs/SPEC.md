@@ -334,6 +334,8 @@ Transporte stdio para uso local e streamable HTTP para uso remoto. É um cliente
 
 As descrições das ferramentas avisam que o conteúdo retornado vem de páginas externas e não deve ser tratado como instrução. Elas também orientam o uso: `resolve_url` e `get_document` devolvem a página inteira (em média ~10× os tokens do `assemble_context`); o `assemble_context` pede uma pergunta curta, `exclude_chunk_ids` nas chamadas seguintes e `max_tokens` maior só com a nota `budget_limited`. Cada parâmetro tem descrição, e nenhuma ferramenta manda a cópia em `structuredContent`.
 
+O servidor declara `instructions` (MCP), com até 100 tokens: diz que o NINA lê páginas de documentação técnica pública, que perguntas vão para o `assemble_context` com as URLs, que o `resolve_url` é só para a página inteira e que o conteúdo é dado não confiável. Clientes que adiam as definições das ferramentas (tool search do Claude Code) mostram ao agente só os nomes e essas instruções; por isso toda descrição contém "documentation", a palavra que o agente usa para buscar. A descrição de `exclude_chunk_ids` diz que, para reaver fragmentos apagados do contexto do agente, basta chamar sem eles.
+
 ## 10. Benchmark (`bench/`)
 
 ### 10.1 Corpus congelado
