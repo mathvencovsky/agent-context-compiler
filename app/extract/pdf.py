@@ -63,6 +63,7 @@ from app.extract.ir import (
     make_version_id,
     normalize_text,
 )
+from app.extract.pdf_limits import DecodeBudget, decode_budget
 from app.fetch.errors import ExtractionEmpty
 
 if TYPE_CHECKING:
@@ -441,6 +442,41 @@ def _infer_heading_levels(lines: list[_Line]) -> tuple[float, dict[float, int]]:
     return body_size, levels
 
 
+#: Warning code when a PDF resource limit truncated the extraction (audit A2).
+PDF_TRUNCATED_WARNING_CODE = "pdf_truncated"
+
+
+def _limit_warnings(
+    settings: Settings, truncated_pages: int, budget: DecodeBudget
+) -> list[Warning]:
+    """Say explicitly when a resource limit cut the extraction short."""
+    warnings: list[Warning] = []
+    if truncated_pages:
+        warnings.append(
+            Warning(
+                code=PDF_TRUNCATED_WARNING_CODE,
+                message=(
+                    f"only the first {settings.pdf_max_pages} pages were extracted; "
+                    f"{truncated_pages} more pages were skipped (page limit)"
+                ),
+                block_id=None,
+            )
+        )
+    if budget.truncated_streams:
+        warnings.append(
+            Warning(
+                code=PDF_TRUNCATED_WARNING_CODE,
+                message=(
+                    f"{budget.truncated_streams} compressed PDF stream(s) exceeded "
+                    "the decoded-size limit and were truncated; content may be "
+                    "missing"
+                ),
+                block_id=None,
+            )
+        )
+    return warnings
+
+
 def extract_pdf(
     raw: bytes, source: SourceInfo, *, settings: Settings | None = None
 ) -> Document:
@@ -462,8 +498,17 @@ def extract_pdf(
     pages: list[_PageLines] = []
     band_input: list[tuple[int, list[_Line], float]] = []
 
-    with pdfplumber.open(io.BytesIO(raw)) as pdf:
-        for page in pdf.pages:
+    truncated_pages = 0
+    with (
+        decode_budget(
+            settings.pdf_max_stream_bytes, settings.pdf_max_decoded_bytes
+        ) as budget,
+        pdfplumber.open(io.BytesIO(raw)) as pdf,
+    ):
+        for index, page in enumerate(pdf.pages):
+            if index >= settings.pdf_max_pages:
+                truncated_pages = len(pdf.pages) - index
+                break
             lines = _group_lines(page)
             band_input.append((page.page_number, lines, float(page.height)))
             tables = page.find_tables()
@@ -502,6 +547,7 @@ def extract_pdf(
 
     assign_block_ids(builder.blocks)
     warnings = _finalize_warnings(builder)
+    warnings.extend(_limit_warnings(settings, truncated_pages, budget))
 
     main_text_len = sum(
         len(block.text) for block in builder.blocks if block.type != "code"
