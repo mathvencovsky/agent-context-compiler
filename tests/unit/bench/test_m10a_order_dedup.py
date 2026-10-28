@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from app.retrieve.select import Candidate, select
 from bench.m10a_order_dedup import (
+    at_edge,
     confirm_dedup,
     confirm_order,
+    edges_by_document_value,
     jaccard,
     near_dup_tokens,
     order_by_document_value,
@@ -90,21 +92,50 @@ def test_variant_select_records_each_variant_picks() -> None:
     assert sink == [out]
 
 
-def _cells(hits: list[bool], first: list[int | None], cov: list[float]) -> dict:
+def _cells(
+    hits: list[bool],
+    first: list[int | None],
+    cov: list[float],
+    edge: list[bool] | None = None,
+) -> dict:
     return {
         "hit": hits,
         "first_hit": first,
         "coverage": cov,
+        "edge": edge if edge is not None else [False] * len(hits),
         "precision": [0.1] * len(hits),
     }
 
 
-def test_confirm_order_needs_the_answer_to_move_first() -> None:
+def test_confirm_order_needs_the_answer_to_move_to_an_end() -> None:
     n = 40
-    current = {1000: _cells([True] * n, [3] * n, [0.6] * n)}
-    better = {1000: _cells([True] * n, [1] * n, [0.6] * n)}
+    current = {1000: _cells([True] * n, [3] * n, [0.6] * n, [False] * n)}
+    better = {1000: _cells([True] * n, [1] * n, [0.6] * n, [True] * n)}
     assert all(ok for _, ok, _ in confirm_order(better, current))
     assert not all(ok for _, ok, _ in confirm_order(current, current))
+
+
+def test_edges_put_the_second_best_document_last() -> None:
+    picked = [_c("a", 0, 0.9), _c("b", 0, 0.8), _c("c", 1, 0.5), _c("c", 0, 0.1)]
+    ordered = edges_by_document_value(picked)
+    assert [(c.document_id, c.ord) for c in ordered] == [
+        ("a", 0),
+        ("c", 0),
+        ("c", 1),
+        ("b", 0),
+    ]
+    two = [_c("a", 0, 0.9), _c("b", 0, 0.8)]
+    assert edges_by_document_value(two) == order_by_document_value(two)
+
+
+def test_at_edge_looks_at_the_first_and_last_fragments() -> None:
+    units = ["the timeout option sets how many seconds"]
+    answer = "[URL] u\nthe timeout option sets how many seconds"
+    middle = f"[URL] u\nnothing\n\n{answer}\n\n[URL] u\nend"
+    last = f"[URL] u\nnothing\n\n{answer}"
+    assert not at_edge(units, middle)
+    assert at_edge(units, last)
+    assert not at_edge(units, "")
 
 
 def test_confirm_dedup_rejects_a_coverage_loss() -> None:
