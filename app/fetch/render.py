@@ -331,7 +331,9 @@ def render_url(
                 except PlaywrightError:
                     pass
         except PlaywrightError as exc:
-            if (watchdog is not None and watchdog.fired) or time.monotonic() >= deadline:
+            if (
+                watchdog is not None and watchdog.fired
+            ) or time.monotonic() >= deadline:
                 raise Timeout(
                     "browser render exceeded its deadline of "
                     f"{settings.render_total_timeout_s}s",

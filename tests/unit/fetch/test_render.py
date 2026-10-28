@@ -27,6 +27,8 @@ The guard itself is used verbatim — no IP/port policy is monkeypatched.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from app.config import Settings
@@ -37,7 +39,7 @@ from tests.unit.fetch._local_servers import (
     page_requesting,
     spa_server,
 )
-from tests.unit.fetch._resolvers import FakeResolver
+from tests.unit.fetch._resolvers import FakeResolver, loopback_connector
 
 pytestmark = [pytest.mark.browser, pytest.mark.allow_network]
 
@@ -58,6 +60,23 @@ def _host_rules(*mappings: str) -> list[str]:
     return [f"--host-resolver-rules={','.join(mappings)}"]
 
 
+def _route(*mappings: str) -> dict[str, Any]:
+    """render_url kwargs wiring each ``MAP host 127.0.0.1:port`` rule TWICE.
+
+    * as Chromium ``--host-resolver-rules``: if any connection ever bypassed
+      the egress proxy, Chromium would resolve the name itself and land on the
+      loopback fixture (so a bypass is counted, not silently lost); and
+    * as the egress proxy ``connector``: AFTER the guard validates a
+      destination (public IP via ``FakeResolver``), the proxy connects to the
+      mapped loopback port instead of the public IP. A destination the guard
+      rejects never reaches the connector.
+    """
+    return {
+        "browser_launch_args": _host_rules(*mappings),
+        "connector": loopback_connector(mappings),
+    }
+
+
 def test_spa_is_rendered_with_browser() -> None:
     """The browser executes JS: content injected into an empty #root appears.
 
@@ -72,9 +91,7 @@ def test_spa_is_rendered_with_browser() -> None:
         result = render.render_url(
             entry,
             resolver=resolver,
-            browser_launch_args=_host_rules(
-                f"MAP {_FIXTURE_HOST} 127.0.0.1:{_port_of(server.base_url)}"
-            ),
+            **_route(f"MAP {_FIXTURE_HOST} 127.0.0.1:{_port_of(server.base_url)}"),
         )
 
     assert injected in result.html
@@ -105,7 +122,7 @@ def test_subrequest_to_blocked_host_is_aborted(blocked_host: str) -> None:
         render.render_url(
             entry,
             resolver=resolver,
-            browser_launch_args=_host_rules(
+            **_route(
                 f"MAP {_FIXTURE_HOST} 127.0.0.1:{page_port}",
                 # If the guard FAILED to block, Chromium would connect here.
                 f"MAP {blocked_host} 127.0.0.1:{meta_port}",
@@ -138,7 +155,7 @@ def test_allowed_subrequest_is_not_aborted() -> None:
         render.render_url(
             entry,
             resolver=resolver,
-            browser_launch_args=_host_rules(
+            **_route(
                 f"MAP {_FIXTURE_HOST} 127.0.0.1:{page_port}",
                 f"MAP {allowed_host} 127.0.0.1:{sub_port}",
             ),
@@ -181,7 +198,7 @@ def test_image_subrequest_is_aborted_for_economy() -> None:
         render.render_url(
             entry,
             resolver=resolver,
-            browser_launch_args=_host_rules(
+            **_route(
                 f"MAP {_FIXTURE_HOST} 127.0.0.1:{page_port}",
                 f"MAP {img_host} 127.0.0.1:{img_port}",
             ),
@@ -215,7 +232,7 @@ def test_websocket_to_blocked_host_is_refused(blocked_host: str) -> None:
         render.render_url(
             entry,
             resolver=resolver,
-            browser_launch_args=_host_rules(
+            **_route(
                 f"MAP {_FIXTURE_HOST} 127.0.0.1:{page_port}",
                 # If the guard FAILED to block, Chromium would connect here.
                 f"MAP {blocked_host} 127.0.0.1:{meta_port}",
@@ -249,7 +266,7 @@ def test_allowed_websocket_is_not_refused() -> None:
         render.render_url(
             entry,
             resolver=resolver,
-            browser_launch_args=_host_rules(
+            **_route(
                 f"MAP {_FIXTURE_HOST} 127.0.0.1:{page_port}",
                 f"MAP {allowed_host} 127.0.0.1:{sub_port}",
             ),

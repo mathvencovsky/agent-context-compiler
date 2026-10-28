@@ -9,6 +9,8 @@ re-resolves.
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class FakeResolver:
     """Resolver returning a fixed IP list per host (implements guard.Resolver)."""
@@ -40,3 +42,28 @@ class SequenceResolver:
         index = min(len(self.calls), len(self._answers) - 1)
         self.calls.append(host)
         return list(self._answers[index])
+
+
+def loopback_connector(mappings: tuple[str, ...] | list[str]) -> Any:
+    """Egress-proxy connector mapping validated hostnames to loopback ports.
+
+    ``mappings`` are Chromium-style ``"MAP <host> 127.0.0.1:<port>"`` rules. The
+    proxy calls the connector only AFTER the guard accepted the destination, so
+    a blocked host listed here is never connected to: the mapping only exists so
+    that a guard bypass would be COUNTED by the fixture instead of escaping.
+    A validated host with no mapping raises (tests never touch the internet).
+    """
+    import socket
+
+    table: dict[str, int] = {}
+    for rule in mappings:
+        _map, host, target = rule.split()
+        table[host] = int(target.rsplit(":", 1)[1])
+
+    def connect(guard: Any, timeout: float) -> socket.socket:
+        port = table.get(guard.hostname)
+        if port is None:
+            raise OSError(f"no loopback mapping for {guard.hostname}")
+        return socket.create_connection(("127.0.0.1", port), timeout=timeout)
+
+    return connect
