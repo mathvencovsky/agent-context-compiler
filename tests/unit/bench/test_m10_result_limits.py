@@ -32,3 +32,10 @@ def test_each_page_is_measured_once() -> None:
 
     count([(["a", "b"], ["a"]), (["a"], ["a"])], chars_of)
     assert sorted(calls) == ["a", "b"]
+
+
+def test_over_ceiling_lists_tasks_with_any_listed_page_over_the_cap() -> None:
+    from bench.m10_result_limits import over_ceiling
+
+    tasks = [("t1", ["a", "b"]), ("t2", ["d", "c"]), ("t3", ["c"]), ("t4", [])]
+    assert over_ceiling(tasks, SIZES.__getitem__) == ["t2", "t3"]

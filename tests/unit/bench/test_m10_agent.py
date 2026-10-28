@@ -716,3 +716,22 @@ def test_infra_tool_errors_are_found_behind_the_mcp_sdk_prefix() -> None:
     assert is_infra_tool_error(text)
 
     assert not is_infra_tool_error("Error executing tool fetch_page: page not found: x")
+
+
+def test_tasks_with_a_page_over_the_result_cap_leave_every_arm(
+    store: CorpusStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import bench.m10_result_limits as limits
+    from bench.m10_agent import drop_over_ceiling
+    from bench.page_length import page_markdown
+
+    size = len(page_markdown(store, _URL))
+    monkeypatch.setattr(limits, "CEILING", size - 1)  # the fixture page is "too long"
+    kept = drop_over_ceiling(
+        [_task(), _task(id="so-2", urls=["https://example.com/missing"])],
+        store,
+        tmp_path,
+    )
+    assert [t.id for t in kept] == ["so-2"]  # unknown pages count as 0 chars
+    record = json.loads((tmp_path / "excluded_over_ceiling.json").read_text())
+    assert record == {"ceiling_chars": size - 1, "task_ids": ["so-1"]}

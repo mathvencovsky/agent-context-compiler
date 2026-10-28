@@ -601,6 +601,32 @@ def _judge(
     return verdict
 
 
+def drop_over_ceiling(
+    tasks: list[ExternalTask], store: CorpusStore, out: Path
+) -> list[ExternalTask]:
+    """Tasks without a listed page over the tool-result cap (PREREG Amendment 14).
+
+    The excluded ids go to ``excluded_over_ceiling.json`` and are reported.
+    """
+    from bench.m10_result_limits import CEILING, over_ceiling
+    from bench.page_length import page_markdown
+
+    def chars_of(url: str) -> int:
+        try:
+            return len(page_markdown(store, url))
+        except (KeyError, ValueError):
+            return 0
+
+    dropped = set(over_ceiling(((t.id, t.urls) for t in tasks), chars_of))
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "excluded_over_ceiling.json").write_text(
+        json.dumps({"ceiling_chars": CEILING, "task_ids": sorted(dropped)}, indent=1),
+        encoding="utf-8",
+    )
+    print(f"excluded {len(dropped)} of {len(tasks)} tasks over {CEILING:,} chars")
+    return [t for t in tasks if t.id not in dropped]
+
+
 def _append_jsonl(path: Path, row: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
@@ -735,7 +761,9 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         t
         for t in load_external_tasks(REPO_ROOT / "bench/tasks/external.yaml")
         if t.split == args.split and t.audit != "invalid"
-    ][: args.limit]
+    ]
+    store = CorpusStore(CORPUS_DIR)
+    tasks = drop_over_ceiling(tasks, store, out)[: args.limit]
     ctx = RunContext(
         out=out,
         data_root=Path.cwd(),
@@ -743,7 +771,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         prices=prices,
         primary=OpenAIProvider(model=PRIMARY_JUDGE),
         second=AnthropicProvider(model=SECOND_JUDGE),
-        store=CorpusStore(CORPUS_DIR),
+        store=store,
         commit=frozen_commit(out / "results.csv"),
         query_fn=query,
         context7_key=keys.context7_api_key or "",
