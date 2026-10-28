@@ -590,6 +590,39 @@ data had been seen.
   main-run session had run. The CLI behaviour was read from its code, without
   starting a session.
 
+### Amendment 12 — 2026-10-28: whole tool results, and today's CLI defaults pinned
+
+- **What changed:** three harness rules (§3, §4), the same for every arm.
+  1. **Whole tool results.** The frozen arms' tools (`fetch_page`,
+     `search_docs`) declare `_meta["anthropic/maxResultSizeChars"] = 500000`.
+  2. **Pinned defaults.** Every session sets `CLAUDE_CODE_EFFORT_LEVEL=medium`
+     (the documented default effort of `claude-sonnet-5-5`),
+     `FORCE_PROMPT_CACHING_5M=1` (5-minute cache writes, the API-key default)
+     and `CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK=1` (no automatic switch to
+     another model; a refused request fails the session like any non-transient
+     API refusal, Amendment 7).
+  3. **Pages over the ceiling.** Before the pilot, `bench/m10_result_limits.py`
+     counts the pages and tasks over 500,000 characters. A later amendment,
+     before any agent session, says how those tasks are handled.
+- **Why:**
+  - Claude Code saves any MCP text result longer than 50,000 characters to a
+    file, whatever `MAX_MCP_OUTPUT_TOKENS` says, unless the tool declares
+    `anthropic/maxResultSizeChars`, which it caps at 500,000 (Claude Code MCP
+    documentation, "MCP output limits"; the key is read in CLI 2.1.301). No arm
+    has a tool that reads such a file, so without the annotation the primary
+    comparator would not see any page longer than about 12,000 tokens, which
+    is roughly the 90th percentile of the corpus. Amendment 7 alone does not
+    prevent this.
+  - Claude Code's default effort, cache TTL and model fallback can change
+    without a CLI update (product decisions, organization defaults, remote
+    flags; Anthropic's April 23 postmortem describes a default-effort change
+    and its reversal). Pinning them to today's values keeps the pilot, which
+    fixes n and the cost per session, and the main run on the same settings.
+    5-minute writes match the write price the cost model uses.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run. The limits come from the Claude Code
+  documentation and the CLI's code, read without starting a session.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
