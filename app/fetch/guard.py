@@ -35,8 +35,14 @@ _NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
 _SIXTOFOUR_PREFIX = ipaddress.ip_network("2002::/16")
 # Carrier-grade NAT (RFC 6598). Checked explicitly for defense in depth.
 _CGNAT_NET = ipaddress.ip_network("100.64.0.0/10")
-# Cloud metadata endpoint.
-_METADATA_V4 = ipaddress.ip_address("169.254.169.254")
+# Cloud metadata endpoints. 169.254.169.254 (AWS/GCP/Azure/OCI IMDS) is also
+# link-local; 168.63.129.16 is Azure's WireServer/metadata, a PUBLIC address
+# that is_global accepts, so it must be listed (security research 2026-10-28).
+_METADATA_V4 = frozenset(
+    {ipaddress.ip_address("169.254.169.254"), ipaddress.ip_address("168.63.129.16")}
+)
+# Deprecated IPv6 site-local (RFC 3879): stdlib still reports it as global.
+_SITE_LOCAL_V6 = ipaddress.ip_network("fec0::/10")
 
 
 class Resolver(Protocol):
@@ -182,8 +188,10 @@ def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     ):
         return True
     if isinstance(ip, ipaddress.IPv4Address):
-        if ip == _METADATA_V4 or ip in _CGNAT_NET:
+        if ip in _METADATA_V4 or ip in _CGNAT_NET:
             return True
+    elif ip in _SITE_LOCAL_V6:
+        return True
     return False
 
 
@@ -198,8 +206,7 @@ def _validate_ip(ip_str: str) -> None:
         ip = ipaddress.ip_address(ip_str)
     except ValueError as exc:
         raise BlockedDestination(
-            f"resolved address is not a valid IP: {ip_str!r}",
-            details={"ip": ip_str},
+            "destination is not a public address", details={}
         ) from exc
 
     effective: ipaddress.IPv4Address | ipaddress.IPv6Address = ip
@@ -209,10 +216,10 @@ def _validate_ip(ip_str: str) -> None:
             effective = embedded
 
     if _ip_is_blocked(effective):
-        raise BlockedDestination(
-            f"destination IP is not a global unicast address: {ip_str}",
-            details={"ip": ip_str, "effective_ip": str(effective)},
-        )
+        # No IP in the message or details: echoing the resolved address back
+        # to the caller is an internal-DNS oracle (audit B1). The host the
+        # caller sent is all they learn.
+        raise BlockedDestination("destination is not a public address", details={})
 
 
 def validate_url(
