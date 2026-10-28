@@ -792,3 +792,27 @@ def test_frozen_trees_are_the_ones_the_prereg_names() -> None:
     )
     for tree in agent.FROZEN_TREES.values():
         assert tree in text
+
+
+def test_drop_unhealthy_excludes_tasks_with_an_unusable_cited_snapshot(
+    store: CorpusStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import bench.page_health as health
+    from bench.m10_agent import drop_unhealthy
+
+    monkeypatch.setattr(health, "EMPTY_CHARS", 20)  # the fixture page is tiny
+
+    missing = "https://example.com/missing"
+    kept = drop_unhealthy(
+        [
+            _task(),
+            # Only cited pages count: a listed page outside the corpus is fine.
+            _task(id="so-2", urls=[_URL, missing]),
+            _task(id="so-3", urls=[missing], cited_urls=[missing]),
+        ],
+        store,
+        tmp_path,
+    )
+    assert [t.id for t in kept] == ["so-1", "so-2"]
+    record = json.loads((tmp_path / "excluded_unhealthy.json").read_text())
+    assert record == {"so-3": {missing: "empty"}}

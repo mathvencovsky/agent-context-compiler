@@ -630,6 +630,33 @@ def drop_over_ceiling(
     return [t for t in tasks if t.id not in dropped]
 
 
+def drop_unhealthy(
+    tasks: list[ExternalTask], store: CorpusStore, out: Path
+) -> list[ExternalTask]:
+    """Tasks whose cited snapshots are all plausible pages (PREREG Amendment 16).
+
+    A cited page whose snapshot is empty, a soft 404, a bot challenge or a
+    consent wall excludes the task from every arm; the ids, pages and cases go
+    to ``excluded_unhealthy.json``.
+    """
+    from bench.page_health import unhealthy_tasks
+    from bench.page_length import page_markdown
+
+    def markdown_of(url: str) -> str:
+        try:
+            return page_markdown(store, url)
+        except (KeyError, ValueError):
+            return ""
+
+    bad = unhealthy_tasks(((t.id, t.cited_urls) for t in tasks), markdown_of)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "excluded_unhealthy.json").write_text(
+        json.dumps(dict(sorted(bad.items())), indent=1), encoding="utf-8"
+    )
+    print(f"excluded {len(bad)} of {len(tasks)} tasks with an unhealthy cited page")
+    return [t for t in tasks if t.id not in bad]
+
+
 def _append_jsonl(path: Path, row: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
@@ -782,7 +809,8 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         if t.split == args.split and t.audit != "invalid"
     ]
     store = CorpusStore(CORPUS_DIR)
-    tasks = drop_over_ceiling(tasks, store, out)[: args.limit]
+    tasks = drop_unhealthy(drop_over_ceiling(tasks, store, out), store, out)
+    tasks = tasks[: args.limit]
     ctx = RunContext(
         out=out,
         data_root=Path.cwd(),

@@ -34,6 +34,7 @@ dev:
 # token-counting endpoint (an Anthropic key in .env).
 m10a-pending:
 	uv run python -m bench.m10_result_limits
+	uv run python -m bench.page_health
 	uv run python -m bench.m10a_baseline --real
 	uv run python -m bench.m10a_order_dedup --half A
 	uv run python -m bench.m10a_section_expand --half A
