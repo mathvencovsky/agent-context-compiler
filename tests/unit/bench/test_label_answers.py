@@ -5,7 +5,16 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from bench.label_answers import _read, draw_sample, label, report, settle
+import pytest
+
+from bench.label_answers import (
+    _read,
+    draw_sample,
+    label,
+    population_report,
+    report,
+    settle,
+)
 from bench.tasks_schema import ExternalTask, Source
 
 _ARMS = ["full_page", "strong_rag", "nina", "webfetch_live", "context7_live"]
@@ -113,3 +122,40 @@ def test_settle_asks_only_disagreements_and_report_applies_the_gate(
     k_graders, k_judge = report(sample, a, b, settled, output_fn=out.append)
     assert (k_graders, k_judge) == (0.5, 0.5)
     assert out[-1].startswith("GATE: kappa below 0.6")
+
+
+def test_draw_sample_takes_explicit_quotas() -> None:
+    rows = [
+        {k: v for k, v in _row(f"so-{n}", arm, v).items() if k != "item"}
+        for arm in _ARMS
+        for v in (True, False)
+        for n in range(30)
+    ]
+    quotas = {("nina", True): 25, ("nina", False): 25, ("full_page", True): 3}
+    sample = draw_sample(rows, quotas=quotas)
+    strata = Counter((r["arm"], r["judge_correct"]) for r in sample)
+    assert strata == Counter(quotas)
+    assert [r["item"] for r in sample] == list(range(1, 54))
+
+
+def test_population_report_weights_by_stratum_and_reports_per_arm() -> None:
+    sample = [
+        _row("so-1", "nina", True, item=1),
+        _row("so-2", "nina", False, item=2),
+        _row("so-3", "full_page", True, item=3),
+        _row("so-4", "full_page", False, item=4),
+    ]
+    a = {1: "correct", 2: "correct", 3: "correct", 4: "incorrect"}
+    answers = (
+        [_row(f"n{i}", "nina", i < 8) for i in range(10)]
+        + [_row(f"f{i}", "full_page", i < 6) for i in range(10)]
+        + [_row("x", "nina", None)]  # excluded sessions are not population
+    )
+    out: list[str] = []
+    result = population_report(sample, a, a, {}, answers, output_fn=out.append)
+    text = "\n".join(out)
+    assert "weighted by stratum size" in text
+    assert "| nina |" in text and "| full_page |" in text
+    # nina: judge 0.8, every label correct -> corrected 1.0; full_page: 0.6 both
+    assert result.corrected == pytest.approx(1.0 - 0.6)
+    assert "sensitivity only" in text
