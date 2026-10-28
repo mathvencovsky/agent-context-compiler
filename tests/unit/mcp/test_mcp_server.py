@@ -232,6 +232,8 @@ async def test_instructions_and_descriptions_let_a_deferred_agent_find_nina() ->
     assert server.instructions == INSTRUCTIONS
     assert "assemble_context" in INSTRUCTIONS and "documentation" in INSTRUCTIONS
     assert "untrusted" in INSTRUCTIONS.lower()
+    # Says when NOT to use NINA (Context7 4.4.4; research A, L8).
+    assert "Do not use" in INSTRUCTIONS and "web search" in INSTRUCTIONS
     assert count_tokens(INSTRUCTIONS) <= 100  # in every system prompt
     tools = await server.list_tools()
     for tool in tools:
