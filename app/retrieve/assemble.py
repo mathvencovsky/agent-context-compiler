@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date as calendar_date
 from typing import TYPE_CHECKING
 
 from app.api.documents import resolve_document
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
     from app.config import Settings
-    from app.extract.ir import Document
+    from app.extract.ir import Document, Metadata
     from app.fetch.client import Transport
     from app.fetch.guard import Resolver
     from app.fetch.robots import RobotsChecker
@@ -114,6 +115,11 @@ class SourceStatus:
     version_id: str | None
     fetched_at: str | None
     status: str
+    #: cl100k tokens of the whole page as Markdown (resolve ``stats``): what
+    #: ``resolve_url`` would cost; lets the concise form say it is an excerpt.
+    page_tokens: int | None = None
+    #: The page's own date, from extracted metadata (:func:`page_date`).
+    date: str | None = None
 
 
 @dataclass
@@ -140,6 +146,29 @@ class _ResolvedUrl:
     document_id: str
     version_id: str
     fetched_at: str
+
+
+#: A leading ISO 8601 calendar date (``2024-05-01``, ``2024-05-01T10:00Z``).
+_ISO_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
+
+def page_date(metadata: Metadata) -> str | None:
+    """The page's date as ``YYYY-MM-DD``, or ``None`` when it has none.
+
+    Uses only what extraction already captured (``modified_at``, then
+    ``published_at``: SPEC §4 ``Metadata``). A value counts only when it starts
+    with a valid ISO calendar date; free text is never guessed, and the result
+    holds digits and dashes only, so no page text reaches the output.
+    """
+    for raw in (metadata.modified_at, metadata.published_at):
+        match = _ISO_DATE.match(raw or "")
+        if match is None:
+            continue
+        try:
+            return calendar_date.fromisoformat(match.group(1)).isoformat()
+        except ValueError:
+            continue
+    return None
 
 
 def _tokenize(text: str) -> list[str]:
@@ -229,6 +258,8 @@ def _resolve_and_index(
                 version_id=response.version_id,
                 fetched_at=fetched_at,
                 status="ok",
+                page_tokens=response.stats.tokens_markdown,
+                date=page_date(response.metadata),
             )
         )
 

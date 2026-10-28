@@ -184,9 +184,41 @@ def test_assemble_concise_renders_the_same_fragments(
         assert frag["md"] in concise["context"]
         assert f'<fragment chunk="{frag["chunk_id"]}"' in concise["context"]
         assert (
-            f'id="{frag["document_id"]}" version="{frag["version_id"]}">'
+            f'id="{frag["document_id"]}" version="{frag["version_id"]}" excerpt="'
             in concise["context"]
         )
+    # Each document says it is an excerpt of a page of a known size (D5).
+    for src in concise["sources"]:
+        assert src["page_tokens"] > 0
+        assert src["date"] is None  # the fixture pages state no date
+    assert " of a ~" in concise["context"] and "-token page" in concise["context"]
+    assert "date=" not in concise["context"]
+
+
+def test_assemble_exposes_the_date_the_page_states(
+    assemble_harness: AssembleHarness,
+) -> None:
+    """A page's own modified date reaches both formats as ``YYYY-MM-DD``."""
+    harness = assemble_harness
+    page = (
+        b"<html><head><title>Auth</title>"
+        b'<meta property="article:published_time" content="2025-01-02T08:00:00Z">'
+        b'<meta property="article:modified_time" content="2026-09-30T12:00:00Z">'
+        b"</head><body><main><h1>Authentication</h1>"
+        + b"<p>Send the API key in the X-Api-Key header of every request.</p>" * 20
+        + b"</main></body></html>"
+    )
+    harness.transport.set(_AUTH_PATH, lambda: html_response(page))
+    body = {
+        "query": "Which header carries the API key?",
+        "urls": [harness.url(_AUTH_PATH)],
+        "selection": "truncate",
+    }
+    detailed = _post(harness, body).json()
+    assert detailed["sources"][0]["date"] == "2026-09-30"  # modified, not published
+    concise = _post(harness, {**body, "response_format": "concise"}).json()
+    assert concise["sources"][0]["date"] == "2026-09-30"
+    assert ' date="2026-09-30">' in concise["context"]
 
 
 def test_assemble_include_evidence_false_omits_quotes(

@@ -170,6 +170,8 @@ class SourceStatus:
     document_id: str | None = None
     version_id: str | None = None
     fetched_at: str | None = None
+    page_tokens: int | None = None
+    date: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SourceStatus:
@@ -179,6 +181,8 @@ class SourceStatus:
             document_id=data.get("document_id"),
             version_id=data.get("version_id"),
             fetched_at=data.get("fetched_at"),
+            page_tokens=data.get("page_tokens"),
+            date=data.get("date"),
         )
 
 

@@ -127,6 +127,8 @@ def _sources(result: AssembleResult) -> list[SourceStatusModel]:
             version_id=src.version_id,
             fetched_at=src.fetched_at,
             status=src.status,
+            page_tokens=src.page_tokens,
+            date=src.date,
         )
         for src in result.sources
     ]
