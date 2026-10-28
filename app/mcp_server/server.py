@@ -30,6 +30,9 @@ from app.mcp_server.client import NinaApiClient
 
 __all__ = ["build_server", "INSTRUCTIONS", "UNTRUSTED_NOTICE"]
 
+#: Each tool's ``_meta["anthropic/searchHint"]`` is a short phrase Claude Code's
+#: tool search matches against the agent's query, besides the name and the
+#: description (read in CLI 2.1.301; docs/PESQUISA_LABS.md, M3).
 #: Server instructions (MCP ``instructions``). Claude Code puts them in the
 #: system prompt even when it defers the tool definitions behind tool search, so
 #: they are how an agent learns when NINA applies before it loads any tool
@@ -94,6 +97,7 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
             "use it only when you need the full page, such as an entire table. "
             "To answer a question, call assemble_context. " + UNTRUSTED_NOTICE
         ),
+        meta={"anthropic/searchHint": "read a whole documentation page"},
         structured_output=False,
     )
     def resolve_url(
@@ -106,14 +110,14 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
 
     @server.tool(
         description=(
-            "Answer a question from documentation (docs) pages: returns only the most "
-            "relevant fragments of `urls`, within `max_tokens`, as Markdown (one "
-            "header per page, one line per fragment with its chunk id). Ask one "
-            "short, focused question per call. For a follow-up on the same pages, "
-            'pass the chunk ids you already have (the N in "chunk N") in '
-            "`exclude_chunk_ids`. Raise `max_tokens` only when the NINA notes at "
-            "the end say budget_limited. " + UNTRUSTED_NOTICE
+            "Answer a question from documentation pages: returns only the most "
+            "relevant fragments of `urls`, within `max_tokens`, as <document> "
+            'elements holding <fragment chunk="N"> elements. Ask one short, '
+            "focused question per call. For a follow-up on the same pages, pass "
+            "the chunk ids you have in `exclude_chunk_ids`. Raise `max_tokens` "
+            "only when <nina_notes> says budget_limited. " + UNTRUSTED_NOTICE
         ),
+        meta={"anthropic/searchHint": "answer questions from documentation docs"},
         # Without this the SDK also sends the JSON as structuredContent, a
         # second copy of the same payload (DECISIONS.md 2026-10-16).
         structured_output=False,
@@ -154,6 +158,7 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
             "`document_id` (doc_...), without fetching it again. Like "
             "resolve_url it is the whole page. " + UNTRUSTED_NOTICE
         ),
+        meta={"anthropic/searchHint": "stored documentation page by id"},
         structured_output=False,
     )
     def get_document(

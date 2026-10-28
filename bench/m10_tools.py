@@ -81,13 +81,23 @@ FROZEN_SETTINGS = (
 )
 
 
+#: Claude Code saves any MCP text result over 50,000 characters to a file,
+#: whatever ``MAX_MCP_OUTPUT_TOKENS`` says, unless the tool declares this
+#: ``_meta`` key; 500,000 is the CLI's hard ceiling for it (Claude Code MCP
+#: docs, "MCP output limits"; read in CLI 2.1.301). The arms have no tool to
+#: read such a file, so without it a long page would never reach the agent.
+MAX_RESULT_CHARS = 500_000
+RESULT_META = {"anthropic/maxResultSizeChars": MAX_RESULT_CHARS}
+
+
 def full_page_server(store: CorpusStore) -> MCPServer:
     """``fetch_page(url)``: the whole frozen page as Markdown."""
     server: MCPServer[None] = MCPServer(name="docs")
 
     @server.tool(
         description="Return the whole documentation page at `url` as Markdown. "
-        + UNTRUSTED_NOTICE
+        + UNTRUSTED_NOTICE,
+        meta=RESULT_META,
     )
     def fetch_page(url: str) -> str:
         try:
@@ -107,7 +117,8 @@ def strong_rag_server(store: CorpusStore, runner: StrongRagRunner) -> MCPServer:
     @server.tool(
         description="Search the documentation pages at `urls` for `query` and "
         "return the most relevant passages, at most `max_tokens` tokens, each "
-        "headed by its page URL. " + UNTRUSTED_NOTICE
+        "headed by its page URL. " + UNTRUSTED_NOTICE,
+        meta=RESULT_META,
     )
     def search_docs(query: str, urls: list[str], max_tokens: int = 4000) -> str:
         task = Task(

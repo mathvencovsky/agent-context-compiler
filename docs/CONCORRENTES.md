@@ -282,6 +282,159 @@ local de provedores. O orçamento adaptativo foi medido sem custo e rejeitado na
 metade A (A1, `cd80170`): todo corte por relevância perdia mais cobertura do que
 economizava.
 
+## Firecrawl em 2026-10-28: Research Index, Developer Search e Deep Research
+
+Lido na íntegra: o README do repositório `firecrawl/firecrawl`, o README do
+`firecrawl-mcp-server`, as páginas "Research Index" e "Deep Research" (o
+texto-fonte está no repositório `firecrawl/firecrawl-docs`; o site
+docs.firecrawl.dev é bloqueado neste ambiente) e a skill
+`firecrawl-research-index` (repositório `firecrawl/cli`).
+
+**O que eles lançaram:**
+- **Research Index:** ~43 milhões de resumos de artigos (PubMed, bioRxiv,
+  medRxiv, arXiv). O recurso mais próximo do NINA é
+  `read_paper(id, question, k)`: dado um documento conhecido e uma pergunta,
+  devolve só os trechos que respondem. É o mesmo desenho do
+  `assemble_context`, num domínio diferente.
+- **Developer Search** (`firecrawl_developer_search`): um índice para agentes
+  de código com issues e PRs do GitHub, READMEs e documentação de código.
+  Devolve trechos por resultado, até `k = 100`. **É concorrente direto do NINA**
+  nas perguntas de programação, com o modelo de índice pré-montado (como o
+  Context7).
+- **Deep Research:** o caminho recomendado é um laço busca → raspar a página
+  inteira → LLM analisa → repetir. É exatamente o padrão `full_page` que o
+  NINA quer baratear.
+
+**O que isso diz para o NINA:**
+1. **Validação de mercado.** Um dos maiores fornecedores de contexto para
+   agentes construiu "trechos de um documento conhecido para uma pergunta".
+   Isso confirma o formato do produto.
+2. **O próprio Firecrawl manda evitar a página inteira.** O guia do MCP deles
+   diz para usar Markdown completo "com parcimônia", só quando a tarefa exige
+   a página toda, e preferir extração dirigida "para não estourar a janela de
+   contexto". Argumento de posicionamento: o NINA faz essa redução sem LLM,
+   com proveniência e dentro de um orçamento de tokens.
+3. **Onde o NINA difere do Developer Search:**
+   - sem índice: lê qualquer URL que o agente passa, e não sofre do problema de
+     manutenção que é 55% das issues do Context7;
+   - orçamento em tokens em vez de `k` resultados;
+   - texto literal com `document_id`, `version_id` e `chunk_id`;
+   - determinístico e auto-hospedável;
+   - o Firecrawl é AGPL-3.0, o que o NINA não pode usar como dependência.
+4. **Eles distribuem instruções ao agente por Skill, além do MCP.** A
+   documentação "recomenda fortemente" CLI ou MCP junto com uma skill
+   (`npx skills add …`). A skill de pesquisa ensina quando usar cada
+   ferramenta, como reformular a pergunta quando o resultado vem fraco ("passe
+   várias formulações distintas") e os erros comuns. É a divulgação
+   progressiva do texto da Anthropic sobre skills.
+   **Proposta:** uma `SKILL.md` do NINA (quando usar, pergunta curta,
+   `exclude_chunk_ids`, como ler `<nina_notes>`). Só produto; o braço `nina` do
+   M10 roda sem skills (`skills=[]`).
+5. **Resultados grandes.** Acima de ~20 mil tokens estimados (bytes ÷ 4), o
+   Firecrawl devolve um aviso curto e guarda o resultado num espaço de
+   trabalho que o agente consulta por Bash. É a resposta deles ao limite de 50
+   mil caracteres do Claude Code (`docs/PESQUISA_LABS.md`, C1). Confirma que o
+   limite é real e afeta todo fornecedor de página inteira.
+6. **Atrito de adoção.** O MCP hospedado deles tem um nível gratuito sem chave
+   (scrape, search e parse limitados por taxa), e o Research Index funciona sem
+   chave para começar. O NINA exige chave e uma pilha pesada para hospedar,
+   que é o maior tema de issues dos projetos abertos (seção acima). Uma
+   demonstração hospedada sem chave seria a maior alavanca de adoção; é M11.
+7. **Quantidade de ferramentas.** O perfil completo do MCP deles tem 27
+   ferramentas, e por isso oferecem perfis de 3 e de 9. O NINA tem 3, dentro
+   da faixa em que a Anthropic diz que a escolha de ferramenta funciona bem.
+
+## Cinco textos sobre o Firecrawl (trazidos pelo humano em 2026-10-28)
+
+Lidos na íntegra, em PDF:
+
+| texto | quem escreve | confiabilidade |
+|---|---|---|
+| "How Firecrawl Cuts Web Scraping Time by 60%" | Blott, agência (abr/2025) | marketing: números sem dados nem código |
+| "How to Build LLM-Ready Datasets with Firecrawl" | Blott (abr/2025) | tutorial de API, sem medição |
+| "Firecrawl /scrape Deep Dive" | fastCRW, concorrente compatível (mai/2026) | o mais técnico; declara o conflito de interesse |
+| "Firecrawl: Web Data for Your AI Agent" | Jacar (jul/2026) | guia prático com fatos verificáveis |
+| "Firecrawl Explained" | ApiX-Drive (fev/2026) | visão geral, preços e empresa |
+
+**Fatos úteis:**
+- Licença AGPL-3.0 no núcleo e MIT nos SDKs; mais de 150 mil estrelas; v2.11.0
+  de 19/06/2026 (Jacar). Confirma que o NINA só pode usá-lo como API externa,
+  nunca como dependência (CLAUDE.md).
+- Auto-hospedar pede cerca de 12 GB de RAM (8 da API e 4 do Playwright), Redis
+  e banco, e não inclui o Fire-engine, que é o motor proprietário de proxies e
+  anti-bot (Jacar). O atrito de hospedar é o mesmo tema das issues já
+  analisadas acima.
+- Preços: Free 500 créditos; Hobby US$ 19/mês por 3 mil páginas; Standard
+  US$ 99 por 100 mil; Growth US$ 399 por 500 mil. Series A de US$ 14,5 milhões
+  (ago/2025), 350 mil desenvolvedores (ApiX-Drive). A extração estruturada por
+  LLM seria uma assinatura à parte (fastCRW, "widely reported").
+
+**O que isso diz para o NINA:**
+1. **Falhas que o status HTTP não mostra (implementado no benchmark).** O
+   fastCRW lista: soft 404 (200 com "página não encontrada"), parede de
+   cookies, desafio anti-bot, casca de SPA vazia e página gigante cortada. O
+   NINA já cobria duas:
+   - a página gigante falha com `TooLarge`, sem corte silencioso;
+   - páginas de erro HTTP nunca viram documento (Emenda 15).
+
+   As outras três passavam. No M10, uma tarefa cuja página citada é uma
+   delas no snapshot sairia como erro de todos os braços de corpus, mas não do
+   `webfetch_live`, que lê a página de hoje. Por isso existe agora
+   `bench/page_health.py`, com a Emenda 16 do PREREG:
+   - o snapshot defeituoso exclui a tarefa de todos os braços;
+   - busca ao vivo bloqueada fica na análise primária, com tabela por braço e
+     análise de sensibilidade.
+
+   O mesmo site relata que, desde 15/09/2026, a Cloudflare bloqueia por padrão
+   crawlers de IA de uso misto em páginas com anúncios.
+   **Proposta de produto, depois do M10:** um warning `suspect_page` no
+   `resolve` e no `assemble`, com o mesmo detector e sem descartar conteúdo.
+   Isso cumpre a regra "falha explícita" para casos que hoje passam calados. Não
+   entra agora porque o `app/` está congelado e o warning aparece em
+   `<nina_notes>`, ou seja, mudaria o sistema medido.
+2. **Como não publicar um benchmark.** O texto da Blott afirma "60% menos
+   tempo", "98,7% de acurácia", "37% menos falhas" e "58% mais barato" sem
+   dados, sem tarefas e sem código (diz que o código está no GitHub, sem link).
+   É o contraexemplo do checklist ABC (`docs/AUDITORIA_ABC.md`). O fastCRW faz
+   melhor:
+   - declara que vende um dos produtos comparados;
+   - separa números próprios dos números tirados da documentação dos outros;
+   - valida o próprio harness reproduzindo, a 1,5 ponto, o placar publicado de
+     um fornecedor antes de medir o seu.
+
+   **Para a publicação do M10:** abrir com a declaração de conflito (nós
+   fizemos o NINA) e ter uma seção "validação do harness": o probe do juiz
+   (`bench/judge_probe.py`), a concordância com rótulos humanos (Emenda 5) e,
+   se houver número público comparável para algum braço, a reprodução dele.
+3. **A conta que sustenta a tese.** No plano Standard, raspar uma página custa
+   cerca de US$ 0,001. Pôr essa página inteira (20 mil tokens) no contexto do
+   Sonnet 5.5 custa US$ 0,04 só de entrada, cerca de 40 vezes mais, e isso a
+   cada turno em que ela fica no contexto (sem cache). O custo dominante é o
+   token no modelo, não a extração; é exatamente o que o NINA reduz e o que a
+   H2 mede.
+4. **Menos tokens permite modelo mais barato.** Um relato na Blott: cortar 2/3
+   dos tokens permitiu trocar GPT-4 por GPT-3.5 Turbo. Para o NINA, isso é um
+   experimento de produto depois do M10: o braço `nina` com um modelo menor
+   contra `full_page` com o modelo atual. Fora do M10, que fixa um modelo
+   (§4).
+5. **O prompt pesa mais que o modelo.** A Blott cita, sem fonte, um
+   "CrawlBench" em que o prompt da tarefa mudou 41 pontos e a troca de modelo,
+   6. O M10 já usa o mesmo prompt de sistema, literal, em todos os braços com
+   documentação (Apêndice B), então a comparação não depende disso.
+6. **Higiene que o NINA já tem.** O fastCRW recomenda:
+   - guardar a URL de origem em cada pedaço (o NINA guarda proveniência em todo
+     fragmento);
+   - usar hash do conteúdo normalizado para não reprocessar página igual (o
+     NINA deduplica versões por `content_hash`);
+   - pedir o formato mais estreito que serve (o NINA entrega fragmentos, mais
+     estreito que o Markdown inteiro que o fastCRW chama de "o menor").
+
+   Fica como ideia de baixa prioridade: uma lista, por domínio, de linhas
+   repetidas em todas as páginas (menus que sobrevivem à limpeza).
+7. **Raspar ou ler.** O Jacar separa ler a web (Firecrawl) de operar a web
+   (Browser Use). O NINA fica no lado de ler, e só documentação; ações em sites
+   estão fora do escopo (CLAUDE.md).
+
 ## Fontes
 
 - Anthropic, "Writing effective tools for agents": https://www.anthropic.com/engineering/writing-tools-for-agents
@@ -296,4 +449,13 @@ economizava.
 - Jina ReaderLM-v2: https://arxiv.org/html/2503.01151v1
 - Crawl4AI fit markdown: https://docs.crawl4ai.com/core/fit-markdown/
 - llms.txt na prática: https://www.digitalapplied.com/blog/llms-txt-in-practice-adoption-evidence-2026
+- Firecrawl (lido em 2026-10-28): https://github.com/firecrawl/firecrawl ·
+  https://github.com/firecrawl/firecrawl-mcp-server ·
+  https://github.com/firecrawl/firecrawl-docs (features/research.mdx, use-cases/deep-research.mdx) ·
+  https://github.com/firecrawl/cli (skills/firecrawl-research-index/SKILL.md)
 - Issues públicas (coletadas em 2026-10-17): https://github.com/upstash/context7/issues, https://github.com/firecrawl/firecrawl/issues, https://github.com/unclecode/crawl4ai/issues e https://github.com/jina-ai/reader/issues
+- PDFs trazidos pelo humano (lidos em 2026-10-28): https://www.blott.com/blog/post/how-firecrawl-cuts-web-scraping-time-by-60-real-developer-results ·
+  https://www.blott.com/blog/post/how-to-build-llm-ready-datasets-with-firecrawl-a-developers-guide ·
+  https://fastcrw.com/blog/firecrawl-scrape-endpoint-deep-dive ·
+  https://jacar.es/en/firecrawl-web-data-for-agents/ ·
+  https://apix-drive.com/en/blog/useful/firecrawl-explained

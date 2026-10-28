@@ -31,6 +31,7 @@ class SessionRecord:
     correct: bool | None = None  # primary judge; None = excluded session
     correct_judge2: bool | None = None
     citation_correct: bool | None = None
+    abstained: bool | None = None  # primary judge (PREREG Amendment 13)
     input_tokens: int = 0
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0

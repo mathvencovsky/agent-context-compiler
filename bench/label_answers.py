@@ -35,7 +35,7 @@ from typing import Any
 
 from bench.agreement import KAPPA_GATE, cohen_kappa, judge_is_reliable
 from bench.external_tasks import SEED
-from bench.judge_external import judge_prompt
+from bench.judge_external import JUDGE_ONLY_LINES, judge_prompt
 from bench.tasks_schema import ExternalTask, load_external_tasks
 
 InputFn = Callable[[str], str]
@@ -43,10 +43,6 @@ OutputFn = Callable[[str], None]
 
 #: PREREG §9: at least 100 human-labelled answers.
 SAMPLE_SIZE = 100
-#: The rubric's instruction to judges, which humans skip.
-_JSON_LINE = (
-    'Return a single JSON object: {"correct": true|false, "reason": "<short reason>"}\n'
-)
 
 
 def draw_sample(
@@ -91,7 +87,7 @@ def _write(path: Path, labels: Mapping[int, str]) -> None:
 
 def _show(row: Mapping[str, Any], task: ExternalTask, output_fn: OutputFn) -> None:
     output_fn(f"\n=== item {row['item']} ===")
-    output_fn(judge_prompt(task, row["answer"]).replace(_JSON_LINE, ""))
+    output_fn(judge_prompt(task, row["answer"]).replace(JUDGE_ONLY_LINES, ""))
 
 
 def _ask(input_fn: InputFn) -> str | None:

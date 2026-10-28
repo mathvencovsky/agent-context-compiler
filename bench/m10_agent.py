@@ -22,6 +22,8 @@ web (the SPEC §10.1 exception). Every session:
   PREREG §4 the same way;
 * gets whole tool results: ``MAX_MCP_OUTPUT_TOKENS`` is pinned to the 1M
   context for every arm (PREREG Amendment 7);
+* runs with effort, cache TTL and model fallback pinned to today's defaults
+  (:data:`PINNED_ENV`, PREREG Amendment 12);
 * sees every tool definition from the first turn: ``ENABLE_TOOL_SEARCH`` is
   pinned to ``false`` (PREREG Amendment 11). By default the CLI defers MCP tool
   definitions behind a tool-search step, decided by remote flags, which only
@@ -148,6 +150,22 @@ MAX_MCP_OUTPUT_TOKENS = 1_000_000
 #: Amendment 11: "false" selects the CLI's standard mode (every definition
 #: loaded up front); a falsy value also overrides a remote "force" flag.
 ENABLE_TOOL_SEARCH = "false"
+#: Amendments 12 and 14: CLI behaviors that are defaults today but can change
+#: without a CLI update, pinned so the pilot and the main run match.
+PINNED_ENV = {
+    # Sonnet 5.5's documented default; an organization default or a product
+    # change would otherwise move it (Anthropic's April 23 postmortem).
+    "CLAUDE_CODE_EFFORT_LEVEL": "medium",
+    # 5-minute cache writes, the rate in bench/prices.yaml; overrides any
+    # inherited ENABLE_PROMPT_CACHING_1H or CLAUDE_CODE_PROMPT_CACHE_TTL.
+    "FORCE_PROMPT_CACHING_5M": "1",
+    # A safety-classifier flag would otherwise switch the session to another
+    # model mid-run; the refused request then fails like any API refusal.
+    "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1",
+    # Amendment 14: no remote feature flags, auto-updates or telemetry during a
+    # run, so nothing fetched mid-run changes the CLI's behavior.
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+}
 #: The MCP server key of every arm, so the tools are ``mcp__docs__<name>``.
 SERVER = "docs"
 PRIMARY_JUDGE = "gpt-6.1-sol"
@@ -314,6 +332,7 @@ def session_options(
             "CLAUDE_CONFIG_DIR": str(config_dir),  # no stored login or memory
             "MAX_MCP_OUTPUT_TOKENS": str(MAX_MCP_OUTPUT_TOKENS),
             "ENABLE_TOOL_SEARCH": ENABLE_TOOL_SEARCH,
+            **PINNED_ENV,
         },
     )
 
@@ -540,14 +559,15 @@ def run_session(task: ExternalTask, arm: str, ctx: RunContext) -> SessionRecord:
         record.correct = False  # PREREG §4: hitting the limit counts as a failure
         return record
     answer = final_answer(attempt.final_text)
-    record.correct = _judge(task, arm, answer.answer, ctx.primary, "primary", ctx)
+    primary = _judge(task, arm, answer.answer, ctx.primary, "primary", ctx)
+    record.correct, record.abstained = primary.correct, primary.abstained
     if record.correct is None:  # Amendment 5: an unparseable verdict is infra
         record.infra_error = True
         return record
     if ctx.second is not None:
         record.correct_judge2 = _judge(
             task, arm, answer.answer, ctx.second, "second", ctx
-        )
+        ).correct
     if in_recheck_sample(task.id, arm):
         _judge(task, arm, answer.answer, ctx.primary, "recheck", ctx)
     if task.expected_evidence:
@@ -570,7 +590,7 @@ def _judge(
     provider: LLMProvider,
     role: str,
     ctx: RunContext,
-) -> bool | None:
+) -> Verdict:
     try:
         verdict = judge(task, answer, provider)
     except Exception as exc:  # noqa: BLE001 - a judge outage is infra (PREREG §10)
@@ -581,7 +601,60 @@ def _judge(
         ctx.out / "judgments.jsonl",
         {"task_id": task.id, "arm": arm, "role": role, **asdict(verdict)},
     )
-    return verdict.correct
+    return verdict
+
+
+def drop_over_ceiling(
+    tasks: list[ExternalTask], store: CorpusStore, out: Path
+) -> list[ExternalTask]:
+    """Tasks without a listed page over the tool-result cap (PREREG Amendment 14).
+
+    The excluded ids go to ``excluded_over_ceiling.json`` and are reported.
+    """
+    from bench.m10_result_limits import CEILING, over_ceiling
+    from bench.page_length import page_markdown
+
+    def chars_of(url: str) -> int:
+        try:
+            return len(page_markdown(store, url))
+        except (KeyError, ValueError):
+            return 0
+
+    dropped = set(over_ceiling(((t.id, t.urls) for t in tasks), chars_of))
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "excluded_over_ceiling.json").write_text(
+        json.dumps({"ceiling_chars": CEILING, "task_ids": sorted(dropped)}, indent=1),
+        encoding="utf-8",
+    )
+    print(f"excluded {len(dropped)} of {len(tasks)} tasks over {CEILING:,} chars")
+    return [t for t in tasks if t.id not in dropped]
+
+
+def drop_unhealthy(
+    tasks: list[ExternalTask], store: CorpusStore, out: Path
+) -> list[ExternalTask]:
+    """Tasks whose cited snapshots are all plausible pages (PREREG Amendment 16).
+
+    A cited page whose snapshot is empty, a soft 404, a bot challenge or a
+    consent wall excludes the task from every arm; the ids, pages and cases go
+    to ``excluded_unhealthy.json``.
+    """
+    from bench.page_health import unhealthy_tasks
+    from bench.page_length import page_markdown
+
+    def markdown_of(url: str) -> str:
+        try:
+            return page_markdown(store, url)
+        except (KeyError, ValueError):
+            return ""
+
+    bad = unhealthy_tasks(((t.id, t.cited_urls) for t in tasks), markdown_of)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "excluded_unhealthy.json").write_text(
+        json.dumps(dict(sorted(bad.items())), indent=1), encoding="utf-8"
+    )
+    print(f"excluded {len(bad)} of {len(tasks)} tasks with an unhealthy cited page")
+    return [t for t in tasks if t.id not in bad]
 
 
 def _append_jsonl(path: Path, row: Mapping[str, Any]) -> None:
@@ -633,12 +706,28 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
+#: Git tree ids of ``app/`` and ``migrations/`` as frozen by PREREG Amendment 15.
+#: A run refuses any other tree; a re-freeze changes these in its own amendment.
+FROZEN_TREES = {
+    "app": "69527b613ea8f7ce38949a87932818862311097e",
+    "migrations": "ac062036781057653f5694b8f560c3c57b34b07b",
+}
+
+
 def frozen_commit(results: Path) -> str:
-    """HEAD, if ``app/`` is committed and ``results.csv`` used the same ``app/``."""
-    if _git("status", "--porcelain", "--", "app"):
-        raise SystemExit(
-            "app/ has uncommitted changes; an M10 run uses committed app/ only (PREREG §10)"
-        )
+    """HEAD, if ``app/`` and ``migrations/`` are the frozen trees, committed, and
+    ``results.csv`` used the same ``app/``."""
+    for name, frozen in FROZEN_TREES.items():
+        if _git("status", "--porcelain", "--", name):
+            raise SystemExit(
+                f"{name}/ has uncommitted changes; an M10 run uses committed code "
+                "only (PREREG §10)"
+            )
+        if _git("rev-parse", f"HEAD:{name}") != frozen:
+            raise SystemExit(
+                f"{name}/ differs from the tree frozen by the PREREG (Amendment 15); "
+                "an M10 run uses the frozen code only"
+            )
     head = _git("rev-parse", "HEAD")
     tree = _git("rev-parse", f"{head}:app")
     if results.exists():
@@ -718,7 +807,10 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         t
         for t in load_external_tasks(REPO_ROOT / "bench/tasks/external.yaml")
         if t.split == args.split and t.audit != "invalid"
-    ][: args.limit]
+    ]
+    store = CorpusStore(CORPUS_DIR)
+    tasks = drop_unhealthy(drop_over_ceiling(tasks, store, out), store, out)
+    tasks = tasks[: args.limit]
     ctx = RunContext(
         out=out,
         data_root=Path.cwd(),
@@ -726,7 +818,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         prices=prices,
         primary=OpenAIProvider(model=PRIMARY_JUDGE),
         second=AnthropicProvider(model=SECOND_JUDGE),
-        store=CorpusStore(CORPUS_DIR),
+        store=store,
         commit=frozen_commit(out / "results.csv"),
         query_fn=query,
         context7_key=keys.context7_api_key or "",

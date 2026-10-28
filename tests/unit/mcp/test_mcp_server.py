@@ -242,3 +242,15 @@ async def test_exclude_chunk_ids_says_how_to_restore_cleared_fragments() -> None
     tools = {t.name: t for t in await _build().list_tools()}
     param = tools["assemble_context"].input_schema["properties"]["exclude_chunk_ids"]
     assert "cleared from your context" in param["description"]
+
+
+async def test_every_tool_carries_a_documentation_search_hint() -> None:
+    for tool in await _build().list_tools():
+        hint = (tool.meta or {}).get("anthropic/searchHint", "")
+        assert "documentation" in hint, tool.name
+
+
+async def test_assemble_description_names_the_tagged_format() -> None:
+    tools = {t.name: t for t in await _build().list_tools()}
+    description = tools["assemble_context"].description or ""
+    assert '<fragment chunk="N">' in description and "<nina_notes>" in description

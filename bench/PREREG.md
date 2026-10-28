@@ -590,6 +590,225 @@ data had been seen.
   main-run session had run. The CLI behaviour was read from its code, without
   starting a session.
 
+### Amendment 12 — 2026-10-28: whole tool results, and today's CLI defaults pinned
+
+- **What changed:** three harness rules (§3, §4), the same for every arm.
+  1. **Whole tool results.** The frozen arms' tools (`fetch_page`,
+     `search_docs`) declare `_meta["anthropic/maxResultSizeChars"] = 500000`.
+  2. **Pinned defaults.** Every session sets `CLAUDE_CODE_EFFORT_LEVEL=medium`
+     (the documented default effort of `claude-sonnet-5-5`),
+     `FORCE_PROMPT_CACHING_5M=1` (5-minute cache writes, the API-key default)
+     and `CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK=1` (no automatic switch to
+     another model; a refused request fails the session like any non-transient
+     API refusal, Amendment 7).
+  3. **Pages over the ceiling.** Before the pilot, `bench/m10_result_limits.py`
+     counts the pages and tasks over 500,000 characters. A later amendment,
+     before any agent session, says how those tasks are handled.
+- **Why:**
+  - Claude Code saves any MCP text result longer than 50,000 characters to a
+    file, whatever `MAX_MCP_OUTPUT_TOKENS` says, unless the tool declares
+    `anthropic/maxResultSizeChars`, which it caps at 500,000 (Claude Code MCP
+    documentation, "MCP output limits"; the key is read in CLI 2.1.301). No arm
+    has a tool that reads such a file, so without the annotation the primary
+    comparator would not see any page longer than about 12,000 tokens, which
+    is roughly the 90th percentile of the corpus. Amendment 7 alone does not
+    prevent this.
+  - Claude Code's default effort, cache TTL and model fallback can change
+    without a CLI update (product decisions, organization defaults, remote
+    flags; Anthropic's April 23 postmortem describes a default-effort change
+    and its reversal). Pinning them to today's values keeps the pilot, which
+    fixes n and the cost per session, and the main run on the same settings.
+    5-minute writes match the write price the cost model uses.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run. The limits come from the Claude Code
+  documentation and the CLI's code, read without starting a session.
+
+### Amendment 13 — 2026-10-28: judge rubric, abstention, and a clustered interval
+
+- **What changed:**
+  1. **Rubric.** The text below replaces the Appendix B judge rubric for both
+     judges and the human graders. Three changes:
+     - the judge writes its reasoning before the verdict;
+     - a candidate that offers several alternative core answers, any of them
+       wrong or contradicting the reference, is incorrect;
+     - the judge also returns `abstained`: true only when the candidate gives
+       no core answer and says the information is unavailable or that it does
+       not know.
+
+     The human graders see the same text without the two judge-only
+     instructions (the abstention flag and the JSON format), as they already
+     skipped the JSON line.
+  2. **Abstention rate.** `results.csv` gains an `abstained` column from the
+     primary judge. The share of abstentions per arm is reported as secondary
+     and descriptive. It does not change §6: an abstention stays incorrect
+     for H1 and H2.
+  3. **Clustered interval.** Next to the §6 bootstrap, Δ and R are also
+     reported with a paired bootstrap that resamples clusters of tasks (tasks
+     that share their first cited page) instead of tasks (10,000 resamples,
+     seed `20261015`). It is a sensitivity analysis. H1 and H2 are decided by
+     §6 as written, and the report states whether the clustered interval
+     would change either verdict.
+
+Judge rubric from Amendment 13, used by both judges and by the human graders:
+
+```
+You are the judge. Decide whether the CANDIDATE answer resolves the developer's QUESTION.
+The REFERENCE is the answer the asker accepted on Stack Overflow; treat what it says as correct.
+Mark the candidate correct if its core answer (the fact, setting, API or fix that resolves the question)
+agrees with the reference, even if shorter or worded differently, or if it is a different solution that
+clearly resolves the question as asked.
+Mark it incorrect if its core answer is wrong, contradicts the reference, is missing, or only says the
+information is unavailable. Also mark it incorrect if it offers several alternative core answers and any
+of them is wrong or contradicts the reference. Ignore style, length and citations.
+Set "abstained" to true only if the candidate gives no core answer and says that the information is
+unavailable or that it does not know.
+Write your reasoning first, then the verdict, as a single JSON object:
+{"reason": "<short reasoning>", "abstained": true|false, "correct": true|false}
+
+QUESTION:
+<question title and body>
+
+REFERENCE:
+<accepted answer>
+
+CANDIDATE:
+<candidate answer>
+```
+
+- **Why:**
+  - Judges that reason before they rule are more accurate and show less
+    preference for their own model's answers (arXiv 2504.03846). OpenAI's
+    BrowseComp grader and StackEval's judge, which also grades answers to
+    Stack Overflow questions against the accepted answer, reason first.
+  - OpenAI's SimpleQA grader marks a list of guesses with a wrong one as
+    incorrect. The old rubric's "a different solution that clearly resolves
+    the question" let such a list pass, and arms with more context can list
+    more options.
+  - Binary grading scores an abstention like a wrong answer ("Why Language
+    Models Hallucinate", 2025). The system prompt tells the agent to say when
+    the pages lack the answer, so the abstention rate per arm is needed to
+    read the results.
+  - Clustered questions make the naive interval too narrow (Anthropic, "Adding
+    error bars to evals"). In the holdout pool, 65% of tasks share their first
+    cited page with another task; in a random sample of 349 about 35% do.
+- **Data seen:** none. No judge call, agent session or human label existed.
+
+### Amendment 14 — 2026-10-28: pages over the result cap, NINA's whole-page tools, no remote flags
+
+- **What changed:**
+  1. **Pages over the cap** (closes Amendment 12 point 3). A task with any
+     listed URL whose page Markdown is longer than 500,000 characters is
+     excluded from every arm, before the screen and the main run. The harness
+     writes the excluded ids to `excluded_over_ceiling.json` and the report
+     gives their count. Pilot tasks follow the same rule.
+  2. **NINA's whole-page tools.** `resolve_url` and `get_document` keep the
+     Claude Code default: a result over 50,000 characters is saved to a file,
+     which the `nina` arm cannot read. The shipped server is not changed for
+     the benchmark (§3: payload unchanged).
+  3. **No remote flags.** Every session also sets
+     `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`: no feature-flag fetching,
+     auto-update or telemetry during a run.
+- **Why:**
+  - Point 1 keeps the arm definitions intact (§3). It is the only option that
+    does not give `full_page` a different tool, and it removes the longest
+    pages, where §7's Amendment 4 prediction expects NINA's advantage to be
+    largest. The bias it introduces runs against the claim, not for it.
+  - Point 2: for a real user, saving a huge page to a file is Claude Code's
+    protection, since the agent then reads only the part it needs. That is the
+    product's intended behavior, and changing it only for the benchmark would
+    test a different product. In M10 it can only hurt the `nina` arm, whose
+    main path is `assemble_context`.
+  - Point 3: Amendments 11 and 12 pinned the behaviors known to depend on
+    remote flags. This removes the flags themselves, so nothing fetched during
+    a run can change the CLI between the pilot and the main run. In CLI
+    2.1.301, WebFetch's domain check does not depend on this setting (read in
+    the CLI's code).
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
+### Amendment 15 — 2026-10-28: `app/` re-frozen, and the freeze enforced by the harness
+
+- **What changed:**
+  1. **Freeze.** From this amendment on, every M10 run (pilot, screen and main
+     run) uses `app/` and `migrations/` as of the commit that adds this
+     amendment, replacing the freeze of Amendment 10. Their git tree ids are:
+     - `app/`: `69527b613ea8f7ce38949a87932818862311097e`
+     - `migrations/`: `ac062036781057653f5694b8f560c3c57b34b07b` (unchanged
+       since Amendment 10).
+  2. **Enforcement.** The harness (`bench/m10_agent.frozen_commit`) refuses to
+     start when either tree differs from the ids above, besides refusing
+     uncommitted changes and a `results.csv` made with another `app/` (§10).
+     A later re-freeze changes those ids in its own amendment.
+  3. **Changes since Amendment 10**, all from M10a and checked with tests:
+     - `9e2e745`: an HTTP error page is never stored as a document
+       (`upstream_status`, 502);
+     - `49a1176`: MCP tool descriptions say when to use each tool and what it
+       costs, every parameter is described, and no tool sends a structured
+       copy;
+     - `efc4649`: MCP server instructions, "documentation" in every tool
+       description, and how to get cleared fragments back;
+     - `2333826`: the `mixed_versions` hint;
+     - `9fea528`: the concise format marks NINA's structure with `<document>`,
+       `<fragment>` and `<nina_notes>` and neutralizes those tags in page text,
+       so a page cannot forge NINA's notes (+3.7% tokens); MCP search hints.
+- **Effective settings:** as in Amendments 9 and 10. The harness checks NINA's
+  effective retrieval and selection settings against the `app/config.py`
+  defaults when a run starts (`check_frozen_settings`), so a `.env` that
+  overrides them stops the run.
+- **Later product changes:** the development-slice experiments that have not
+  run yet (order and near duplicates, section expansion, named release) may
+  still be accepted under their pre-registered rules. If one is, it changes
+  `app/` and needs a new amendment before any agent session. Until then this
+  freeze stands and the pilot can run.
+- **Why:** the five changes were made and checked on the development slice or
+  with tests, never on pilot, evaluation-pool or bridge tasks. Without a new
+  freeze the code named by Amendment 10 would no longer be the product under
+  test, and with the freeze recorded only in prose a run could start on
+  unfrozen code by mistake.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
+### Amendment 16 — 2026-10-28: pages that answer 200 without documentation
+
+- **What changed:**
+  1. **Snapshot pages.** Before the screen and the main run, a task is
+     excluded from every arm when one of its cited pages, as frozen-snapshot
+     Markdown (`bench/page_length.page_markdown`), is shorter than 200
+     characters, or is shorter than 2,000 characters and is a bot challenge
+     (Cloudflare "Just a moment...", CAPTCHA, "access denied"), a soft 404
+     ("page not found" or "404" in its first 300 characters) or a cookie-consent
+     wall. The rule is `bench/page_health.classify`. The harness writes the ids,
+     pages and cases to `excluded_unhealthy.json`, and the report gives the
+     count. Pilot tasks follow the same rule. It runs after the Amendment 14
+     exclusion.
+  2. **Live fetches.** After the run, `bench/page_health.blocked_sessions`
+     reads the transcripts and counts, per arm, the fetch-tool results
+     (`fetch_page`, `WebFetch`, `resolve_url`, `get_document`) that are a
+     challenge, a soft 404 or a tool error, and lists the (task, arm) sessions
+     with any. The report gives this table. Comparisons that involve
+     `webfetch_live` or `context7_live` are also reported without the tasks
+     where that arm had such a session, as a sensitivity analysis. The primary
+     analyses keep every task.
+- **Why:**
+  - Point 1: an HTTP error page is already never stored (Amendment 15,
+    `9e2e745`), but a site can answer 200 with a page that is not the
+    documentation. No corpus arm can find the answer in such a snapshot, while
+    `webfetch_live` reads today's page, so keeping the task would bias the
+    comparison against the corpus arms, `nina` among them. The task is
+    defective, not hard. Missing snapshots count as empty and are excluded the
+    same way.
+  - Point 2: a vendor blog (fastCRW, 2026-07-21) reports that from 2026-09-15
+    Cloudflare blocks mixed-use AI crawlers on ad-supported pages by default,
+    and some listed sites (MDN among them) carry ads, so a live fetch can get a
+    challenge instead of the page. That is
+    what the live arm does in the real world, so the primary analysis keeps it.
+    The sensitivity analysis shows how much of any gap comes from blocked
+    fetches, in either direction.
+  - Both checks look only at page text and tool results, never at whether an
+    answer was correct.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

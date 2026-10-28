@@ -77,6 +77,17 @@ def test_tools_carry_the_untrusted_notice(store: CorpusStore) -> None:
         assert "untrusted_source" in (tool.description or "")
 
 
+def test_tools_raise_claude_codes_result_size_limit(store: CorpusStore) -> None:
+    # Without the annotation Claude Code saves a result over 50,000 characters
+    # to a file the arms cannot read; 500,000 is the CLI's ceiling for it.
+    for server in (
+        full_page_server(store),
+        strong_rag_server(store, StrongRagRunner()),
+    ):
+        (tool,) = asyncio.run(server.list_tools())
+        assert tool.meta == {"anthropic/maxResultSizeChars": 500_000}
+
+
 def test_corpus_transport_serves_frozen_bytes_by_host_header(
     store: CorpusStore,
 ) -> None:
@@ -143,12 +154,15 @@ def test_full_page_server_speaks_mcp_over_stdio(
         cwd=str(tmp_path),
     )
 
-    async def session() -> tuple[list[str], str]:
+    async def session() -> tuple[list[str], str, list[object]]:
         async with Client(params) as client:
             tools = await client.list_tools()
             result = await client.call_tool("fetch_page", {"url": _URL})
-            return [t.name for t in tools.tools], result.content[0].text  # type: ignore[union-attr]
+            metas = [t.model_dump(by_alias=True).get("_meta") for t in tools.tools]
+            return [t.name for t in tools.tools], result.content[0].text, metas  # type: ignore[union-attr]
 
-    names, text = asyncio.run(session())
+    names, text, metas = asyncio.run(session())
     assert names == ["fetch_page"]
     assert "absolute value" in text
+    # the size annotation crosses the wire as `_meta`, where Claude Code reads it
+    assert metas == [{"anthropic/maxResultSizeChars": 500_000}]

@@ -79,6 +79,9 @@ def test_label_hides_arm_and_verdict_and_resumes(tmp_path: Path) -> None:
     assert "answer from [tool]" in screen and "nina" not in screen.lower()
     assert "arm" not in screen and "judge_correct" not in screen
     assert "Return a single JSON object" not in screen
+    # Amendment 13: humans apply the same rubric without the judge-only lines.
+    assert "several alternative core answers" in screen
+    assert "abstained" not in screen and "Write your reasoning first" not in screen
 
 
 def test_settle_asks_only_disagreements_and_report_applies_the_gate(

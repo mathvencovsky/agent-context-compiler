@@ -1,6 +1,8 @@
 # PROGRESS
 
 Marco atual: **M10a (aprofundar o NINA antes do piloto), melhorias sem custo**.
+**`app/` congelado na Emenda 15 (2026-10-28): pronto para o piloto quando
+houver chaves e teto de gasto.**
 Últimas etapas (2026-10-28): pesquisa sem custo a partir de estudos e
 publicações, e as propostas de context engineering P1–P7 (seções abaixo); cinco
 medições esperam o humano rodar com corpus e cache.
@@ -13,6 +15,82 @@ gratuitas do M10; termina com nova emenda de recongelamento. A trilha 2 (medir
 respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
+
+### M10a/M10 — páginas que respondem 200 sem documentação (2026-10-28)
+
+A partir dos cinco PDFs sobre o Firecrawl trazidos pelo humano
+(`docs/CONCORRENTES.md`, seção própria), Emenda 16 do PREREG:
+- `bench/page_health.py` classifica página vazia, soft 404, desafio anti-bot e
+  parede de cookies (só em páginas curtas, marcador no começo para soft 404);
+- tarefa com página citada assim no snapshot sai de todos os braços
+  (`drop_unhealthy`, lista em `excluded_unhealthy.json`), depois da exclusão
+  da Emenda 14;
+- depois da rodada, `blocked_sessions` conta por braço as buscas bloqueadas,
+  os soft 404 e os erros de ferramenta; comparações com braços ao vivo saem
+  também sem essas tarefas (sensibilidade).
+- Pendente (humano): `make m10a-pending` agora também lista as exclusões, sem
+  custo. Proposta de produto para depois do M10: warning `suspect_page`.
+- Testar: `uv run pytest tests/unit/bench/test_page_health.py`.
+
+### M10a/M10 — decisões abertas fechadas (2026-10-28)
+
+Pelo critério do humano ("seguro e eficiente"), Emenda 14 do PREREG:
+- tarefas com página listada acima de 500 mil caracteres saem de todos os
+  braços (`drop_over_ceiling`, lista em `excluded_over_ceiling.json`);
+- `resolve_url`/`get_document` do NINA sem anotação de tamanho (proteção do
+  usuário; no M10 só pesa contra o NINA);
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` nas sessões;
+- skill `skills/nina-docs/SKILL.md` para agentes (produto), citada no
+  QUICKSTART.
+
+Atualização: o `app/` foi recongelado na Emenda 15 (o harness confere os ids
+das árvores git e se recusa a rodar com outro código). O piloto pode rodar
+quando houver chaves e teto. As medições do dev rodam com `make m10a-pending`;
+se alguma for aceita, uma nova emenda recongela.
+
+### M10a/M10 — propostas da pesquisa implementadas (2026-10-28)
+
+- **Formato conciso imune a falsificação (C3):** `<document>`, `<fragment>` e
+  `<nina_notes>`, com as tags neutralizadas no texto das páginas; +3,7% de
+  tokens. SPEC §8/§9; testes em `tests/unit/retrieve/test_render.py` e na
+  integração.
+- **Rubrica nova (Emenda 13):** raciocínio antes do veredicto, lista com
+  alternativa errada é incorreta, `abstained` registrado (coluna nova no
+  `results.csv`).
+- **Análise (A1):** `bench/m10_analysis.py`, H1/H2 por tarefa e por grupo de
+  página.
+- **Preços de cache** do Sonnet/Opus 5.5 no `bench/prices.yaml` (A4).
+- **`searchHint`** nas ferramentas MCP (M3).
+- **Experimento de versão (U2):** `bench/m10a_version.py`; falta rodar:
+  `uv run python -m bench.m10a_version --half A`.
+
+O `app/` mudou: nenhuma sessão de agente antes da emenda de recongelamento.
+
+### M10a/M10 — pesquisa nas grandes empresas de IA (2026-10-28)
+
+`docs/PESQUISA_LABS.md`: textos da Anthropic, doc do Claude Code, OpenAI (via
+GitHub), Google DeepMind e benchmarks, aplicados ao M10 antes de qualquer gasto.
+
+- **Crítico, corrigido:** o Claude Code salva em arquivo (ilegível para os
+  braços) todo resultado MCP acima de 50 mil caracteres, apesar do
+  `MAX_MCP_OUTPUT_TOKENS`. O `full_page` não veria nenhuma página acima de ~12
+  mil tokens. `fetch_page` e `search_docs` agora declaram
+  `anthropic/maxResultSizeChars = 500000` (o teto do CLI), com teste em stdio.
+- **Crítico, corrigido:** esforço, validade do cache e troca de modelo fixados
+  nos padrões de hoje (`PINNED_ENV` em `bench/m10_agent.py`). Emenda 12 do
+  PREREG.
+- **Crítico, proposto:** uma página consegue forjar as "NINA notes" no formato
+  conciso (testado); proposta de blocos MCP separados por fragmento.
+- **Item 4:** regra revista antes de medir (resposta numa das pontas) e nova
+  variante `edges`.
+- **Novo:** `bench/m10_result_limits.py` (páginas acima do teto).
+- **Segunda rodada (universidades e startups, §2b):** três propostas novas
+  (juiz raciocina antes do veredicto; preferir a versão nomeada na pergunta;
+  poda de frases, para depois do M10) e várias confirmações (rerank de 30,
+  chunking por estrutura, trafilatura como comparador forte).
+- **Decisões abertas:** `docs/PESQUISA_LABS.md` §3.
+
+Para rodar (humano): `uv run python -m bench.m10_result_limits`.
 
 ### M10a — context engineering: propostas P1–P7 feitas (2026-10-28)
 

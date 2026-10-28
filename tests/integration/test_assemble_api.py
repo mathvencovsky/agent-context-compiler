@@ -177,13 +177,16 @@ def test_assemble_concise_renders_the_same_fragments(
     headers = [
         line
         for line in concise["context"].splitlines()
-        if line.startswith("### ") and " · chunk " in line
+        if line.startswith("<fragment chunk=")
     ]
     assert len(headers) == len(detailed["fragments"])
     for frag in detailed["fragments"]:
         assert frag["md"] in concise["context"]
-        assert f" · chunk {frag['chunk_id']}" in concise["context"]
-        assert f"({frag['document_id']}, {frag['version_id']})" in concise["context"]
+        assert f'<fragment chunk="{frag["chunk_id"]}"' in concise["context"]
+        assert (
+            f'id="{frag["document_id"]}" version="{frag["version_id"]}">'
+            in concise["context"]
+        )
 
 
 def test_assemble_include_evidence_false_omits_quotes(
@@ -326,7 +329,7 @@ def test_assemble_blocked_url_is_reported_next_to_a_good_one(
     )
     assert detailed.json()["fragments"]
     status = statuses[harness.url(blocked)]
-    notes = concise.json()["context"].split("NINA notes (not from the pages):")[1]
+    notes = concise.json()["context"].split("\n<nina_notes>\n")[1]
     assert f"- source_failed: {harness.url(blocked)} was not used" in notes
     hints = detailed.json()["hints"]
     assert {"url": harness.url(blocked), "status": status} in [

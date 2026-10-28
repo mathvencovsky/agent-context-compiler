@@ -5,8 +5,13 @@ Item 4, order. Models use what sits in the middle of a long context worst
 fragments by ``(document_id, ord)``, so with several URLs the order of the
 documents is arbitrary. The ``order`` variant keeps the same fragments and
 puts the documents in order of their best fragment's value, each document still
-read top to bottom. Coverage cannot change; what moves is ``first_hit``, the
-position of the first fragment that carries the answer section.
+read top to bottom (within a document, page order beats score order: OP-RAG,
+NVIDIA 2024). The ``edges`` variant puts the best document first and the
+second best last, since models read both ends best (Liu et al.; Jin et al.,
+"Long-Context LLMs Meet RAG", 2024; Anthropic's long-context study found Claude
+best near the end). Coverage cannot change; what moves is where the answer
+sits: :func:`at_edge` is whether a fragment that carries the answer section is
+the first or the last one.
 
 Item 5, near duplicates. Similar text hurts answers more than unrelated text
 ("Context Rot", Chroma, 2025), and λ = 0 turned off the only defense against it
@@ -23,7 +28,7 @@ exactly like ``bench.m10a_selection``. Acceptance rules: DECISIONS.md
 
 Usage:
     uv run python -m bench.m10a_order_dedup --half A
-    uv run python -m bench.m10a_order_dedup --half B --confirm dedup
+    uv run python -m bench.m10a_order_dedup --half B --confirm edges
 """
 
 from __future__ import annotations
@@ -45,7 +50,7 @@ SHINGLE = 5
 NEAR_DUP = 0.8
 #: Item 5 is dropped without the variant if fewer selections hold a pair.
 MIN_DUP_SHARE = 0.05
-VARIANTS = ("current", "order", "dedup")
+VARIANTS = ("current", "order", "edges", "dedup")
 _OUT = Path("bench/results/m10a")
 _WORD = re.compile(r"\w+")
 
@@ -120,6 +125,26 @@ def order_by_document_value(selected: Sequence[Candidate]) -> list[Candidate]:
     return sorted(selected, key=lambda c: (-best[c.document_id], c.document_id, c.ord))
 
 
+def edges_by_document_value(selected: Sequence[Candidate]) -> list[Candidate]:
+    """Best document first, second best last, the rest between, in page order."""
+    ordered = order_by_document_value(selected)
+    docs = list(dict.fromkeys(c.document_id for c in ordered))
+    if len(docs) < 3:
+        return ordered
+    rank = docs[:1] + docs[2:] + docs[1:2]
+    pos = {d: i for i, d in enumerate(rank)}
+    return sorted(ordered, key=lambda c: (pos[c.document_id], c.ord))
+
+
+def at_edge(section_units: Sequence[str], context: str) -> bool:
+    """Whether the first or the last ``[URL]`` fragment holds a section unit."""
+    fragments = [f for f in context.split("[URL] ") if f.strip()]
+    if not fragments:
+        return False
+    ends = {0, len(fragments) - 1}
+    return any(unit in normalize(fragments[i]) for i in ends for unit in section_units)
+
+
 def variant_select(
     variant: str,
     text_of: Callable[[Candidate], str],
@@ -143,6 +168,8 @@ def variant_select(
                          min_value=min_value)  # fmt: skip
         if variant == "order":
             out = order_by_document_value(out)
+        elif variant == "edges":
+            out = edges_by_document_value(out)
         sink.append(out)
         return out
 
@@ -154,12 +181,13 @@ def measure_cell(
 ) -> dict[str, list[Any]]:
     """Per-task coverage, hit, first_hit and token precision for one variant."""
     cell: dict[str, list[Any]] = {"coverage": [], "hit": [], "first_hit": [],
-                                  "precision": []}  # fmt: skip
+                                  "edge": [], "precision": []}  # fmt: skip
     for ctx, section, su in zip(contexts, sections, section_units, strict=True):
         cov = coverage(su, ctx)
         cell["coverage"].append(cov)
         cell["hit"].append(cov >= HIT)
         cell["first_hit"].append(first_hit(su, ctx))
+        cell["edge"].append(at_edge(su, ctx))
         cell["precision"].append(token_precision(section, ctx).precision)
     return cell
 
@@ -168,7 +196,7 @@ def confirm_order(
     candidate: Mapping[int, Mapping[str, Sequence[Any]]],
     current: Mapping[int, Mapping[str, Sequence[Any]]],
 ) -> list[tuple[str, bool, str]]:
-    """DECISIONS 2026-10-28, item 4: the answer moves to the front, nothing lost."""
+    """DECISIONS 2026-10-28, item 4: the answer moves to an end, nothing lost."""
     from bench.m10a_diagnose import paired
 
     checks = []
@@ -180,10 +208,11 @@ def confirm_order(
             )
             if a and b
         ]
-        new = [candidate[budget]["first_hit"][i] == 1 for i in both]
-        old = [current[budget]["first_hit"][i] == 1 for i in both]
+        new = [candidate[budget]["edge"][i] for i in both]
+        old = [current[budget]["edge"][i] for i in both]
         p = paired(new, old) if both else {"diff": 0.0, "lo": 0.0, "hi": 0.0}
-        checks.append((f"answer first at {budget}: CI lower bound > 0", p["lo"] > 0,
+        checks.append((f"answer at an end at {budget}: CI lower bound > 0",
+                       p["lo"] > 0,
                        f"{p['diff']:+.3f} [{p['lo']:+.3f}, {p['hi']:+.3f}] "
                        f"on {len(both)} hits"))  # fmt: skip
         drop = statistics.mean(candidate[budget]["coverage"]) - statistics.mean(
@@ -242,7 +271,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--half", choices=["A", "B"], default="A")
-    parser.add_argument("--confirm", choices=["order", "dedup"])
+    parser.add_argument("--confirm", choices=["order", "edges", "dedup"])
     args = parser.parse_args(argv)
 
     embeddings = CachingEmbeddingProvider(OpenAIEmbeddingProvider())
@@ -311,19 +340,21 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
     ]
     out += ["", "## Variants", "",
             "| variant | budget | hit | coverage | tokens | answer first "
-            "| median first_hit | token precision |",
-            "|---|---|---|---|---|---|---|---|"]  # fmt: skip
+            "| answer at an end | median first_hit | token precision |",
+            "|---|---|---|---|---|---|---|---|---|"]  # fmt: skip
     for variant in VARIANTS:
         for b in BUDGETS:
             c = measured[variant][b]
             hits = [f for f in c["first_hit"] if f is not None]
             first = sum(f == 1 for f in hits) / len(hits) if hits else 0.0
             med = statistics.median(hits) if hits else 0
+            hit_edges = [e for e, h in zip(c["edge"], c["hit"], strict=True) if h]
+            edge = sum(hit_edges) / len(hit_edges) if hit_edges else 0.0
             out.append(
                 f"| {variant} | {b} | {statistics.mean(c['hit']):.3f} "
                 f"| {statistics.mean(c['coverage']):.3f} "
                 f"| {statistics.mean(token_counts[variant][b]):,.0f} | {first:.3f} "
-                f"| {med} | {statistics.mean(c['precision']):.3f} |"
+                f"| {edge:.3f} | {med} | {statistics.mean(c['precision']):.3f} |"
             )
     worst = max(dup_share[b] / n for b in BUDGETS)
     if worst < MIN_DUP_SHARE:
@@ -332,8 +363,8 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
     name = f"order_dedup_{args.half}"
     if args.confirm:
         name = f"confirm_{args.confirm}_{args.half}"
-        if args.confirm == "order":
-            checks = confirm_order(measured["order"], measured["current"])
+        if args.confirm in ("order", "edges"):
+            checks = confirm_order(measured[args.confirm], measured["current"])
         else:
             base = {
                 (r["task_id"], int(r["budget"])): r

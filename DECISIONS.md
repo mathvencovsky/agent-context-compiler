@@ -10,6 +10,53 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: páginas que respondem 200 sem documentação (Emenda 16), a partir dos PDFs sobre Firecrawl
+Contexto: o humano trouxe 5 textos sobre o Firecrawl (Blott ×2, fastCRW, Jacar, ApiX-Drive). O único com conteúdo técnico novo, o do fastCRW, lista falhas que o código HTTP não mostra: soft 404 (200 com "página não encontrada"), parede de consentimento de cookies, desafio anti-bot e casca de SPA vazia. O NINA já não guarda páginas de erro HTTP (Emenda 15), mas não detecta essas quatro. O mesmo site relata que, desde 2026-09-15, a Cloudflare bloqueia por padrão crawlers de IA de uso misto em páginas com anúncios (o MDN tem anúncios).
+Decisão:
+- No benchmark (`bench/page_health.py`, Emenda 16): uma tarefa cuja página citada, no snapshot, é vazia (<200 caracteres) ou curta (<2.000) com marcador de desafio, soft 404 ou consentimento sai de todos os braços antes de qualquer sessão (`drop_unhealthy` em `bench/m10_agent.py`). Busca ao vivo bloqueada fica na análise primária (é o que o braço faz de verdade), com tabela por braço e análise de sensibilidade sem essas tarefas.
+- No produto: o detector vira proposta para depois do M10 (warning `suspect_page` no `resolve`/`assemble`, sem descartar conteúdo). O `app/` está congelado (Emenda 15) e um warning novo aparece em `<nina_notes>`, então mudaria o sistema medido.
+Alternativas: mexer no `app/` agora (exige recongelar e muda o braço `nina` sem medição no dev); excluir também tarefas com busca ao vivo bloqueada da análise primária (esconderia um custo real do concorrente e seria decidido olhando sessões); não fazer nada (tarefa defeituosa conta como erro de todos os braços de corpus e favorece o `webfetch_live`).
+Consequências: Emenda 16; `make m10a-pending` já lista as exclusões sem custo; `docs/CONCORRENTES.md` registra o que os PDFs trazem; SPEC inalterada até a proposta de produto ser aprovada depois do M10.
+
+## 2026-10-28: `app/` recongelado agora, com o congelamento verificado pelo harness (Emenda 15)
+Contexto: o congelamento estava adiado até as medições do dev voltarem. O humano delegou a decisão ("você sabe o que seria melhor para o NINA").
+Decisão: recongelar já. Uma emenda pode ser substituída por outra antes de qualquer dado, então esperar só atrasava o piloto; se uma medição do dev for aceita, uma nova emenda recongela. O harness passa a conferir os ids de árvore git de `app/` e `migrations/` (`FROZEN_TREES` em `bench/m10_agent.py`) e se recusa a rodar com outro código; um teste confere que os ids são os da Emenda 15. Novo alvo `make m10a-pending` roda as medições sem custo que faltam.
+Alternativas: esperar as medições (o piloto ficaria bloqueado sem ganho); manter o congelamento só no texto (uma rodada poderia começar com código não congelado por engano).
+Consequências: o piloto pode rodar assim que houver chaves e teto de gasto. Qualquer mudança no `app/` antes do M10 exige nova emenda e novos ids.
+
+## 2026-10-28: decisões abertas fechadas pelo critério "seguro e eficiente" (humano delegou)
+Contexto: o humano pediu para seguir "o que for mais lógico para manter a proposta do NINA segura e eficiente" nas decisões abertas de `docs/PESQUISA_LABS.md` §3.
+Decisão (critério: nunca favorecer o NINA no M10; no produto, o comportamento mais seguro e mais barato para o usuário):
+- Tarefas com página acima de 500 mil caracteres: excluídas de todos os braços, com contagem (`drop_over_ceiling` em `bench/m10_agent.py`). Remove justamente onde o NINA mais ganharia; viés contra a tese.
+- `resolve_url` e `get_document` do NINA: sem anotação de tamanho. Para o usuário, o Claude Code salvar a página gigante em arquivo é proteção e economia; no M10 isso só pode prejudicar o braço `nina`.
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` nas sessões: nenhuma flag remota, atualização ou telemetria durante a rodada.
+- Skill `skills/nina-docs/SKILL.md` (produto): ensina pergunta curta, leitura de `<nina_notes>` e `exclude_chunk_ids`; um teste garante que só cita ferramentas e códigos que existem. O M10 roda sem skills.
+- Recongelamento do `app/`: continua para depois das medições do dev (itens 4/5, P3, U2), que ainda podem mudar o `app/`.
+Alternativas: dar ao `full_page` uma ferramenta de leitura de arquivo (muda o braço); anotar 500 mil também no NINA (pior para o usuário real); deixar as flags remotas ligadas (deriva entre piloto e rodada principal).
+Consequências: Emenda 14 do PREREG.
+
+## 2026-10-28: propostas da pesquisa nas empresas e universidades, implementadas (humano: "vamos implementar essas mudanças")
+Contexto: `docs/PESQUISA_LABS.md` §3 listava as propostas que mudam o protocolo ou o produto. O humano pediu para implementá-las.
+Decisão:
+- C3 (produto, SPEC §8/§9): o formato conciso troca os cabeçalhos Markdown por `<document>`, `<fragment>` e `<nina_notes>`; as três tags dentro do texto de página ou de atributos viram `&lt;…`, e atributos são escapados. Testado contra uma página que fecha o fragmento e escreve notas falsas. Custo medido: +3,7% de tokens (~12 por fragmento) num resultado de 12 fragmentos.
+- M3 (produto): `_meta["anthropic/searchHint"]` nas três ferramentas MCP; o esquema delas fica em 788 tokens (teto de 800 mantido, descrição do `assemble_context` enxugada).
+- A2, U1 e A5 (protocolo, Emenda 13 do PREREG): rubrica com o raciocínio antes do veredicto, lista de alternativas com uma errada é incorreta, e o campo `abstained`; `results.csv` ganha a coluna `abstained`; os avaliadores humanos veem a mesma rubrica sem as duas instruções exclusivas do juiz.
+- A1 (protocolo, Emenda 13): `bench/m10_analysis.py` calcula H1 e H2 com o bootstrap por tarefa do §6 e, como sensibilidade, por grupo de tarefas que dividem a primeira página citada.
+- A4 (bench): preços de cache do Sonnet 5.5 (2,50/0,10) e do Opus 5.5 (5,00/0,20) no `bench/prices.yaml`, gravação de 5 min, conforme a tabela oficial lida em 2026-10-28.
+- U2 (medição): `bench/m10a_version.py`, regra fixada antes de medir: na metade A, com menos de 20 tarefas que nomeiam uma versão e têm candidatos de duas ou mais versões, o U2 para por falta de poder; senão passa na metade B se a cobertura nessas tarefas sobe em 4k e 8k (estimativa pontual > 0) e nenhum orçamento perde mais de 0,5 pt no total.
+Alternativas: devolver um bloco de conteúdo MCP por fragmento (mais forte, mas exige mudar o contrato da API, porque o MCP só repassa o `context`); marcação de dados (datamarking) dentro do texto (mexe nos tokens das páginas).
+Consequências: o `app/` mudou de novo (formato conciso, metadados MCP); vai na emenda de recongelamento. As decisões abertas restantes são as tarefas acima de 500 mil caracteres, o limite de tamanho nas ferramentas de página inteira do NINA e desligar o tráfego não essencial do CLI.
+
+## 2026-10-28: pesquisa nas grandes empresas de IA — achados e correções no harness
+Contexto: leitura completa dos textos da Anthropic sobre avaliação de agentes, ruído de infraestrutura, estatística de avaliações, uso de ferramentas e contexto longo; documentação oficial do Claude Code; guia de prompts do GPT-4.1 e avaliadores oficiais da OpenAI (GitHub); relatórios Gemini 1.5/2.5 (DeepMind); e, por resumos, BRIGHT, OP-RAG, "Long-Context LLMs Meet RAG", "Sufficient Context", "Why Language Models Hallucinate", Spotlighting e outros. Detalhes em `docs/PESQUISA_LABS.md`.
+Decisão (feita no `bench/`, restaura o que o PREREG já pedia; Emenda 12):
+- `fetch_page` e `search_docs` declaram `anthropic/maxResultSizeChars = 500000`; sem isso o Claude Code salvaria em arquivo, ilegível para o agente, toda página acima de 50 mil caracteres.
+- O harness fixa `CLAUDE_CODE_EFFORT_LEVEL=medium`, `FORCE_PROMPT_CACHING_5M=1` e `CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK=1`.
+- `bench/m10_result_limits.py` conta as páginas acima do teto de 500 mil caracteres.
+- Item 4 (regra revista antes de qualquer medição): a literatura não manda pôr a resposta "em primeiro", e sim numa das pontas (Liu et al.; Jin et al. 2024; estudo de contexto longo da Anthropic) e manter a ordem da página dentro de cada documento (OP-RAG, NVIDIA). Nova variante `edges` (melhor documento no começo, segundo melhor no fim). Critério: em cada orçamento, entre as tarefas com acerto nas duas variantes, a fração com a seção no primeiro ou no último fragmento sobe com limite inferior do IC 95% pareado > 0, e a cobertura não cai mais de 0,5 pt. Na metade A escolhe-se, entre `order` e `edges`, a de maior fração nas pontas.
+Alternativas: deixar os padrões do CLI soltos (o piloto poderia medir outro custo que a rodada principal); dar ao `full_page` uma ferramenta de leitura de arquivo (muda o braço; decisão do humano, ver `docs/PESQUISA_LABS.md`).
+Consequências: nada mudou em `app/`. Ficam para o humano decidir os achados que mudam o protocolo ou o produto (lista em `docs/PESQUISA_LABS.md` §3).
+
 ## 2026-10-28: propostas de context engineering P1–P7 (aprovadas pelo humano)
 Contexto: `docs/CONTEXT_ENGINEERING.md` (leitura completa dos textos da Anthropic sobre engenharia de contexto e dos estudos ligados). O humano aprovou as sete propostas em 2026-10-28.
 Decisão:
