@@ -45,7 +45,7 @@ from bench.page_length import page_markdown
 from bench.runners.naive_rag import NaiveRagRunner
 from bench.runners.ours import OursRunner, _extract_ir, _source_for
 from bench.runners.strong_rag import StrongRagRunner
-from bench.section_recall import HIT, coverage, first_hit, units
+from bench.section_recall import HIT, coverage, first_hit, token_precision, units
 from bench.snapshot import DEFAULT_CORPUS_DIR
 from bench.tasks_schema import ExternalTask, Task, load_external_tasks
 
@@ -76,6 +76,8 @@ class Row:
     hit: bool
     first_hit: int | None
     ms: float
+    precision: float = 0.0  # share of the context's tokens that are the section
+    iou: float = 0.0  # token-level intersection over union with the section
 
 
 def bench_task(task: ExternalTask) -> Task:
@@ -95,8 +97,9 @@ def bench_task(task: ExternalTask) -> Task:
 
 
 def _row(task: ExternalTask, system: str, budget: int, ctx: str, ms: float,
-         section_units: Sequence[str]) -> Row:  # fmt: skip
+         section_units: Sequence[str], section: str) -> Row:  # fmt: skip
     cov = coverage(section_units, ctx)
+    tp = token_precision(section, ctx)
     return Row(
         task_id=task.id,
         site=task.site,
@@ -107,6 +110,8 @@ def _row(task: ExternalTask, system: str, budget: int, ctx: str, ms: float,
         hit=cov >= HIT,
         first_hit=first_hit(section_units, ctx),
         ms=ms,
+        precision=tp.precision,
+        iou=tp.iou,
     )
 
 
@@ -120,13 +125,14 @@ def measure(
     budgets: Sequence[int] = BUDGETS,
 ) -> list[Row]:
     """Every system's rows for one task (``None`` providers mean the fakes)."""
-    section_units = units(key["section"])
+    sec = key["section"]
+    section_units = units(sec)
     query_task = bench_task(task)
     rows = []
 
     start = perf_counter()
     ctx = "\n\n".join(f"[URL] {u}\n{page_markdown(store, u)}" for u in task.urls)
-    rows.append(_row(task, "full_page", 0, ctx, _ms(start), section_units))
+    rows.append(_row(task, "full_page", 0, ctx, _ms(start), section_units, sec))
 
     page = key["url"]
     start = perf_counter()
@@ -134,10 +140,12 @@ def measure(
     ir = to_markdown(
         _extract_ir(store.raw_bytes(page), store.content_type(page), source)
     )
-    rows.append(_row(task, "extract_nina", 0, ir, _ms(start), section_units))
+    rows.append(_row(task, "extract_nina", 0, ir, _ms(start), section_units, sec))
     start = perf_counter()
     md = page_markdown(store, page)
-    rows.append(_row(task, "extract_trafilatura", 0, md, _ms(start), section_units))
+    rows.append(
+        _row(task, "extract_trafilatura", 0, md, _ms(start), section_units, sec)
+    )
 
     naive = NaiveRagRunner()
     strong = StrongRagRunner(embeddings=embeddings, reranker=reranker)
@@ -146,7 +154,7 @@ def measure(
             start = perf_counter()
             result = runner.build_context(query_task, budget_tokens=budget, store=store)
             rows.append(
-                _row(task, name, budget, result.text, _ms(start), section_units)
+                _row(task, name, budget, result.text, _ms(start), section_units, sec)
             )
 
     settings = get_settings()
@@ -164,7 +172,7 @@ def measure(
         start = perf_counter()
         result = nina.assemble_from_candidates(prepared, budget_tokens=budget)
         ms = prepare_ms + _ms(start)  # time to the answer at this budget
-        rows.append(_row(task, "nina", budget, result.text, ms, section_units))
+        rows.append(_row(task, "nina", budget, result.text, ms, section_units, sec))
     return rows
 
 
@@ -180,8 +188,8 @@ def summarize(rows: Iterable[Row]) -> str:
     order = {name: i for i, name in enumerate(SYSTEMS)}
     lines = [
         "| system | budget | n | hit rate | mean coverage | mean tokens "
-        "| coverage per 1k tokens | median ms |",
-        "|---|---|---|---|---|---|---|---|",
+        "| coverage per 1k tokens | token precision | token IoU | median ms |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for (system, budget), group in sorted(
         groups.items(), key=lambda kv: (order.get(kv[0][0], 99), kv[0][1])
@@ -193,6 +201,8 @@ def summarize(rows: Iterable[Row]) -> str:
             f"| {system} | {budget or 'page'} | {len(group)} "
             f"| {sum(r.hit for r in group) / len(group):.3f} | {cov:.3f} "
             f"| {tokens:,.0f} | {per_1k:.3f} "
+            f"| {statistics.mean(r.precision for r in group):.3f} "
+            f"| {statistics.mean(r.iou for r in group):.3f} "
             f"| {statistics.median(r.ms for r in group):,.0f} |"
         )
     return "\n".join(lines) + "\n"

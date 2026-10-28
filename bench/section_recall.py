@@ -7,12 +7,21 @@ extractors render differently deleted (Markdown emphasis, code and heading
 marks, backslash escapes, table pipes, quote markers, ¶). :func:`coverage` is
 the share of units found in a context; a task is a hit when coverage is at least
 ``HIT``. These rules are fixed before any system is measured.
+
+:func:`token_precision` adds the other side (2026-10-28, before any system was
+measured with it): the share of a context's tokens that belong to the section,
+and the token-level intersection over union (Chroma, "Evaluating Chunking
+Strategies for Retrieval", 2024). Coverage says whether the answer arrived;
+precision says how much of what the agent paid for was the answer.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
+
+from app.index.tokens import count_tokens
 
 #: Shortest unit kept; shorter lines are headings or labels, not answers.
 MIN_WORDS = 4
@@ -56,3 +65,43 @@ def first_hit(section_units: Sequence[str], context: str) -> int | None:
         if any(unit in haystack for unit in section_units):
             return position
     return None
+
+
+@dataclass(frozen=True)
+class TokenPrecision:
+    """How much of a context is the section, in ``cl100k_base`` tokens."""
+
+    on_section: int  # tokens of context pieces found in the section
+    context: int  # all tokens of the context
+    precision: float  # on_section / context
+    iou: float  # on_section / (context + section - on_section)
+
+
+def token_precision(section: str, context: str) -> TokenPrecision:
+    """Token-level precision and IoU of ``context`` against ``section``.
+
+    The context is cut like :func:`units` (lines, then sentence ends). A piece
+    is on the section when it has at least ``MIN_WORDS`` words and its
+    normalized text is in the normalized section. Each distinct piece counts
+    once: a repeated sentence is waste, not answer. Everything else (headers,
+    URLs, short labels, other text) counts only in the denominator.
+    """
+    haystack = normalize(section)
+    seen: set[str] = set()
+    on = 0
+    for line in context.splitlines():
+        for piece in _SENTENCE_END.split(line):
+            unit = normalize(piece)
+            if len(unit.split()) < MIN_WORDS or unit in seen:
+                continue
+            if unit in haystack:
+                seen.add(unit)
+                on += count_tokens(piece)
+    total = count_tokens(context)
+    union = total + count_tokens(section) - on
+    return TokenPrecision(
+        on_section=on,
+        context=total,
+        precision=on / total if total else 0.0,
+        iou=on / union if union > 0 else 0.0,
+    )
