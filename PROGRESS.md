@@ -1,6 +1,8 @@
 # PROGRESS
 
 Marco atual: **M10a (aprofundar o NINA antes do piloto), melhorias sem custo**.
+**`app/` congelado na Emenda 15 (2026-10-28): pronto para o piloto quando
+houver chaves e teto de gasto.**
 Últimas etapas (2026-10-28): pesquisa sem custo a partir de estudos e
 publicações, e as propostas de context engineering P1–P7 (seções abaixo); cinco
 medições esperam o humano rodar com corpus e cache.
@@ -25,8 +27,10 @@ Pelo critério do humano ("seguro e eficiente"), Emenda 14 do PREREG:
 - skill `skills/nina-docs/SKILL.md` para agentes (produto), citada no
   QUICKSTART.
 
-Pendente: as medições do dev (humano) e, depois delas, a emenda de
-recongelamento do `app/`.
+Atualização: o `app/` foi recongelado na Emenda 15 (o harness confere os ids
+das árvores git e se recusa a rodar com outro código). O piloto pode rodar
+quando houver chaves e teto. As medições do dev rodam com `make m10a-pending`;
+se alguma for aceita, uma nova emenda recongela.
 
 ### M10a/M10 — propostas da pesquisa implementadas (2026-10-28)
 

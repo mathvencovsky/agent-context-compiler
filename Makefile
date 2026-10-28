@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate check test bench dev
+.PHONY: setup up down migrate check test bench dev m10a-pending
 
 # First run: dependencies, .env (never over an existing one), services, schema.
 setup:
@@ -27,3 +27,15 @@ bench:
 
 dev:
 	uv run uvicorn app.main:app --reload
+
+# The zero-cost M10a measurements still to run (corpus and provider cache
+# needed). Each cache-only script prints "paid calls"; any number above 0 means
+# the cache missed and the run cost money. tokenizer_ratio uses Anthropic's free
+# token-counting endpoint (an Anthropic key in .env).
+m10a-pending:
+	uv run python -m bench.m10_result_limits
+	uv run python -m bench.m10a_baseline --real
+	uv run python -m bench.m10a_order_dedup --half A
+	uv run python -m bench.m10a_section_expand --half A
+	uv run python -m bench.m10a_version --half A
+	uv run python -m bench.tokenizer_ratio
