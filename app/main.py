@@ -86,6 +86,14 @@ def create_app() -> FastAPI:
     """Build and return the FastAPI application."""
     configure_logging()
 
+    if get_settings().env == "dev":
+        # Loud on purpose: dev mode has no authentication and no rate limit,
+        # and serves loopback connections only (app/api/auth.py, audit A3).
+        logger.warning(
+            "auth.disabled",
+            reason="ENV=dev: no API keys, no rate limit; loopback connections only",
+        )
+
     app = FastAPI(title="NINA", version="0.1.0")
     # Outermost first: the usage middleware records ONE event per /v1 request
     # (M9) and the request-id middleware binds the log context. add_middleware

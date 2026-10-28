@@ -18,6 +18,7 @@ test database and flip ``env`` to ``production`` via ``app.dependency_overrides`
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -62,6 +63,25 @@ AuthSessionFactoryDep = Annotated[
 ]
 
 
+def _dev_connection_is_local(request: Request) -> bool:
+    """True when the connection arrived on a loopback address (or no socket).
+
+    ``scope["server"]`` is the LOCAL address the connection was accepted on
+    (uvicorn fills it from the socket), so a server bound to ``0.0.0.0`` is
+    still usable from ``127.0.0.1`` but refuses connections that came in on a
+    network interface. Names that are not IP literals (the in-process test
+    client's ``testserver``, a unix socket path) carry no network exposure.
+    """
+    server = request.scope.get("server")
+    if not server:
+        return True
+    host = str(server[0]).strip("[]")
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return True
+
+
 def _bearer_token(request: Request) -> str:
     """Extract the Bearer token, raising :class:`Unauthorized` if absent/malformed."""
     header = request.headers.get("authorization")
@@ -84,6 +104,15 @@ def require_api_key(
     ``request.state.api_key`` for the usage layer (FEAT-002).
     """
     if settings.env == "dev":
+        if not _dev_connection_is_local(request):
+            # ENV=dev disables authentication and rate limiting. That is only
+            # acceptable for a developer's own machine: a connection that
+            # arrived on a non-loopback interface means the dev server is
+            # reachable from the network (audit A3). Fail closed.
+            raise Unauthorized(
+                "ENV=dev accepts loopback connections only; "
+                "set ENV=production to serve the network"
+            )
         principal = AuthPrincipal(api_key=None)
         setattr(request.state, REQUEST_STATE_API_KEY, None)
         return principal
