@@ -16,6 +16,20 @@ respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
 
+### M10b — régua de extração sem custo (2026-10-28)
+
+Medida "antes" da Fase P (`docs/PESQUISA_RODADA3.md` §7, passos 1–2), sem
+tocar em `app/`:
+- `bench/extract_eval/`: baixa do GitHub o WCXB-docs (131 páginas, CC-BY-4.0)
+  e 7 PDFs com 64 fatos verificados à mão, confere o sha256 e mede o NINA
+  contra trafilatura e readability (F1, vazamento, palavras coladas, código,
+  tabelas) e os fatos de PDF. Split dev/test por hash, fixado antes de medir.
+- Linha de base e regras de aceite: `bench/results/extract_eval_baseline.md`.
+  Dev: NINA F1 0,912 (R 0,949, vazamento 4,3%) contra trafilatura 0,915
+  (R 0,904, 2,3%); PDF: 15 de 64 fatos.
+- Testar: `make extract-eval` (dev + PDF, portões automáticos) e
+  `uv run pytest tests/unit/bench/test_extract_eval.py`.
+
 ### M10a/M10 — páginas que respondem 200 sem documentação (2026-10-28)
 
 A partir dos cinco PDFs sobre o Firecrawl trazidos pelo humano
