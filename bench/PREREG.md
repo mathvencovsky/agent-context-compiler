@@ -768,6 +768,47 @@ CANDIDATE:
 - **Data seen:** none from any arm. No agent session, screen, pilot or
   main-run session had run.
 
+### Amendment 16 — 2026-10-28: pages that answer 200 without documentation
+
+- **What changed:**
+  1. **Snapshot pages.** Before the screen and the main run, a task is
+     excluded from every arm when one of its cited pages, as frozen-snapshot
+     Markdown (`bench/page_length.page_markdown`), is shorter than 200
+     characters, or is shorter than 2,000 characters and is a bot challenge
+     (Cloudflare "Just a moment...", CAPTCHA, "access denied"), a soft 404
+     ("page not found" or "404" in its first 300 characters) or a cookie-consent
+     wall. The rule is `bench/page_health.classify`. The harness writes the ids,
+     pages and cases to `excluded_unhealthy.json`, and the report gives the
+     count. Pilot tasks follow the same rule. It runs after the Amendment 14
+     exclusion.
+  2. **Live fetches.** After the run, `bench/page_health.blocked_sessions`
+     reads the transcripts and counts, per arm, the fetch-tool results
+     (`fetch_page`, `WebFetch`, `resolve_url`, `get_document`) that are a
+     challenge, a soft 404 or a tool error, and lists the (task, arm) sessions
+     with any. The report gives this table. Comparisons that involve
+     `webfetch_live` or `context7_live` are also reported without the tasks
+     where that arm had such a session, as a sensitivity analysis. The primary
+     analyses keep every task.
+- **Why:**
+  - Point 1: an HTTP error page is already never stored (Amendment 15,
+    `9e2e745`), but a site can answer 200 with a page that is not the
+    documentation. No corpus arm can find the answer in such a snapshot, while
+    `webfetch_live` reads today's page, so keeping the task would bias the
+    comparison against the corpus arms, `nina` among them. The task is
+    defective, not hard. Missing snapshots count as empty and are excluded the
+    same way.
+  - Point 2: a vendor blog (fastCRW, 2026-07-21) reports that from 2026-09-15
+    Cloudflare blocks mixed-use AI crawlers on ad-supported pages by default,
+    and some listed sites (MDN among them) carry ads, so a live fetch can get a
+    challenge instead of the page. That is
+    what the live arm does in the real world, so the primary analysis keeps it.
+    The sensitivity analysis shows how much of any gap comes from blocked
+    fetches, in either direction.
+  - Both checks look only at page text and tool results, never at whether an
+    answer was correct.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
