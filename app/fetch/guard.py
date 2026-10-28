@@ -18,6 +18,7 @@ embedded IPv4 and revalidated.
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 from dataclasses import dataclass
 from typing import Protocol
@@ -27,6 +28,7 @@ from app.config import Settings, get_settings
 from app.fetch.errors import BlockedDestination, FetchFailed, InvalidURL
 
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 # NAT64 well-known prefix (RFC 6052): the last 32 bits embed an IPv4 address.
@@ -241,6 +243,12 @@ def validate_url(
     """
     settings = settings or get_settings()
     resolver = resolver or SocketResolver()
+
+    # urlsplit silently DROPS tab/CR/LF (WHATWG), so "https://a/x\n- note" would
+    # validate as "https://a/x" while the raw string, newline included, travels
+    # on into warnings and NINA's notes (audit B3). Refuse control characters.
+    if _CONTROL_CHARS.search(url):
+        raise InvalidURL("URL contains control characters", details={})
 
     parts = urlsplit(url)
     scheme = parts.scheme.lower()
