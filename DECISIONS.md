@@ -10,6 +10,16 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: pesquisa nas grandes empresas de IA — achados e correções no harness
+Contexto: leitura completa dos textos da Anthropic sobre avaliação de agentes, ruído de infraestrutura, estatística de avaliações, uso de ferramentas e contexto longo; documentação oficial do Claude Code; guia de prompts do GPT-4.1 e avaliadores oficiais da OpenAI (GitHub); relatórios Gemini 1.5/2.5 (DeepMind); e, por resumos, BRIGHT, OP-RAG, "Long-Context LLMs Meet RAG", "Sufficient Context", "Why Language Models Hallucinate", Spotlighting e outros. Detalhes em `docs/PESQUISA_LABS.md`.
+Decisão (feita no `bench/`, restaura o que o PREREG já pedia; Emenda 12):
+- `fetch_page` e `search_docs` declaram `anthropic/maxResultSizeChars = 500000`; sem isso o Claude Code salvaria em arquivo, ilegível para o agente, toda página acima de 50 mil caracteres.
+- O harness fixa `CLAUDE_CODE_EFFORT_LEVEL=medium`, `FORCE_PROMPT_CACHING_5M=1` e `CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK=1`.
+- `bench/m10_result_limits.py` conta as páginas acima do teto de 500 mil caracteres.
+- Item 4 (regra revista antes de qualquer medição): a literatura não manda pôr a resposta "em primeiro", e sim numa das pontas (Liu et al.; Jin et al. 2024; estudo de contexto longo da Anthropic) e manter a ordem da página dentro de cada documento (OP-RAG, NVIDIA). Nova variante `edges` (melhor documento no começo, segundo melhor no fim). Critério: em cada orçamento, entre as tarefas com acerto nas duas variantes, a fração com a seção no primeiro ou no último fragmento sobe com limite inferior do IC 95% pareado > 0, e a cobertura não cai mais de 0,5 pt. Na metade A escolhe-se, entre `order` e `edges`, a de maior fração nas pontas.
+Alternativas: deixar os padrões do CLI soltos (o piloto poderia medir outro custo que a rodada principal); dar ao `full_page` uma ferramenta de leitura de arquivo (muda o braço; decisão do humano, ver `docs/PESQUISA_LABS.md`).
+Consequências: nada mudou em `app/`. Ficam para o humano decidir os achados que mudam o protocolo ou o produto (lista em `docs/PESQUISA_LABS.md` §3).
+
 ## 2026-10-28: propostas de context engineering P1–P7 (aprovadas pelo humano)
 Contexto: `docs/CONTEXT_ENGINEERING.md` (leitura completa dos textos da Anthropic sobre engenharia de contexto e dos estudos ligados). O humano aprovou as sete propostas em 2026-10-28.
 Decisão:

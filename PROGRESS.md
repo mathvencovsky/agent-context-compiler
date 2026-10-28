@@ -14,6 +14,28 @@ respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
 
+### M10a/M10 — pesquisa nas grandes empresas de IA (2026-10-28)
+
+`docs/PESQUISA_LABS.md`: textos da Anthropic, doc do Claude Code, OpenAI (via
+GitHub), Google DeepMind e benchmarks, aplicados ao M10 antes de qualquer gasto.
+
+- **Crítico, corrigido:** o Claude Code salva em arquivo (ilegível para os
+  braços) todo resultado MCP acima de 50 mil caracteres, apesar do
+  `MAX_MCP_OUTPUT_TOKENS`. O `full_page` não veria nenhuma página acima de ~12
+  mil tokens. `fetch_page` e `search_docs` agora declaram
+  `anthropic/maxResultSizeChars = 500000` (o teto do CLI), com teste em stdio.
+- **Crítico, corrigido:** esforço, validade do cache e troca de modelo fixados
+  nos padrões de hoje (`PINNED_ENV` em `bench/m10_agent.py`). Emenda 12 do
+  PREREG.
+- **Crítico, proposto:** uma página consegue forjar as "NINA notes" no formato
+  conciso (testado); proposta de blocos MCP separados por fragmento.
+- **Item 4:** regra revista antes de medir (resposta numa das pontas) e nova
+  variante `edges`.
+- **Novo:** `bench/m10_result_limits.py` (páginas acima do teto).
+- **Decisões abertas:** `docs/PESQUISA_LABS.md` §3.
+
+Para rodar (humano): `uv run python -m bench.m10_result_limits`.
+
 ### M10a — context engineering: propostas P1–P7 feitas (2026-10-28)
 
 Pesquisa em `docs/CONTEXT_ENGINEERING.md`; as sete propostas foram aprovadas pelo
