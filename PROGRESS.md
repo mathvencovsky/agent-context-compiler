@@ -20,6 +20,15 @@ harness recusa rodar até o recongelamento no fim do M10b.**
   (estão `TODO`); publicar o carimbo do PREREG antes do piloto; salvar os PDFs
   da seção 8 da pesquisa.
 - Em andamento: Fase P (produto), começando pelo banco de testes de extração.
+- Fase P, passo 5 (interface, branch `claude/m10b-interface`): `title` e
+  `readOnlyHint`/`openWorldHint` nas ferramentas MCP, `excerpt` e `date` em
+  cada `<document>` do conciso (`page_tokens` e `date` em `sources[]`), linha
+  "Do not use" nas instruções do servidor e skill pedindo URL e `chunk`
+  (DECISIONS.md 2026-10-28, M10b interface). Muda `app/`: listar na emenda de
+  recongelamento. Fora: âncora `#seção` (muda seleção) e `max_age` (contrato).
+  Teste manual: `assemble` conciso de uma página com
+  `article:modified_time` mostra `excerpt="N fragments of a ~T-token page"
+  date="AAAA-MM-DD"`.
 Últimas etapas (2026-10-28): pesquisa sem custo a partir de estudos e
 publicações, e as propostas de context engineering P1–P7 (seções abaixo); cinco
 medições esperam o humano rodar com corpus e cache.
