@@ -10,6 +10,18 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: propostas da pesquisa nas empresas e universidades, implementadas (humano: "vamos implementar essas mudanças")
+Contexto: `docs/PESQUISA_LABS.md` §3 listava as propostas que mudam o protocolo ou o produto. O humano pediu para implementá-las.
+Decisão:
+- C3 (produto, SPEC §8/§9): o formato conciso troca os cabeçalhos Markdown por `<document>`, `<fragment>` e `<nina_notes>`; as três tags dentro do texto de página ou de atributos viram `&lt;…`, e atributos são escapados. Testado contra uma página que fecha o fragmento e escreve notas falsas. Custo medido: +3,7% de tokens (~12 por fragmento) num resultado de 12 fragmentos.
+- M3 (produto): `_meta["anthropic/searchHint"]` nas três ferramentas MCP; o esquema delas fica em 788 tokens (teto de 800 mantido, descrição do `assemble_context` enxugada).
+- A2, U1 e A5 (protocolo, Emenda 13 do PREREG): rubrica com o raciocínio antes do veredicto, lista de alternativas com uma errada é incorreta, e o campo `abstained`; `results.csv` ganha a coluna `abstained`; os avaliadores humanos veem a mesma rubrica sem as duas instruções exclusivas do juiz.
+- A1 (protocolo, Emenda 13): `bench/m10_analysis.py` calcula H1 e H2 com o bootstrap por tarefa do §6 e, como sensibilidade, por grupo de tarefas que dividem a primeira página citada.
+- A4 (bench): preços de cache do Sonnet 5.5 (2,50/0,10) e do Opus 5.5 (5,00/0,20) no `bench/prices.yaml`, gravação de 5 min, conforme a tabela oficial lida em 2026-10-28.
+- U2 (medição): `bench/m10a_version.py`, regra fixada antes de medir: na metade A, com menos de 20 tarefas que nomeiam uma versão e têm candidatos de duas ou mais versões, o U2 para por falta de poder; senão passa na metade B se a cobertura nessas tarefas sobe em 4k e 8k (estimativa pontual > 0) e nenhum orçamento perde mais de 0,5 pt no total.
+Alternativas: devolver um bloco de conteúdo MCP por fragmento (mais forte, mas exige mudar o contrato da API, porque o MCP só repassa o `context`); marcação de dados (datamarking) dentro do texto (mexe nos tokens das páginas).
+Consequências: o `app/` mudou de novo (formato conciso, metadados MCP); vai na emenda de recongelamento. As decisões abertas restantes são as tarefas acima de 500 mil caracteres, o limite de tamanho nas ferramentas de página inteira do NINA e desligar o tráfego não essencial do CLI.
+
 ## 2026-10-28: pesquisa nas grandes empresas de IA — achados e correções no harness
 Contexto: leitura completa dos textos da Anthropic sobre avaliação de agentes, ruído de infraestrutura, estatística de avaliações, uso de ferramentas e contexto longo; documentação oficial do Claude Code; guia de prompts do GPT-4.1 e avaliadores oficiais da OpenAI (GitHub); relatórios Gemini 1.5/2.5 (DeepMind); e, por resumos, BRIGHT, OP-RAG, "Long-Context LLMs Meet RAG", "Sufficient Context", "Why Language Models Hallucinate", Spotlighting e outros. Detalhes em `docs/PESQUISA_LABS.md`.
 Decisão (feita no `bench/`, restaura o que o PREREG já pedia; Emenda 12):
