@@ -32,6 +32,10 @@ GitHub), Google DeepMind e benchmarks, aplicados ao M10 antes de qualquer gasto.
 - **Item 4:** regra revista antes de medir (resposta numa das pontas) e nova
   variante `edges`.
 - **Novo:** `bench/m10_result_limits.py` (páginas acima do teto).
+- **Segunda rodada (universidades e startups, §2b):** três propostas novas
+  (juiz raciocina antes do veredicto; preferir a versão nomeada na pergunta;
+  poda de frases, para depois do M10) e várias confirmações (rerank de 30,
+  chunking por estrutura, trafilatura como comparador forte).
 - **Decisões abertas:** `docs/PESQUISA_LABS.md` §3.
 
 Para rodar (humano): `uv run python -m bench.m10_result_limits`.

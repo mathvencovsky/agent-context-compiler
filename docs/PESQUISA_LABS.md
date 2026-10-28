@@ -201,6 +201,96 @@ parte.
 - Sessões isoladas, leitura obrigatória de transcrições no piloto, uma
   variável por vez nas metades A e B.
 
+## 2b. Universidades e startups (segunda rodada, 2026-10-28)
+
+Os sites de universidades e startups estão todos bloqueados aqui. Li no GitHub
+o que os autores publicam lá (READMEs, tabelas de resultado e código): StackEval
+(Prosus), Signal and Noise (AI2), avaliação do trafilatura, Late Chunking (Jina),
+SWE-agent (Princeton), RAFT e Gorilla (Berkeley), Self-RAG, ColBERT (Stanford),
+RECOMP, RAGTruth, ARES, RAGAS, UMBRELA e Ragnarök (Waterloo), GitChameleon,
+VersiCode, CodeUpdateArena, BEIR, MTEB, FreshQA, mcp-scan (Invariant Labs). O
+resto veio de resumos de busca.
+
+### O que muda algo
+
+**U1. O juiz decide antes de explicar.**
+- **Fontes:**
+  - o avaliador do BrowseComp (OpenAI) e o do StackEval, o trabalho mais
+    próximo do M10 (perguntas do Stack Overflow, resposta aceita como gabarito,
+    juiz LLM validado contra humanos), raciocinam com a referência antes do
+    veredicto;
+  - um estudo de 2025 (arXiv 2504.03846) mostra que raciocinar antes de julgar
+    reduz o viés de o juiz preferir as próprias respostas.
+- **O problema:** nossa rubrica pede `{"correct": …, "reason": …}`, com o
+  veredicto primeiro e a razão depois.
+- **Proposta:** inverter para `{"reason": …, "correct": …}`. Muda o texto
+  congelado do Apêndice B, então é emenda, antes de qualquer julgamento.
+  Combina com a Proposta A (respostas em lista).
+
+**U2. Documentação da versão errada piora a resposta.**
+- **Fontes:**
+  - ClashEval (Stanford, NeurIPS 2024): modelos adotam conteúdo recuperado
+    errado, contra o que já sabiam certo, em mais de 60% dos casos;
+  - GitChameleon 2.0 (NeurIPS 2025): os melhores modelos acertam só 48 a 51%
+    do código que depende da versão da biblioteca;
+  - Jin et al. 2024: distratores muito parecidos com a resposta confundem mais
+    que os fracos.
+- **Leitura:** o aviso `mixed_versions` (P7) vai na direção certa, mas só
+  avisa.
+- **Proposta (experimento no dev, sem custo):** quando a pergunta nomeia uma
+  versão ("Python 3.12", "React 18"), dar preferência aos fragmentos das URLs
+  dessa versão. O PREREG já tem o tipo de tarefa `version` para medir.
+
+**U3. Podar frases, não só escolher pedaços.**
+- **Fonte:** Provence (NAVER, ICLR 2025): podar as frases irrelevantes dentro
+  dos trechos com um modelo do tipo reranker corta até 80% do contexto e
+  mantém ou melhora a resposta.
+- **Leitura:** não é LLM gerativo, então cabe na regra de extração
+  determinística se o modelo for fixo. É a alavanca mais forte que achei para
+  a tese de eficiência.
+- **Custo:** um modelo novo ou muitas chamadas de rerank. Fica para depois do
+  M10, como pesquisa.
+
+### O que confirma escolhas atuais
+
+- **Rerank de 30 candidatos.** "Drowning in Documents" (Databricks, Stanford e
+  outros, 2024): reranquear mais documentos tem retorno decrescente e pode
+  piorar. Não vale subir para 150 como a Anthropic.
+- **Pedaços por estrutura, sem "chunking semântico".** Vectara (2024): o
+  chunking semântico não compensa o custo de forma consistente.
+- **trafilatura no braço `full_page`.** No benchmark do próprio trafilatura
+  (990 páginas, 2026-10-02) ele tem F 0,926, contra 0,853 do readability, que
+  o NINA usa como base. O comparador principal é o mais forte entre os
+  extratores abertos, o que torna a comparação honesta. No dev, depois do item
+  4, a extração do NINA retém a seção em 0,989 das tarefas, contra 0,978 do
+  trafilatura.
+- **Triagem `no_docs`.** Mallen et al. (UW, ACL 2023): recuperar documentos
+  ajuda nas perguntas pouco conhecidas e pode atrapalhar nas muito conhecidas.
+  A triagem tira estas últimas.
+- **Valor de produto das citações.** Estudo de Purdue com 517 perguntas do
+  Stack Overflow: 52% das respostas do ChatGPT (GPT-3.5) estavam erradas, e as
+  pessoas só notavam o erro quando ele era óbvio; quando conferir exigia a
+  documentação, deixavam passar. Citação verificável resolve isso.
+- **Taxonomia de falhas.** "Seven Failure Points" (Deakin University, 2024)
+  separa conteúdo ausente, documento fora do topo, fora do contexto e não
+  extraído. É o que o PREREG §8 já mede (`retrieval_miss`, `selection_drop`,
+  `answerer_error`).
+- **Late Chunking (Jina):** exige vetores por token do modelo de embeddings,
+  que o nosso provedor não expõe. O caminho de seções no pedaço é a versão
+  determinística possível.
+
+### Riscos a vigiar
+
+- **Avaliadores humanos também gostam de texto longo.** No estudo de Purdue,
+  77% das respostas do ChatGPT eram prolixas e ainda assim preferidas em parte
+  dos casos. O `disagreement_by_length` compara juiz com humanos; se os dois
+  tiverem o mesmo viés, ele não aparece. Vale relatar o acerto por faixa de
+  tamanho da resposta também nos rótulos humanos.
+- **Envenenamento de ferramentas MCP.** Invariant Labs e o benchmark MCPTox
+  (36,5% de sucesso médio de ataque em 20 modelos): descrições de ferramenta
+  são superfície de ataque. As do NINA são estáticas e só falam das próprias
+  ferramentas; manter assim e mudar descrições só com versão nova.
+
 ## 3. Decisões suas
 
 1. **Tarefas com página acima de 500 mil caracteres.** Primeiro rode o
@@ -218,8 +308,9 @@ parte.
    o caminho principal do NINA é o `assemble_context`; ou declarar o limite
    também no produto.
 3. **C3** (separação estrutural do conteúdo), **A1** (bootstrap por
-   agrupamento), **A2** (rubrica), **A5** (abstenção) e **M3**
-   (`searchHint`): aprovar ou não. Os quatro primeiros são emenda ou mudança
+   agrupamento), **A2** (rubrica), **A5** (abstenção), **M3**
+   (`searchHint`), **U1** (juiz raciocina antes) e **U2** (experimento de
+   versão no dev): aprovar ou não. C3, A1, A2, A5 e U1 são emenda ou mudança
    de SPEC.
 4. **A4:** conferir os preços e autorizar a gravação no `prices.yaml`.
 5. **Tráfego não essencial:** desligar `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`
@@ -259,6 +350,21 @@ Google: relatório Gemini 2.5, https://storage.googleapis.com/deepmind-media/gem
 https://cloud.google.com/blog/products/ai-machine-learning/optimizing-rag-retrieval ·
 "Sufficient Context", https://arxiv.org/pdf/2411.06037 ·
 "Long-Context LLMs Meet RAG", https://arxiv.org/abs/2410.05983
+
+Universidades e startups: StackEval, https://github.com/ProsusAI/stack-eval ·
+trafilatura (benchmark), https://github.com/adbar/trafilatura/blob/master/docs/evaluation.rst ·
+Late Chunking, https://github.com/jina-ai/late-chunking ·
+"Drowning in Documents", https://arxiv.org/abs/2411.11767 ·
+"Is Semantic Chunking Worth the Computational Cost?", https://arxiv.org/abs/2410.13070 ·
+Provence, https://arxiv.org/abs/2501.16214 ·
+ClashEval, https://arxiv.org/abs/2404.10198 ·
+GitChameleon 2.0, https://neurips.cc/virtual/2025/131646 ·
+Mallen et al., https://arxiv.org/abs/2212.10511 ·
+"Seven Failure Points", https://arxiv.org/abs/2401.05856 ·
+Kabir et al. (Purdue), "Who Answers It Better?" ·
+autopreferência e raciocínio antes de julgar, https://arxiv.org/pdf/2504.03846 ·
+MCP tool poisoning, https://github.com/invariantlabs-ai/mcp-injection-experiments ·
+TREC 2024 RAG (nuggets), https://arxiv.org/abs/2411.09607
 
 Outros: BRIGHT, https://github.com/xlang-ai/BRIGHT ·
 OP-RAG (NVIDIA), https://arxiv.org/abs/2409.01666 ·
