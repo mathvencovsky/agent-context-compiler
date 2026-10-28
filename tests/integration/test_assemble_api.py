@@ -556,3 +556,28 @@ def test_assemble_with_only_a_404_page_is_all_sources_failed(
     assert response.json()["error"]["details"]["sources"] == [
         {"url": harness.url(_AUTH_PATH), "status": "upstream_status"}
     ]
+
+
+def test_assemble_secret_url_fails_alone_next_to_a_good_one(
+    assemble_harness: AssembleHarness,
+) -> None:
+    harness = assemble_harness
+    harness.transport.set(_AUTH_PATH, lambda: html_response(_HTML_A))
+    leaky = harness.url(_AUTH_PATH) + "?token=abc123"
+    body = {
+        "query": "How are classes defined?",
+        "urls": [harness.url(_AUTH_PATH), leaky],
+    }
+
+    response = _post(harness, body)
+
+    assert response.status_code == 200, response.text
+    statuses = {s["url"]: s["status"] for s in response.json()["sources"]}
+    assert statuses[harness.url(_AUTH_PATH)] == "ok"
+    assert statuses[leaky] == "url_rejected_secret"
+
+    alone = _post(harness, {"query": "q", "urls": [leaky]})
+    assert alone.status_code == 422, alone.text
+    assert alone.json()["error"]["details"]["sources"] == [
+        {"url": leaky, "status": "url_rejected_secret"}
+    ]

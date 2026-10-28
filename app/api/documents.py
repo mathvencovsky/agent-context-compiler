@@ -64,6 +64,7 @@ from app.fetch.errors import UnsupportedContentType, UpstreamStatus
 from app.fetch.guard import GuardResult, Resolver, validate_url
 from app.fetch.render import RENDERED_WITH_BROWSER_WARNING_CODE, render_url
 from app.fetch.robots import RobotsChecker
+from app.fetch.url_secrets import reject_secret_url
 from app.index.tokens import count_tokens
 from app.store.blobs import BlobStore
 from app.store.models import DocumentVersion
@@ -346,6 +347,9 @@ def resolve_document(
     # Default usage units (M9): no render unless the fetch path renders below.
     if request is not None:
         set_usage_units(request, {"renders": 0})
+    # Before the guard, the cache and any network access (exfiltration via the
+    # request itself; also covers every assemble URL and the MCP tools).
+    reject_secret_url(req.url)
     guard = validate_url(req.url, resolver=resolver, settings=settings)
     normalized_url = guard.normalized_url
     document_id = make_document_id(normalized_url)

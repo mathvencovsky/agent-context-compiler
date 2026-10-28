@@ -77,6 +77,8 @@ migrations/
 - Redirecionamentos manuais, no máximo 5, com cada destino passando pelo guard de novo.
 - Limites: corpo de até 15 MB (lido em streaming e abortado ao passar), timeout total de 20 s, timeout de conexão de 5 s.
 - User-agent: `AgentContextBot/0.1 (+<url de contato configurável>)`.
+- URLs com caracteres de controle são recusadas (`invalid_url`). URLs que parecem carregar um segredo são recusadas antes de qualquer acesso à rede, em `resolve` e em cada URL do `assemble` (erro `url_rejected_secret`, 400; no `assemble` é falha por URL): userinfo, parâmetro de query/fragmento com nome de credencial (`token`, `api_key`, `secret`, `password`, `auth`, `session`, `sig`/`signature`, `X-Amz-Signature`...) e valor não vazio, valor em formato conhecido de chave (`sk-`, `ghp_`, `AKIA`, `xox*-`, `AIza`, `glpat-`, JWT, cabeçalho PEM) e valor de query/fragmento de alta entropia (32+ hex ou base64 misto). A mensagem nunca repete o valor (`app/fetch/url_secrets.py`).
+- O corpo é limitado depois de descomprimido (incrementalmente; `Content-Encoding` empilhado é recusado com `fetch_failed`) e o timeout total é um prazo de relógio que cobre redirects e leitura.
 
 ### 3.2 robots.txt
 
@@ -317,6 +319,7 @@ Agregados da chave atual por dia e por endpoint: requisições, tokens entregues
 |---|---|
 | invalid_url | 400 |
 | blocked_destination | 400 |
+| url_rejected_secret | 400 |
 | robots_disallowed | 403 |
 | robots_unavailable | 503 |
 | unauthorized | 401 |
