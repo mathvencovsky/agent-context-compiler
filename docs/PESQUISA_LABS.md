@@ -296,7 +296,10 @@ resto veio de resumos de busca.
 **Atualização (2026-10-28):** implementados, a pedido do humano: C3 (formato
 com tags, imune a falsificação), A1 (bootstrap por agrupamento), A2, U1 e A5
 (rubrica nova, Emenda 13), A4 (preços), M3 (`searchHint`) e U2 (script do
-experimento de versão). Continuam abertos os itens 1, 2 e 5 abaixo.
+experimento de versão). **Itens 1, 2 e 5 fechados em 2026-10-28** pelo
+critério "seguro e eficiente" (Emenda 14; DECISIONS): tarefas acima de 500 mil
+caracteres saem de todos os braços; as ferramentas de página inteira do NINA
+ficam sem anotação; o tráfego não essencial do CLI fica desligado nas sessões.
 
 
 1. **Tarefas com página acima de 500 mil caracteres.** Primeiro rode o

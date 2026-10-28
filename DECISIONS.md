@@ -10,6 +10,17 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: decisões abertas fechadas pelo critério "seguro e eficiente" (humano delegou)
+Contexto: o humano pediu para seguir "o que for mais lógico para manter a proposta do NINA segura e eficiente" nas decisões abertas de `docs/PESQUISA_LABS.md` §3.
+Decisão (critério: nunca favorecer o NINA no M10; no produto, o comportamento mais seguro e mais barato para o usuário):
+- Tarefas com página acima de 500 mil caracteres: excluídas de todos os braços, com contagem (`drop_over_ceiling` em `bench/m10_agent.py`). Remove justamente onde o NINA mais ganharia; viés contra a tese.
+- `resolve_url` e `get_document` do NINA: sem anotação de tamanho. Para o usuário, o Claude Code salvar a página gigante em arquivo é proteção e economia; no M10 isso só pode prejudicar o braço `nina`.
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` nas sessões: nenhuma flag remota, atualização ou telemetria durante a rodada.
+- Skill `skills/nina-docs/SKILL.md` (produto): ensina pergunta curta, leitura de `<nina_notes>` e `exclude_chunk_ids`; um teste garante que só cita ferramentas e códigos que existem. O M10 roda sem skills.
+- Recongelamento do `app/`: continua para depois das medições do dev (itens 4/5, P3, U2), que ainda podem mudar o `app/`.
+Alternativas: dar ao `full_page` uma ferramenta de leitura de arquivo (muda o braço); anotar 500 mil também no NINA (pior para o usuário real); deixar as flags remotas ligadas (deriva entre piloto e rodada principal).
+Consequências: Emenda 14 do PREREG.
+
 ## 2026-10-28: propostas da pesquisa nas empresas e universidades, implementadas (humano: "vamos implementar essas mudanças")
 Contexto: `docs/PESQUISA_LABS.md` §3 listava as propostas que mudam o protocolo ou o produto. O humano pediu para implementá-las.
 Decisão:
