@@ -282,6 +282,68 @@ local de provedores. O orçamento adaptativo foi medido sem custo e rejeitado na
 metade A (A1, `cd80170`): todo corte por relevância perdia mais cobertura do que
 economizava.
 
+## Firecrawl em 2026-10-28: Research Index, Developer Search e Deep Research
+
+Lido na íntegra: o README do repositório `firecrawl/firecrawl`, o README do
+`firecrawl-mcp-server`, as páginas "Research Index" e "Deep Research" (o
+texto-fonte está no repositório `firecrawl/firecrawl-docs`; o site
+docs.firecrawl.dev é bloqueado neste ambiente) e a skill
+`firecrawl-research-index` (repositório `firecrawl/cli`).
+
+**O que eles lançaram:**
+- **Research Index:** ~43 milhões de resumos de artigos (PubMed, bioRxiv,
+  medRxiv, arXiv). O recurso mais próximo do NINA é
+  `read_paper(id, question, k)`: dado um documento conhecido e uma pergunta,
+  devolve só os trechos que respondem. É o mesmo desenho do
+  `assemble_context`, num domínio diferente.
+- **Developer Search** (`firecrawl_developer_search`): um índice para agentes
+  de código com issues e PRs do GitHub, READMEs e documentação de código.
+  Devolve trechos por resultado, até `k = 100`. **É concorrente direto do NINA**
+  nas perguntas de programação, com o modelo de índice pré-montado (como o
+  Context7).
+- **Deep Research:** o caminho recomendado é um laço busca → raspar a página
+  inteira → LLM analisa → repetir. É exatamente o padrão `full_page` que o
+  NINA quer baratear.
+
+**O que isso diz para o NINA:**
+1. **Validação de mercado.** Um dos maiores fornecedores de contexto para
+   agentes construiu "trechos de um documento conhecido para uma pergunta".
+   Isso confirma o formato do produto.
+2. **O próprio Firecrawl manda evitar a página inteira.** O guia do MCP deles
+   diz para usar Markdown completo "com parcimônia", só quando a tarefa exige
+   a página toda, e preferir extração dirigida "para não estourar a janela de
+   contexto". Argumento de posicionamento: o NINA faz essa redução sem LLM,
+   com proveniência e dentro de um orçamento de tokens.
+3. **Onde o NINA difere do Developer Search:**
+   - sem índice: lê qualquer URL que o agente passa, e não sofre do problema de
+     manutenção que é 55% das issues do Context7;
+   - orçamento em tokens em vez de `k` resultados;
+   - texto literal com `document_id`, `version_id` e `chunk_id`;
+   - determinístico e auto-hospedável;
+   - o Firecrawl é AGPL-3.0, o que o NINA não pode usar como dependência.
+4. **Eles distribuem instruções ao agente por Skill, além do MCP.** A
+   documentação "recomenda fortemente" CLI ou MCP junto com uma skill
+   (`npx skills add …`). A skill de pesquisa ensina quando usar cada
+   ferramenta, como reformular a pergunta quando o resultado vem fraco ("passe
+   várias formulações distintas") e os erros comuns. É a divulgação
+   progressiva do texto da Anthropic sobre skills.
+   **Proposta:** uma `SKILL.md` do NINA (quando usar, pergunta curta,
+   `exclude_chunk_ids`, como ler `<nina_notes>`). Só produto; o braço `nina` do
+   M10 roda sem skills (`skills=[]`).
+5. **Resultados grandes.** Acima de ~20 mil tokens estimados (bytes ÷ 4), o
+   Firecrawl devolve um aviso curto e guarda o resultado num espaço de
+   trabalho que o agente consulta por Bash. É a resposta deles ao limite de 50
+   mil caracteres do Claude Code (`docs/PESQUISA_LABS.md`, C1). Confirma que o
+   limite é real e afeta todo fornecedor de página inteira.
+6. **Atrito de adoção.** O MCP hospedado deles tem um nível gratuito sem chave
+   (scrape, search e parse limitados por taxa), e o Research Index funciona sem
+   chave para começar. O NINA exige chave e uma pilha pesada para hospedar,
+   que é o maior tema de issues dos projetos abertos (seção acima). Uma
+   demonstração hospedada sem chave seria a maior alavanca de adoção; é M11.
+7. **Quantidade de ferramentas.** O perfil completo do MCP deles tem 27
+   ferramentas, e por isso oferecem perfis de 3 e de 9. O NINA tem 3, dentro
+   da faixa em que a Anthropic diz que a escolha de ferramenta funciona bem.
+
 ## Fontes
 
 - Anthropic, "Writing effective tools for agents": https://www.anthropic.com/engineering/writing-tools-for-agents
@@ -296,4 +358,8 @@ economizava.
 - Jina ReaderLM-v2: https://arxiv.org/html/2503.01151v1
 - Crawl4AI fit markdown: https://docs.crawl4ai.com/core/fit-markdown/
 - llms.txt na prática: https://www.digitalapplied.com/blog/llms-txt-in-practice-adoption-evidence-2026
+- Firecrawl (lido em 2026-10-28): https://github.com/firecrawl/firecrawl ·
+  https://github.com/firecrawl/firecrawl-mcp-server ·
+  https://github.com/firecrawl/firecrawl-docs (features/research.mdx, use-cases/deep-research.mdx) ·
+  https://github.com/firecrawl/cli (skills/firecrawl-research-index/SKILL.md)
 - Issues públicas (coletadas em 2026-10-17): https://github.com/upstash/context7/issues, https://github.com/firecrawl/firecrawl/issues, https://github.com/unclecode/crawl4ai/issues e https://github.com/jina-ai/reader/issues
