@@ -108,6 +108,14 @@ FROZEN_SETTINGS = (
     "embeddings_query_prefix",
     "reranker_base_url",
     "reranker_score_transform",
+    # M10b efficiency (DECISIONS 2026-10-29): when a render stops waiting and how
+    # many renders run at once change what the browser captures, so a run uses
+    # the recorded defaults.
+    "render_stable_interval_ms",
+    "render_stable_window_ms",
+    "render_stable_cap_ms",
+    "render_total_timeout_s",
+    "render_concurrency",
 )
 
 
