@@ -29,6 +29,20 @@ harness recusa rodar até o recongelamento no fim do M10b.**
   Teste manual: `assemble` conciso de uma página com
   `article:modified_time` mostra `excerpt="N fragments of a ~T-token page"
   date="AAAA-MM-DD"`.
+- Fase P, passo 3 (Markdown, branch `claude/m10b-markdown`): `text/markdown`,
+  `text/x-markdown` e `text/plain` viram documento (`app/extract/markdown.py`,
+  `markdown-it-py`, MIT); Markdown alternativo da mesma origem
+  (`markdown_alternate`) e `Accept: text/markdown` (`fetch_accept_markdown`),
+  os dois desligados e travados no harness (`FROZEN_SETTINGS`). DECISIONS.md
+  2026-10-29, SPEC §3.5. Muda `app/`: listar na emenda de recongelamento,
+  inclusive que páginas `text/plain` congeladas (ex.: `rfc2046.txt`) deixam de
+  falhar. Pendente: calibrar o limiar 0,7 em páginas com alternativo antes de
+  ligar `markdown_alternate`; spec OpenAPI no lugar de Swagger UI/Redoc (resto
+  do passo 3). Teste manual: `resolve` de
+  `https://www.rfc-editor.org/rfc/rfc2046.txt` devolve títulos `1. Introduction`
+  etc.; com `MARKDOWN_ALTERNATE=true`, uma página com
+  `<link rel="alternate" type="text/markdown">` traz `source.alternate_url` e o
+  warning `markdown_alternate_used`.
 Últimas etapas (2026-10-28): pesquisa sem custo a partir de estudos e
 publicações, e as propostas de context engineering P1–P7 (seções abaixo); cinco
 medições esperam o humano rodar com corpus e cache.

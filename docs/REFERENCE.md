@@ -8,7 +8,7 @@ commands and milestone status. Contracts and algorithms are specified in
 ## How it works
 
 ```
-URL ──▶ fetch guard (SSRF, robots.txt) ──▶ HTML │ PDF │ SPA (Playwright)
+URL ──▶ fetch guard (SSRF, robots.txt) ──▶ HTML │ PDF │ Markdown/text │ SPA (Playwright)
     ──▶ IR block tree (app/extract) ──▶ Markdown / JSON                    resolve
     ──▶ chunks (≤ 800 tokens) ──▶ lexical (tsvector) + vector (pgvector) index
 
@@ -24,7 +24,7 @@ specified in [`SPEC.md`](SPEC.md).
 | Path | Role |
 |---|---|
 | `app/fetch` | guarded HTTP client, robots.txt, render decision, Playwright rendering |
-| `app/extract` | HTML/PDF → IR block tree, Markdown, metadata |
+| `app/extract` | HTML/PDF/Markdown/plain text → IR block tree, Markdown, metadata |
 | `app/index` | chunking, embeddings, lexical and vector indexing |
 | `app/retrieve` | search, RRF, rerank, selection, `assemble_context` |
 | `app/api`, `app/usage` | FastAPI routes, API keys, rate limits, usage events |
