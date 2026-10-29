@@ -48,7 +48,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_c4dd3ad0e5cc',
+        'block_id': 'b_86c1c3c63bd0',
         'data': dict({
         }),
         'heading_path': list([
@@ -60,23 +60,7 @@
         ]),
         'order': 3,
         'page': 1,
-        'text': 'Keys are shown once at creation and stored only as a hash.',
-        'type': 'paragraph',
-      }),
-      dict({
-        'block_id': 'b_791bb71533d3',
-        'data': dict({
-        }),
-        'heading_path': list([
-          'NINA API Reference',
-          'Authentication',
-        ]),
-        'level': None,
-        'links': list([
-        ]),
-        'order': 4,
-        'page': 1,
-        'text': 'Rotating a key invalidates the previous value immediately.',
+        'text': 'Keys are shown once at creation and stored only as a hash. Rotating a key invalidates the previous value immediately.',
         'type': 'paragraph',
       }),
       dict({
@@ -89,13 +73,13 @@
         'level': 2,
         'links': list([
         ]),
-        'order': 5,
+        'order': 4,
         'page': 1,
         'text': 'Rate Limits',
         'type': 'heading',
       }),
       dict({
-        'block_id': 'b_a4531b2da23b',
+        'block_id': 'b_bb35d46d4496',
         'data': dict({
         }),
         'heading_path': list([
@@ -105,41 +89,9 @@
         'level': None,
         'links': list([
         ]),
-        'order': 6,
+        'order': 5,
         'page': 1,
-        'text': 'The default quota is one thousand requests per hour.',
-        'type': 'paragraph',
-      }),
-      dict({
-        'block_id': 'b_d2fc90a680b4',
-        'data': dict({
-        }),
-        'heading_path': list([
-          'NINA API Reference',
-          'Rate Limits',
-        ]),
-        'level': None,
-        'links': list([
-        ]),
-        'order': 7,
-        'page': 1,
-        'text': 'Exceeding the quota returns a 429 response with a reset time.',
-        'type': 'paragraph',
-      }),
-      dict({
-        'block_id': 'b_767d1750a689',
-        'data': dict({
-        }),
-        'heading_path': list([
-          'NINA API Reference',
-          'Rate Limits',
-        ]),
-        'level': None,
-        'links': list([
-        ]),
-        'order': 8,
-        'page': 1,
-        'text': 'Burst traffic is smoothed with a token-bucket algorithm.',
+        'text': 'The default quota is one thousand requests per hour. Exceeding the quota returns a 429 response with a reset time. Burst traffic is smoothed with a token-bucket algorithm.',
         'type': 'paragraph',
       }),
       dict({
@@ -152,7 +104,7 @@
         'level': 2,
         'links': list([
         ]),
-        'order': 9,
+        'order': 6,
         'page': 1,
         'text': 'Errors',
         'type': 'heading',
@@ -168,13 +120,13 @@
         'level': None,
         'links': list([
         ]),
-        'order': 10,
+        'order': 7,
         'page': 1,
         'text': 'Errors follow the envelope error.code and error.message.',
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_69bc652d8b39',
+        'block_id': 'b_63c8ce8c8b65',
         'data': dict({
         }),
         'heading_path': list([
@@ -184,29 +136,28 @@
         'level': None,
         'links': list([
         ]),
-        'order': 11,
+        'order': 8,
         'page': 1,
-        'text': 'A blocked destination returns the blocked_destination code.',
+        'text': 'A blocked destination returns the blocked_destination code. An empty extraction returns the extraction_empty code.',
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_67f708b7cd68',
+        'block_id': 'b_b97ef9ba2421',
         'data': dict({
         }),
         'heading_path': list([
           'NINA API Reference',
-          'Errors',
         ]),
-        'level': None,
+        'level': 2,
         'links': list([
         ]),
-        'order': 12,
-        'page': 1,
-        'text': 'An empty extraction returns the extraction_empty code.',
-        'type': 'paragraph',
+        'order': 9,
+        'page': 2,
+        'text': 'Reference Table',
+        'type': 'heading',
       }),
       dict({
-        'block_id': 'b_c9ef540a9b81',
+        'block_id': 'b_0274d8f9e1c0',
         'data': dict({
           'caption': None,
           'headers': list([
@@ -241,30 +192,15 @@
         }),
         'heading_path': list([
           'NINA API Reference',
-          'Errors',
+          'Reference Table',
         ]),
         'level': None,
         'links': list([
         ]),
-        'order': 13,
+        'order': 10,
         'page': 2,
         'text': 'Code Status Meaning invalid_url 400 URL malformed or forbidden s too_large 413 Body exceeded the size limit extraction_empty 422 No extractable text was found timeout 504 Connect or total timeout exce',
         'type': 'table',
-      }),
-      dict({
-        'block_id': 'b_b97ef9ba2421',
-        'data': dict({
-        }),
-        'heading_path': list([
-          'NINA API Reference',
-        ]),
-        'level': 2,
-        'links': list([
-        ]),
-        'order': 14,
-        'page': 2,
-        'text': 'Reference Table',
-        'type': 'heading',
       }),
     ]),
     'document_id': 'doc_1ba251b959409010',
@@ -274,7 +210,7 @@
       'lang': None,
       'modified_at': None,
       'published_at': None,
-      'title': None,
+      'title': 'NINA API Reference',
     }),
     'source': dict({
       'content_hash': 'c01a8d84da698a3edfd7f616b878f615832485d4c3970e23d039a90223db15f1',

@@ -248,3 +248,34 @@ by humans; `main_content` is plain text, so code and table checks rely on
   this change alone ΔF1 +0.0059, ΔP +0.0109, Δrecall −0.0011, leak −0.0072
   (dev −0.0053); gates PASS, both targeted metrics beyond half their dev
   effect. Accepted.
+- 2026-10-29 (Phase P step 1, PDF extraction, commits `766543e`..`c907415`;
+  note written BEFORE the re-run it announces): the single test look
+  (`make extract-eval ARGS="--split test"`) printed `automatic gates: PASS`,
+  but only the tail of its output (PDF facts) was read, not the `[test]`
+  paired deltas. A second invocation then ran by mistake with its output
+  discarded unread. The change touches only `app/extract/pdf.py`,
+  `app/fetch/detect.py` and `app/api/documents.py` (the HTML extractor is
+  untouched and deterministic, dev deltas are exactly 0), so one more run
+  with `--out` only records the numbers of that same look; no decision
+  depends on it and nothing is changed after it.
+- 2026-10-29: Phase P step 1 (PDF: words, paragraphs, tables, columns,
+  title/outline, `%PDF-` sniffing, `pages_without_text`), `app/` at commit
+  `c907415`. PDF facts 15/64 -> **64/64** (heading 10/10, order 4/4,
+  paragraphs 10/10, present 25/25, table_cell 6/6, table_count 5/5, title
+  4/4); long-token rate 22.8% -> 0.1% (per pdfTeX file at most 0.2%,
+  GeoTopo); paragraphs per page RISC-V 25.8 -> 10.8, GeoTopo 52.5 -> 26.9,
+  two-column 34.7 -> 5.3, outline 27.2 -> 5.0, minimal 9.0 -> 2.0,
+  LibreOffice 0.0 -> 1.0, Google Docs 22.0 -> 17.0; tables 205 -> 100, empty
+  15 -> 0. Gates: P1 (no baseline fact lost) and P5 pass; P2, P3, P4 and the
+  end-of-step target (>= 52/64) pass. HTML unchanged: dev and test paired
+  deltas exactly 0 (F1, recall, precision, leak, without), glued 251 -> 251
+  (dev) and 119 -> 119 (test), code and table recalls unchanged; automatic
+  gates PASS on dev and on test. C4: no rule keys on a document, font name or
+  fact string (generic geometry; monospace/bold by font-name family only, as
+  before). Caveat: the facts have no holdout; as a smoke check only (no
+  facts, not a gate), seven unseen PDFs (two arXiv two-column papers, a
+  Chrome-printed web page, ECMA-262 by Prince, a reportlab deck, a pdfTeX
+  outline sample) went from 20-51% long tokens to 0% (ECMA-262: 6.4%, all
+  real grammar identifiers) and from 8/496 empty tables to 0. Extraction
+  time on the 238-page RISC-V manual 10.9 s -> 13.5 s (31 s before the
+  linear glyph dedupe).

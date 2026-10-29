@@ -123,6 +123,33 @@ def test_timeout(harness: Harness) -> None:
     _assert_error_envelope(response, "timeout", 504)
 
 
+@pytest.mark.parametrize(
+    "declared", ["application/octet-stream", "binary/octet-stream", "text/plain", ""]
+)
+def test_pdf_with_wrong_content_type_is_extracted(
+    harness: Harness, declared: str
+) -> None:
+    """A PDF body (``%PDF-``) under a wrong or missing type is still a PDF.
+
+    It is extracted as a PDF (200, page provenance) and the mismatch is said
+    in ``warnings`` (G L2), instead of failing with unsupported_content_type.
+    """
+    pdf = read_pdf_fixture("api_reference.pdf")
+    headers = {"content-type": declared} if declared else {}
+    harness.transport.set(
+        _PATH, lambda: httpx.Response(200, content=pdf, headers=headers)
+    )
+    response = harness.client.post(
+        "/v1/documents/resolve",
+        json={"url": harness.url(_PATH), "formats": ["blocks"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    codes = [w["code"] for w in body["warnings"]]
+    assert "content_type_mismatch" in codes
+    assert body["blocks"] and all(b["page"] >= 1 for b in body["blocks"])
+
+
 def test_extraction_empty(harness: Harness) -> None:
     """A textless PDF yields no content -> extraction_empty (422)."""
     harness.transport.set(
