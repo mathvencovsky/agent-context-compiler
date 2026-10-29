@@ -60,7 +60,7 @@ from operator import itemgetter
 from typing import TYPE_CHECKING, Any
 
 import pdfplumber
-from pdfplumber.utils import cluster_objects
+from pdfplumber.utils.clustering import cluster_objects
 
 from app.config import Settings, get_settings
 from app.extract.ir import (
