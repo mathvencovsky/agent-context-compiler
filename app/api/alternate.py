@@ -44,6 +44,7 @@ from app.extract.markdown import (
 from app.fetch.client import FetchResult
 from app.fetch.detect import detect_charset, parse_content_type
 from app.fetch.errors import FetchError
+from app.fetch.url_secrets import find_secret
 
 MARKDOWN_ALTERNATE_USED_WARNING_CODE = "markdown_alternate_used"
 MARKDOWN_ALTERNATE_FAILED_WARNING_CODE = "markdown_alternate_failed"
@@ -81,20 +82,23 @@ def use_markdown_alternate(
     alt_url = find_markdown_alternate(html_text, page_url, link_header)
     if alt_url is None:
         return None, None
+    # A URL that looks like it carries a secret is refused by the fetcher and
+    # never echoed in a warning (SPEC §3.1).
+    shown = alt_url if find_secret(alt_url) is None else "a URL that looks secret"
 
     try:
         result = fetch_alternate(alt_url)
     except FetchError as exc:
-        return _failed(alt_url, f"fetch failed ({exc.code})")
+        return _failed(shown, f"fetch failed ({exc.code})")
     if not 200 <= result.status < 300:
-        return _failed(alt_url, f"it answered HTTP {result.status}")
+        return _failed(shown, f"it answered HTTP {result.status}")
     if not same_origin(result.final_url, page_url):
-        return _failed(alt_url, "it redirected to another origin")
+        return _failed(shown, "it redirected to another origin")
     if (
         result.content_type not in MARKDOWN_CONTENT_TYPES
         and result.content_type != PLAIN_TEXT_CONTENT_TYPE
     ):
-        return _failed(alt_url, f"content-type {result.content_type!r}")
+        return _failed(shown, f"content-type {result.content_type!r}")
 
     _media, charset = parse_content_type(result.headers.get("content-type"))
     text = result.body.decode(
@@ -105,14 +109,14 @@ def use_markdown_alternate(
     parse_source = http_source.model_copy(update={"final_url": result.final_url})
     doc = extract_markdown(text, parse_source)
     if not doc.blocks:
-        return _failed(alt_url, "it is empty")
+        return _failed(shown, "it is empty")
 
     agreement = text_agreement(
         "\n".join(b.text for b in doc.blocks), visible_text(html_text)
     )
     if agreement < settings.markdown_alternate_min_overlap:
         return _failed(
-            alt_url,
+            shown,
             f"only {agreement:.2f} of its text appears on the HTML page "
             f"(minimum {settings.markdown_alternate_min_overlap:.2f})",
         )

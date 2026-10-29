@@ -25,6 +25,7 @@ from app.extract.html import extract_html
 from app.extract.ir import Document, SourceInfo
 from app.fetch.client import FetchResult
 from app.fetch.errors import BlockedDestination, RobotsDisallowed
+from app.fetch.url_secrets import reject_secret_url
 
 PAGE = "https://docs.example.com/guide/auth"
 
@@ -43,14 +44,16 @@ def _head(link: str) -> str:
         ),
         (
             _head(
-                '<link rel="Alternate nofollow" type="text/markdown; charset=utf-8" href="/a.md#x">'
+                '<link rel="Alternate nofollow" '
+                'type="text/markdown; charset=utf-8" href="/a.md#x">'
             ),
             None,
             "https://docs.example.com/a.md",
         ),
         (
             _head("<p>none</p>"),
-            '</other>; rel="next", </guide/auth.md>; rel="alternate"; type="text/markdown"',
+            '</other>; rel="next", '
+            '</guide/auth.md>; rel="alternate"; type="text/markdown"',
             "https://docs.example.com/guide/auth.md",
         ),
         # the header wins over the <link> element
@@ -291,3 +294,16 @@ def test_source_without_alternate_serializes_as_before() -> None:
     source = _html_doc(_html()).source
     assert "alternate_url" not in source.model_dump()
     assert "alternate_content_hash" not in source.model_dump_json()
+
+
+def test_secret_looking_alternate_is_refused_and_never_echoed() -> None:
+    secret = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+    html = _html(f"auth.md?token={secret}")
+
+    def fetch(url: str) -> FetchResult:
+        reject_secret_url(url)  # what the resolve path's fetcher does first
+        raise AssertionError("a secret-looking URL reached the network")
+
+    message = _failure(html, fetch)
+    assert "url_rejected_secret" in message
+    assert secret not in message and "token=" not in message

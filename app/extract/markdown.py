@@ -523,10 +523,11 @@ class _MarkdownWalker:
 #: "RFC 9110            HTTP Semantics            June 2022").
 _PAGE_FOOTER = re.compile(r"\[Page \d+\]\s*$")
 _PAGE_HEADER = re.compile(r"^RFC \d+\s{2,}.*\s{2,}\S.*$")
-#: A numbered section title at column 0 ("1.  Introduction", "3.2.1. Foo",
-#: "Appendix A.  Collected ABNF").
+#: A numbered section title at column 0 ("1.  Introduction", "3.2.1 Foo",
+#: "Appendix A.  Collected ABNF"). The number needs at least one dot, so a
+#: lone "200 OK" or "2026 release" line stays a paragraph.
 _SECTION_TITLE = re.compile(
-    r"^(?P<num>(?:\d+(?:\.\d+)*\.?)|(?:Appendix [A-Z](?:\.\d+)*\.?))\s+\S"
+    r"^(?P<num>(?:\d+\.(?:\d+\.?)*)|(?:Appendix [A-Z](?:\.\d+)*\.?))\s+\S"
 )
 _SECTION_MAX_CHARS = 100
 #: Lines longer than this are never page furniture or a figure row (and the

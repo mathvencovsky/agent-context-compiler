@@ -145,7 +145,9 @@ def test_empty_markdown_is_never_a_silent_200(harness: Harness) -> None:
     harness.transport.set(
         "/empty.md",
         lambda: httpx.Response(
-            200, content=b"<!-- nothing -->\n", headers={"content-type": "text/markdown"}
+            200,
+            content=b"<!-- nothing -->\n",
+            headers={"content-type": "text/markdown"},
         ),
     )
     body = _resolve(harness, "/empty.md")
@@ -344,3 +346,30 @@ def test_accept_markdown_opt_in(harness: Harness, site: Site) -> None:
     assert page_accepts and page_accepts[0] is not None
     assert page_accepts[0].startswith("text/markdown")
     assert body["source"]["content_type"] == "text/markdown"
+
+
+@pytest.mark.parametrize(
+    ("path", "body", "ctype", "first_heading"),
+    [
+        ("/guide/tokens.md", MARKDOWN, "text/markdown; charset=utf-8", "Tokens"),
+        ("/rfc/rfc9110.txt", RFC_TEXT, "text/plain", "1. Introduction"),
+    ],
+)
+def test_markdown_and_plain_text_urls_over_loopback(
+    harness: Harness,
+    site: Site,
+    path: str,
+    body: bytes,
+    ctype: str,
+    first_heading: str,
+) -> None:
+    # The whole production path (robots, guard, client) on a real socket.
+    _serve(site, path, body, ctype)
+    resolved = _resolve(harness, path)
+    assert _paths(site) == [path]
+    assert resolved["source"]["final_url"] == harness.url(path)
+    assert resolved["source"]["content_type"] == ctype.split(";")[0]
+    headings = [b["text"] for b in resolved["blocks"] if b["type"] == "heading"]
+    assert headings[0] == first_heading
+    assert all(b["block_id"].startswith("b_") for b in resolved["blocks"])
+    assert resolved["trust"] == "untrusted_source"

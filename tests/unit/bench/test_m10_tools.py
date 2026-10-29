@@ -131,6 +131,21 @@ def test_overridden_nina_settings_are_refused() -> None:
         check_frozen_settings(Settings(_env_file=None, selection_lambda=0.3))  # type: ignore[call-arg]
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"markdown_alternate": True},
+        {"markdown_alternate_min_overlap": 0.5},
+        {"fetch_accept_markdown": True},
+    ],
+)
+def test_markdown_source_settings_are_frozen_off(change: dict[str, object]) -> None:
+    # SPEC §3.5: snapshot runs must not fetch a Markdown alternate (absent from
+    # the frozen corpus) nor negotiate Markdown.
+    with pytest.raises(SystemExit, match="PREREG"):
+        check_frozen_settings(Settings(_env_file=None, **change))  # type: ignore[arg-type, call-arg]
+
+
 def test_candidate_log_appends_what_the_reranker_scored(tmp_path: Path) -> None:
     log = tmp_path / "candidates.jsonl"
     reranker = _CandidateLog(FakeRerankProvider(), log)

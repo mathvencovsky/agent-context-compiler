@@ -323,3 +323,13 @@ def test_plain_text_without_structure_is_paragraphs() -> None:
         ("paragraph", "Second paragraph."),
     ]
     assert doc.metadata.title == "First line wraps here."
+
+
+def test_plain_text_numbers_without_a_dot_are_not_section_titles() -> None:
+    text = "200 OK\n\n3.2.1 Retries\n\n2026 release notes\n"
+    doc = extract_plain_text(text, _source(text, "https://e.example.com/a.txt"))
+    assert [(b.type, b.text) for b in doc.blocks] == [
+        ("paragraph", "200 OK"),
+        ("heading", "3.2.1 Retries"),
+        ("paragraph", "2026 release notes"),
+    ]

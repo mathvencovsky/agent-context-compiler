@@ -81,6 +81,12 @@ FROZEN_SETTINGS = (
     "embedding_dim",
     "reranker_model",
     "render_min_text_chars",
+    # Markdown sources (SPEC §3.5, M10b): the frozen corpus holds only the
+    # cited pages, so a Markdown alternate would 404 and add a warning, and an
+    # Accept preference would be ignored by the corpus transport. Both stay off.
+    "markdown_alternate",
+    "markdown_alternate_min_overlap",
+    "fetch_accept_markdown",
 )
 
 
