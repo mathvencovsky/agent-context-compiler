@@ -261,3 +261,14 @@ def test_without_main_a_complete_readability_pick_is_kept() -> None:
     doc = extract_html(_NO_MAIN, _source())
     assert "format produces output" in " ".join(b.text for b in doc.blocks)
     assert not any(w.code == "readability_fallback" for w in doc.warnings)
+
+
+@pytest.mark.parametrize(
+    "raw", ["", "  \n ", "<!-- nothing here -->", b"", b"<!-- a --><!-- b -->"]
+)
+def test_body_without_any_element_is_an_empty_document(raw: str | bytes) -> None:
+    """readability/lxml raise on these ("Document is empty"); that was a 500."""
+    doc = extract_html(raw, _source())
+    assert doc.blocks == []
+    assert doc.metadata.title is None
+    assert doc.metadata.jsonld == []

@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 
 import extruct
 import lxml.html
+from lxml import etree
 
 from app.extract.ir import Metadata
 from app.fetch.detect import detect_charset, parse_content_type
@@ -142,7 +143,14 @@ def extract_metadata(raw: bytes | str, source: SourceInfo) -> Metadata:
     stored exactly as ``extruct`` returns them.
     """
     text = _ensure_text(raw, source)
-    tree = lxml.html.fromstring(text) if text.strip() else lxml.html.Element("html")
+    try:
+        tree = lxml.html.fromstring(text) if text.strip() else None
+    except etree.ParserError:  # "Document is empty": only comments or PIs
+        tree = None
+    if tree is None:
+        return Metadata(
+            title=None, lang=None, published_at=None, modified_at=None, jsonld=[]
+        )
     jsonld = _extract_jsonld(text, source.final_url)
 
     return Metadata(

@@ -35,7 +35,9 @@ from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 
 import lxml.html
+from lxml import etree
 from readability import Document as ReadabilityDocument
+from readability.readability import Unparseable
 
 from app.extract.hidden import hidden_text_warning
 from app.extract.invisible import (
@@ -1311,9 +1313,27 @@ def _structural_counts(el: HtmlElement | None) -> dict[str, int]:
 
 
 def _readability_subtree(text: str) -> HtmlElement:
-    """Return the readability-isolated main content as an lxml subtree."""
-    summary_html = ReadabilityDocument(text).summary(html_partial=True)
+    """Return the readability-isolated main content as an lxml subtree.
+
+    A body with no element at all (empty, blank, comments only) is an empty
+    subtree: readability raises ``Unparseable`` on it, which used to surface as
+    a 500 instead of an empty document with the ``empty_content`` warning.
+    """
+    try:
+        summary_html = ReadabilityDocument(text).summary(html_partial=True)
+    except Unparseable:
+        return lxml.html.Element("div")
     return lxml.html.fromstring(summary_html)
+
+
+def _parse_document(text: str) -> HtmlElement:
+    """Parse the page, or an empty ``<html>`` when it holds no element at all."""
+    if not text.strip():
+        return lxml.html.Element("html")
+    try:
+        return lxml.html.fromstring(text)
+    except etree.ParserError:  # "Document is empty": only comments or PIs
+        return lxml.html.Element("html")
 
 
 # --------------------------------------------------------------------------- #
@@ -1330,9 +1350,7 @@ def extract_html(raw: bytes | str, source: SourceInfo) -> Document:
     ``readability_fallback``.
     """
     text = _ensure_text(raw, source)
-    full_tree = (
-        lxml.html.fromstring(text) if text.strip() else lxml.html.Element("html")
-    )
+    full_tree = _parse_document(text)
 
     # Original main/article, measured BEFORE cleanup, for the fallback check.
     # Beyond the SPEC's table/<pre> trigger, readability also drops <ul>/<ol>/<dl>
