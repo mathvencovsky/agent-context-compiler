@@ -5,6 +5,35 @@ M10)**. O humano não financia rodada paga até lá (2026-10-28).
 **`app/` mudou depois da Emenda 15 (correções de segurança, Emenda 17): o
 harness recusa rodar até o recongelamento no fim do M10b.**
 
+### M10b — proveniência, harness e contrato de falha (2026-10-29, revisão externa)
+
+Itens dos documentos do revisor externo conferidos contra o código
+(branch `claude/m10b-provenance`). Mudam `app/` e `migrations/`: entram na
+emenda de recongelamento.
+- **Extração velha depois de upgrade (S1):** `EXTRACTOR_VERSION = "2"`
+  (`app/extract/ir.py`); `version_id = "ver_" + sha256(document_id \n
+  content_hash \n EXTRACTOR_VERSION)[:16]`; migração
+  `0006_versions_extractor_version` (`extractor_version`,
+  `content_type_header`, `link_header`; unicidade com o extrator). O `resolve`
+  reextrai os bytes guardados (cache e 304, sem refetch) quando o extrator
+  mudou; a versão antiga fica intacta. Corrigidas também duas colisões do id
+  antigo: mesmos bytes em duas URLs e A → B → A. SPEC §4/§5/§7, DECISIONS.
+- **Harness M10:** rodada nova começa com `nina_m10` vazio (recusa banco com
+  dados sem `--reset-nina-db`; rodada retomada mantém); `run_meta.jsonl` com
+  commit, árvores de `app/`/`migrations/` e `EXTRACTOR_VERSION`.
+- **`X-Request-ID`** em toda resposta, `error.request_id` no envelope e
+  `(request_id: ...)` no erro de ferramenta MCP.
+- **Sem 200 vazio silencioso:** suíte de contrato
+  (`tests/integration/test_explicit_failure_contract.py`); corpo HTML sem
+  elemento deixou de dar 500; `assemble` avisa `empty_content` para URL
+  resolvida sem texto.
+- **SSRF:** `docs/security/SSRF_MATRIX.md` (15 casos → testes) e
+  `tests/unit/fetch/test_ssrf_matrix.py` para os casos sem prova.
+- Como testar: `make check`, `uv run pytest -m browser`, `make extract-eval`
+  (gates PASS). Pendente: mapear SEC-001..005 do guia quando o texto estiver no
+  repositório; depois do deploy, o primeiro `resolve` de cada URL reextrai e o
+  `assemble` reindexa (embeddings reaproveitados por texto).
+
 ### M10b — Fase P, produto (2026-10-29, Emenda 18)
 
 - Régua sem custo: `make extract-eval` (WCXB-docs com dev/test fixos e 64
