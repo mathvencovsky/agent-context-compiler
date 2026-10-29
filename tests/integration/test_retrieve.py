@@ -33,7 +33,11 @@ from app.extract.ir import (
 )
 from app.index.indexer import index_version
 from app.providers.embeddings.fake import FakeEmbeddingProvider
-from app.retrieve.lexical import lexical_search
+from app.retrieve.lexical import (
+    LexicalConfig,
+    lexical_search,
+    lexical_search_ranked,
+)
 from app.retrieve.vector import vector_search
 from app.store.models import DocumentVersion, Source
 from tests.integration.conftest import _truncate
@@ -254,6 +258,69 @@ def test_lexical_long_question_still_finds_the_target_chunk(
     assert "Authorization" in short[0][0].text
     assert long, "a long question must still match"
     assert "Authorization" in long[0][0].text
+
+
+def test_lexical_configs_read_headings_and_markdown_from_the_db(
+    clean_db: None,
+    session_factory: sessionmaker[Session],
+    blob_store: BlobStore,
+) -> None:
+    """M10b: the default equals ``overlap_ranks``; BM25F and the page prior run.
+
+    BM25F reads ``heading_path`` and ``md`` from the stored chunks, so the
+    chunk whose own heading matches wins; the ``rrf`` page prior returns the
+    page ranks keyed by document id (DECISIONS 2026-10-29).
+    """
+    blocks_a = [
+        _make_block(
+            heading_path=["Auth", "Rate limits"],
+            text="Each token token token account has a daily quota.",
+            order=0,
+        ),
+        _make_block(
+            heading_path=["Auth", "Token expiry"],
+            text="A credential lasts one hour.",
+            order=1,
+        ),
+    ]
+    version_a = _index(
+        session_factory, blob_store, url=_URL_A, content_hash=_HASH_A, blocks=blocks_a
+    )
+    version_b = _index(
+        session_factory,
+        blob_store,
+        url=_URL_B,
+        content_hash=_HASH_B,
+        blocks=[_make_block(heading_path=["Errors"], text="Error 401.", order=0)],
+    )
+    versions = [version_a, version_b]
+    query = "token expiry"
+    with session_factory() as session:
+        default = lexical_search(session, query=query, version_ids=versions)
+        same_as_before = lexical_search(
+            session, query=query, version_ids=versions, config=LexicalConfig()
+        )
+        bm25f = lexical_search(
+            session,
+            query=query,
+            version_ids=versions,
+            config=LexicalConfig(scorer="bm25f", title_weight=5.0),
+        )
+        _, page_rank = lexical_search_ranked(
+            session,
+            query="retrieve auth token",
+            version_ids=versions,
+            config=LexicalConfig(page_prior="rrf"),
+            url_by_document={
+                make_document_id(_URL_A): _URL_A,
+                make_document_id(_URL_B): _URL_B,
+            },
+        )
+
+    assert [(c.id, p) for c, p in same_as_before] == [(c.id, p) for c, p in default]
+    assert "Rate limits" in default[0][0].text  # overlap: the repeated word wins
+    assert bm25f[0][0].heading_path == ["Auth", "Token expiry"]
+    assert page_rank[make_document_id(_URL_A)] == 1
 
 
 def test_vector_search_orders_by_cosine_and_restricts_versions(

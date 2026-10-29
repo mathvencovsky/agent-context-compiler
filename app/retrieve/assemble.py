@@ -10,7 +10,8 @@ into one deterministic pipeline:
    and never aborts the others (SPEC §8).
 2. Collect the current ``version_id`` of every OK URL.
 3. Lexical top-50 + vector top-50 over those versions (ablation ``use_lexical`` /
-   ``use_vector`` may drop a list).
+   ``use_vector`` may drop a list). The lexical scorer and the page prior come
+   from ``LexicalConfig.from_settings`` (defaults: today's overlap, no prior).
 4. Fuse the lists with RRF (``rrf_k``), keys carrying ``(document_id, ord)``.
 5. Rerank the top-30 (``use_rerank``); value is the rerank score or, with rerank
    off, the normalized RRF score.
@@ -38,7 +39,9 @@ from typing import TYPE_CHECKING
 from app.api.documents import resolve_document
 from app.api.schemas import AssembleRequest, ResolveRequest
 from app.index.indexer import index_version
-from app.retrieve.lexical import lexical_search
+from app.providers.embeddings.base import embed_query
+from app.retrieve.lexical import LexicalConfig, lexical_search_ranked
+from app.retrieve.page_prior import apply_page_rrf
 from app.retrieve.rerank import rerank_candidates
 from app.retrieve.rrf import rrf_fuse
 from app.retrieve.select import Candidate, select
@@ -389,16 +392,23 @@ def assemble_context(
     lexical_rank_by_key: dict[Key, int] = {}
     vector_rank_by_key: dict[Key, int] = {}
 
+    lexical_config = LexicalConfig.from_settings(settings)
+    page_rank: dict[str, int] = {}
     with session_factory() as session:
         if req.use_lexical:
-            for chunk, position in lexical_search(
-                session, query=req.query, version_ids=version_ids
-            ):
+            lexical, page_rank = lexical_search_ranked(
+                session,
+                query=req.query,
+                version_ids=version_ids,
+                config=lexical_config,
+                url_by_document={r.document_id: r.url for r in resolved},
+            )
+            for chunk, position in lexical:
                 key = _key(chunk, doc_id_by_version)
                 chunk_by_key[key] = chunk
                 lexical_rank_by_key[key] = position
         if req.use_vector:
-            query_embedding = embeddings.embed([req.query])[0]
+            query_embedding = embed_query(embeddings, req.query)
             for chunk, position in vector_search(
                 session, query_embedding=query_embedding, version_ids=version_ids
             ):
@@ -419,6 +429,11 @@ def assemble_context(
     ranked_lists: list[list[Key]] = [lexical_ranked, vector_ranked]
     weights: list[float] = [settings.lexical_weight, 1.0]
     fused = rrf_fuse(ranked_lists, k=settings.rrf_k, weights=weights)
+    # Page prior as a third list (M10b, off by default): every candidate gains
+    # the RRF term of its page's rank; a no-op when page_rank is empty.
+    fused = apply_page_rrf(
+        fused, page_rank, weight=lexical_config.page_prior_weight, k=settings.rrf_k
+    )
     # Fragments the caller already has leave before the rerank, so the next
     # candidates take their places in the top-30 (SPEC §8 exclude_chunk_ids).
     if req.exclude_chunk_ids:

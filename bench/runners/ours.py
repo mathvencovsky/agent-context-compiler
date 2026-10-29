@@ -8,8 +8,9 @@ CorpusStore`, extracts the IR (HTML or PDF), chunks it with
 deterministic :class:`FakeEmbeddingProvider`, then reproduces the DB search in
 memory:
 
-* lexical ranks from a deterministic token-overlap scorer (the same lowercase
-  alphanumeric tokenization the fake reranker uses), top-50;
+* lexical ranks from the product's lexical stage (``app.retrieve.lexical.
+  rank_lexical``: token overlap by default, BM25F and the page prior when the
+  ``lexical`` config turns them on), top-50;
 * vector ranks from cosine similarity between the query embedding and each
   chunk embedding, top-50.
 
@@ -56,9 +57,17 @@ from app.extract.pdf import extract_pdf
 from app.fetch.detect import parse_content_type
 from app.index.chunker import Chunk, chunk_document
 from app.index.tokens import count_tokens
+from app.providers.embeddings.base import embed_query
 from app.providers.embeddings.fake import FakeEmbeddingProvider
 from app.providers.rerank.fake import FakeRerankProvider
-from app.retrieve.lexical import overlap_ranks
+from app.retrieve.lexical import (
+    LexicalConfig,
+    LexicalItem,
+    LexicalResult,
+    TokenCache,
+    rank_lexical,
+)
+from app.retrieve.page_prior import apply_page_rrf
 from app.retrieve.rerank import rerank_candidates
 from app.retrieve.rrf import rrf_fuse
 from app.retrieve.select import Candidate, cosine, select
@@ -181,10 +190,46 @@ def _fixed_chunks(doc: Document) -> list[Chunk]:
     return chunks
 
 
-def _lexical_ranks(indexed: list[_IndexedChunk], query: str) -> list[_Key]:
-    """Lexical ranking (top-50): the product's ``overlap_ranks``, same keys."""
-    items = ((item.key, item.chunk.text) for item in indexed)
-    return overlap_ranks(items, query, _SEARCH_TOP_K)
+def lexical_items(indexed: list[_IndexedChunk]) -> list[LexicalItem]:
+    """The lexical stage's view of the indexed chunks (same fields as the DB)."""
+    return [
+        LexicalItem(
+            key=item.key,
+            text=item.chunk.text,
+            heading_path=item.chunk.heading_path,
+            md=item.chunk.md,
+        )
+        for item in indexed
+    ]
+
+
+def lexical_result(
+    indexed: list[_IndexedChunk],
+    query: str,
+    config: LexicalConfig | None = None,
+    url_by_document: dict[str, str] | None = None,
+    token_cache: TokenCache | None = None,
+) -> LexicalResult:
+    """The product's lexical stage (``rank_lexical``, top-50) over the chunks."""
+    return rank_lexical(
+        lexical_items(indexed),
+        query,
+        config,
+        url_by_document=url_by_document,
+        limit=_SEARCH_TOP_K,
+        token_cache=token_cache,
+    )
+
+
+def _lexical_ranks(
+    indexed: list[_IndexedChunk], query: str, config: LexicalConfig | None = None
+) -> list[_Key]:
+    """Lexical ranking (top-50): the product's ``rank_lexical``, same keys.
+
+    The default config is today's ``overlap_ranks``. A page prior needs the
+    URLs, so it goes through :func:`lexical_result` instead.
+    """
+    return lexical_result(indexed, query, config).ranks
 
 
 def _vector_ranks(
@@ -227,6 +272,7 @@ class OursRunner:
     lambda_: float = _SELECTION_LAMBDA
     min_value: float = _MIN_VALUE
     lexical_weight: float = 1.0
+    lexical: LexicalConfig = field(default_factory=LexicalConfig)
     embeddings: EmbeddingProvider | None = field(default=None)
     reranker: RerankProvider | None = field(default=None)
 
@@ -268,11 +314,14 @@ class OursRunner:
         chunk_by_key = {item.key: item for item in indexed}
 
         # (3) in-memory lexical + vector search (ablation-aware).
-        lexical_ranked = (
-            _lexical_ranks(indexed, task.question) if self.use_lexical else []
+        lexical = (
+            lexical_result(indexed, task.question, self.lexical, url_by_document)
+            if self.use_lexical
+            else LexicalResult([], {})
         )
+        lexical_ranked = lexical.ranks
         if self.use_vector:
-            query_embedding = embeddings.embed([task.question])[0]
+            query_embedding = embed_query(embeddings, task.question)
             vector_ranked = _vector_ranks(indexed, query_embedding)
         else:
             vector_ranked = []
@@ -285,6 +334,10 @@ class OursRunner:
             [lexical_ranked, vector_ranked],
             k=_RRF_K,
             weights=[self.lexical_weight, 1.0],
+        )
+        # Page prior as a third list (off by default: no-op), as in assemble.
+        fused = apply_page_rrf(
+            fused, lexical.page_rank, weight=self.lexical.page_prior_weight, k=_RRF_K
         )
         if not fused:
             return PreparedCandidates(
