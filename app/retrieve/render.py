@@ -48,10 +48,21 @@ def neutralize(text: str) -> str:
     return _TAG.sub(lambda m: f"&lt;{m.group(1)}{m.group(2)}", text)
 
 
+#: Line breaks and other control characters: in a note or an attribute they
+#: would let a URL or a message forge a new line of NINA's own output.
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]+")
+
+
+def _one_line(text: str) -> str:
+    """``text`` with every run of control characters replaced by one space."""
+    return _CONTROL.sub(" ", text)
+
+
 def _attr(value: str) -> str:
     """A safe double-quoted attribute value."""
     return (
-        value.replace("&", "&amp;")
+        _one_line(value)
+        .replace("&", "&amp;")
         .replace('"', "&quot;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
@@ -94,5 +105,10 @@ def render_concise(result: AssembleResult) -> str:
         for w in result.warnings
     ]
     if notes:
-        lines += ["", NOTES_OPEN, *(neutralize(n) for n in notes), NOTES_CLOSE]
+        lines += [
+            "",
+            NOTES_OPEN,
+            *(neutralize(_one_line(n)) for n in notes),
+            NOTES_CLOSE,
+        ]
     return "\n".join(lines) + "\n"

@@ -61,11 +61,21 @@ class Settings(BaseSettings):
     # is served from storage when force_refresh is False; 24h default).
     resolve_cache_ttl_seconds: int = 86400
 
+    # PDF extraction limits (audit A2, 2026-10-28). Generous for documentation
+    # PDFs; when one truncates, extract_pdf adds a ``pdf_truncated`` warning.
+    pdf_max_pages: int = 2000
+    pdf_max_stream_bytes: int = 64 * 1024 * 1024
+    pdf_max_decoded_bytes: int = 256 * 1024 * 1024
+
     # Render decision (SPEC 3.3).
     render_min_text_chars: int = 500
 
     # Browser render wait cap (SPEC 3.4 — domcontentloaded + networkidle, 15s).
     render_networkidle_timeout_ms: int = 15000
+    # Wall-clock deadline of a whole browser render (audit M2, 2026-10-28):
+    # goto (30 s) + networkidle (15 s) + serialization fit inside it, so it only
+    # cuts a render that would otherwise hang (a JS busy loop); Timeout (504).
+    render_total_timeout_s: int = 60
 
     # Embeddings (M6, SPEC §5). text-embedding-3-small produces 1536-dim vectors
     # (human decision, DECISIONS.md 2026-10-12). embeddings_api_key is the

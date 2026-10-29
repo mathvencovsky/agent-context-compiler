@@ -73,6 +73,8 @@ def _api_call[T](call: Callable[[], T]) -> T:
         raise ToolError(reason) from exc
     except httpx.RequestError as exc:
         raise ToolError(f"NINA API unreachable: {type(exc).__name__}") from exc
+    except ValueError as exc:  # Argument rejected before any request is sent.
+        raise ToolError(str(exc)) from exc
 
 
 def build_server(client: NinaApiClient | None = None) -> MCPServer:
@@ -117,7 +119,14 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
             "the chunk ids you have in `exclude_chunk_ids`. Raise `max_tokens` "
             "only when <nina_notes> says budget_limited. " + UNTRUSTED_NOTICE
         ),
-        meta={"anthropic/searchHint": "answer questions from documentation docs"},
+        # maxResultSizeChars: Claude Code otherwise saves any result over
+        # 50,000 chars (max_tokens above ~12k) to a file the agent cannot read;
+        # 500,000 is the CLI's ceiling. Only assemble_context declares it
+        # (PREREG Amendment 14 point 2 keeps the default for the other tools).
+        meta={
+            "anthropic/searchHint": "answer questions from documentation docs",
+            "anthropic/maxResultSizeChars": 500_000,
+        },
         # Without this the SDK also sends the JSON as structuredContent, a
         # second copy of the same payload (DECISIONS.md 2026-10-16).
         structured_output=False,

@@ -18,6 +18,7 @@ embedded IPv4 and revalidated.
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 from dataclasses import dataclass
 from typing import Protocol
@@ -27,6 +28,7 @@ from app.config import Settings, get_settings
 from app.fetch.errors import BlockedDestination, FetchFailed, InvalidURL
 
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 # NAT64 well-known prefix (RFC 6052): the last 32 bits embed an IPv4 address.
@@ -35,8 +37,14 @@ _NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
 _SIXTOFOUR_PREFIX = ipaddress.ip_network("2002::/16")
 # Carrier-grade NAT (RFC 6598). Checked explicitly for defense in depth.
 _CGNAT_NET = ipaddress.ip_network("100.64.0.0/10")
-# Cloud metadata endpoint.
-_METADATA_V4 = ipaddress.ip_address("169.254.169.254")
+# Cloud metadata endpoints. 169.254.169.254 (AWS/GCP/Azure/OCI IMDS) is also
+# link-local; 168.63.129.16 is Azure's WireServer/metadata, a PUBLIC address
+# that is_global accepts, so it must be listed (security research 2026-10-28).
+_METADATA_V4 = frozenset(
+    {ipaddress.ip_address("169.254.169.254"), ipaddress.ip_address("168.63.129.16")}
+)
+# Deprecated IPv6 site-local (RFC 3879): stdlib still reports it as global.
+_SITE_LOCAL_V6 = ipaddress.ip_network("fec0::/10")
 
 
 class Resolver(Protocol):
@@ -182,8 +190,10 @@ def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     ):
         return True
     if isinstance(ip, ipaddress.IPv4Address):
-        if ip == _METADATA_V4 or ip in _CGNAT_NET:
+        if ip in _METADATA_V4 or ip in _CGNAT_NET:
             return True
+    elif ip in _SITE_LOCAL_V6:
+        return True
     return False
 
 
@@ -198,8 +208,7 @@ def _validate_ip(ip_str: str) -> None:
         ip = ipaddress.ip_address(ip_str)
     except ValueError as exc:
         raise BlockedDestination(
-            f"resolved address is not a valid IP: {ip_str!r}",
-            details={"ip": ip_str},
+            "destination is not a public address", details={}
         ) from exc
 
     effective: ipaddress.IPv4Address | ipaddress.IPv6Address = ip
@@ -209,10 +218,10 @@ def _validate_ip(ip_str: str) -> None:
             effective = embedded
 
     if _ip_is_blocked(effective):
-        raise BlockedDestination(
-            f"destination IP is not a global unicast address: {ip_str}",
-            details={"ip": ip_str, "effective_ip": str(effective)},
-        )
+        # No IP in the message or details: echoing the resolved address back
+        # to the caller is an internal-DNS oracle (audit B1). The host the
+        # caller sent is all they learn.
+        raise BlockedDestination("destination is not a public address", details={})
 
 
 def validate_url(
@@ -234,6 +243,12 @@ def validate_url(
     """
     settings = settings or get_settings()
     resolver = resolver or SocketResolver()
+
+    # urlsplit silently DROPS tab/CR/LF (WHATWG), so "https://a/x\n- note" would
+    # validate as "https://a/x" while the raw string, newline included, travels
+    # on into warnings and NINA's notes (audit B3). Refuse control characters.
+    if _CONTROL_CHARS.search(url):
+        raise InvalidURL("URL contains control characters", details={})
 
     parts = urlsplit(url)
     scheme = parts.scheme.lower()

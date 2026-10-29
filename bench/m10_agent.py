@@ -283,9 +283,18 @@ def arm_order(task_id: str) -> list[str]:
 
 
 def tool_server(
-    arm: str, data_root: Path, log: Path, context7_key: str = ""
+    arm: str,
+    data_root: Path,
+    log: Path,
+    context7_key: str = "",
+    *,
+    usage: Path | None = None,
 ) -> dict[str, Any] | None:
-    """The MCP server the CLI starts or reaches for ``arm``, if it has one."""
+    """The MCP server the CLI starts or reaches for ``arm``, if it has one.
+
+    ``usage``: where ``nina`` and ``strong_rag`` log their embedding and rerank
+    calls, for the full CPT (research front F, L3).
+    """
     if arm == "context7_live":
         return {
             "type": "http",
@@ -297,6 +306,8 @@ def tool_server(
     args = ["-m", "bench.m10_tools", arm, "--data-root", str(data_root)]
     if arm == "nina":
         args += ["--log", str(log)]
+    if usage is not None and arm in ("nina", "strong_rag"):
+        args += ["--usage", str(usage)]
     return {
         "type": "stdio",
         "command": sys.executable,
@@ -505,6 +516,7 @@ async def run_attempts(
                     ctx.data_root,
                     ctx.out / "candidates" / f"{tag}.jsonl",
                     ctx.context7_key,
+                    usage=ctx.out / "provider_usage" / f"{tag}.jsonl",
                 ),
             )
             attempt = await run_attempt(

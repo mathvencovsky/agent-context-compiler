@@ -24,6 +24,7 @@ URL, which is the already-validated IP.
 from __future__ import annotations
 
 import time
+import zlib
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
@@ -35,6 +36,8 @@ from app.fetch.errors import FetchFailed, Timeout, TooLarge
 from app.fetch.guard import GuardResult, Resolver, SocketResolver, validate_url
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+#: Content-Encodings decoded (the ones httpx 0.28 decodes without extras).
+_DECODED_ENCODINGS = frozenset({"gzip", "deflate"})
 
 #: Public alias for the injectable transport seam. Exported so callers (e.g. the
 #: M5 API layer) can type a ``transport`` dependency WITHOUT importing ``httpx``
@@ -79,13 +82,102 @@ def _host_header(guard: GuardResult, original_url: str) -> str:
     return guard.hostname
 
 
-def _read_capped_body(response: httpx.Response, limit: int) -> bytes:
-    """Stream the body, aborting with ``TooLarge`` once ``limit`` is crossed.
+class _CappedInflater:
+    """Incremental gzip/deflate decoder that never inflates past a budget.
 
-    The whole body is never buffered: iteration stops on the first chunk that
-    pushes the running total past ``limit``, so at most ``limit`` + one chunk is
-    ever held. A ``Content-Length`` that already exceeds the limit short-circuits
-    before any body is read, but it is never trusted as the sole check.
+    Mirrors httpx 0.28's ``GZipDecoder``/``DeflateDecoder`` semantics (single
+    gzip member; deflate falls back to raw deflate when the first chunk is not
+    zlib-wrapped) so a normal page decodes to the same bytes as before, but
+    every ``decompress`` call is bounded by ``max_length``: a decompression
+    bomb is stopped after ``limit`` + 1 bytes instead of being inflated in full
+    (audit A1, 2026-10-28).
+    """
+
+    def __init__(self, encoding: str) -> None:
+        self._raw_fallback = encoding == "deflate"
+        wbits = zlib.MAX_WBITS | 16 if encoding == "gzip" else zlib.MAX_WBITS
+        self._inflater = zlib.decompressobj(wbits)
+        self._first = True
+
+    def decode(self, data: bytes, room: int) -> bytes:
+        """Inflate ``data``, returning at most ``room`` bytes."""
+        first, self._first = self._first, False
+        out = bytearray()
+        while data and len(out) < room:
+            try:
+                out += self._inflater.decompress(data, room - len(out))
+            except zlib.error as exc:
+                if first and self._raw_fallback and not out:
+                    self._inflater = zlib.decompressobj(-zlib.MAX_WBITS)
+                    first = False
+                    continue
+                raise FetchFailed(
+                    f"invalid compressed body: {exc}", details={"error": str(exc)}
+                ) from exc
+            data = self._inflater.unconsumed_tail
+        return bytes(out)
+
+    def flush(self, room: int) -> bytes:
+        try:
+            return self._inflater.flush(max(room, 1))
+        except zlib.error as exc:
+            raise FetchFailed(
+                f"invalid compressed body: {exc}", details={"error": str(exc)}
+            ) from exc
+
+
+def _content_decoder(response: httpx.Response) -> _CappedInflater | None:
+    """Pick the body decoder from ``Content-Encoding`` (httpx semantics).
+
+    ``identity`` and values httpx does not decode are skipped exactly as httpx
+    does (the body passes through as-is, which cannot expand). More than one
+    real encoding (``gzip, gzip``) is refused: no legitimate server stacks
+    them, and each layer multiplies the expansion ratio.
+    """
+    values = response.headers.get_list("content-encoding", split_commas=True)
+    encodings = [
+        v.strip().lower() for v in values if v.strip().lower() in _DECODED_ENCODINGS
+    ]
+    if len(encodings) > 1:
+        response.close()
+        raise FetchFailed(
+            f"stacked Content-Encoding is not supported: {', '.join(encodings)}",
+            details={"content_encoding": encodings},
+        )
+    return _CappedInflater(encodings[0]) if encodings else None
+
+
+def _too_large(response: httpx.Response, limit: int, read: int) -> TooLarge:
+    response.close()
+    return TooLarge(
+        f"response body exceeded limit of {limit} bytes",
+        details={"limit": limit, "bytes_read": read},
+    )
+
+
+def _past_deadline(response: httpx.Response, deadline: float, url: str) -> Timeout:
+    response.close()
+    return Timeout(
+        f"request to {url} exceeded the total timeout",
+        details={"url": url},
+    )
+
+
+def _read_capped_body(
+    response: httpx.Response,
+    limit: int,
+    *,
+    deadline: float | None = None,
+    url: str = "",
+) -> bytes:
+    """Stream and decode the body, aborting once ``limit`` or ``deadline`` passes.
+
+    The limit applies to the DECODED bytes, enforced incrementally while
+    inflating (a compressed body can never expand past ``limit`` + 1 bytes in
+    memory). A ``Content-Length`` that already exceeds the limit short-circuits
+    before any body is read, but it is never trusted as the sole check. The
+    deadline is wall-clock (audit M1): a server that trickles bytes cannot hold
+    the request past the total timeout.
     """
     declared = response.headers.get("content-length")
     if declared is not None:
@@ -99,15 +191,38 @@ def _read_capped_body(response: httpx.Response, limit: int) -> bytes:
         except ValueError:
             pass  # Malformed header: fall through to streaming enforcement.
 
+    if response.is_stream_consumed:
+        # An in-memory response (httpx.Response(content=...), as injected
+        # transports build) was already read and decoded by httpx; the network
+        # path always streams and never reaches this branch.
+        if len(response.content) > limit:
+            raise _too_large(response, limit, len(response.content))
+        return response.content
+
+    decoder = _content_decoder(response)
     buffer = bytearray()
-    for chunk in response.iter_bytes():
-        buffer.extend(chunk)
-        if len(buffer) > limit:
-            response.close()
-            raise TooLarge(
-                f"response body exceeded limit of {limit} bytes",
-                details={"limit": limit, "bytes_read": len(buffer)},
-            )
+    try:
+        for chunk in response.iter_raw():
+            if deadline is not None and time.monotonic() > deadline:
+                raise _past_deadline(response, deadline, url)
+            room = limit - len(buffer) + 1
+            buffer += decoder.decode(chunk, room) if decoder else chunk
+            if len(buffer) > limit:
+                raise _too_large(response, limit, len(buffer))
+        if decoder is not None:
+            buffer += decoder.flush(limit - len(buffer) + 1)
+            if len(buffer) > limit:
+                raise _too_large(response, limit, len(buffer))
+    except httpx.TimeoutException as exc:
+        response.close()
+        raise Timeout(
+            f"request to {url} timed out: {exc}", details={"url": url}
+        ) from exc
+    except httpx.HTTPError as exc:
+        response.close()
+        raise FetchFailed(
+            f"transport error reading {url}: {exc}", details={"url": url}
+        ) from exc
     return bytes(buffer)
 
 
@@ -133,6 +248,7 @@ def fetch(
     user_agent = settings.user_agent()
 
     started = time.monotonic()
+    deadline = started + settings.total_timeout
     current_url = url
     redirects = 0
 
@@ -147,6 +263,12 @@ def fetch(
         while True:
             guard = validate_url(current_url, resolver=resolver, settings=settings)
             ip_url = _build_ip_url(guard, current_url)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise Timeout(
+                    f"request to {current_url} exceeded the total timeout",
+                    details={"url": current_url},
+                )
 
             request = client.build_request(
                 method,
@@ -156,6 +278,11 @@ def fetch(
                     "User-Agent": user_agent,
                 },
                 extensions={"sni_hostname": guard.hostname},
+                # Per-operation timeouts never outlive the total deadline.
+                timeout=httpx.Timeout(
+                    min(float(settings.total_timeout), remaining),
+                    connect=min(float(settings.connect_timeout), remaining),
+                ),
             )
 
             try:
@@ -191,7 +318,12 @@ def fetch(
 
             # Final response (non-redirect, or redirect without a Location).
             try:
-                body = _read_capped_body(response, settings.max_body_bytes)
+                body = _read_capped_body(
+                    response,
+                    settings.max_body_bytes,
+                    deadline=deadline,
+                    url=current_url,
+                )
             finally:
                 response.close()
 

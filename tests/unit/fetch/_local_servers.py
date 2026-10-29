@@ -171,3 +171,66 @@ def counting_server() -> Iterator[LocalServer]:
 
     with _run(_Handler, counter) as server:
         yield server
+
+
+@dataclass(frozen=True)
+class Reply:
+    """A canned HTTP reply for :func:`scripted_server`."""
+
+    status: int = 200
+    body: bytes = b""
+    headers: tuple[tuple[str, str], ...] = (("Content-Type", "text/html"),)
+
+
+@contextmanager
+def scripted_server(routes: dict[str, Reply]) -> Iterator[LocalServer]:
+    """Serve fixed replies per path (404 otherwise), counting every hit."""
+    counter = HitCounter()
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler API.
+            counter.record(self.path)
+            reply = routes.get(self.path, Reply(status=404, body=b"nope"))
+            self.send_response(reply.status)
+            for name, value in reply.headers:
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(reply.body)))
+            self.end_headers()
+            self.wfile.write(reply.body)
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    with _run(_Handler, counter) as server:
+        yield server
+
+
+@contextmanager
+def tcp_accept_counter() -> Iterator[LocalServer]:
+    """Count raw TCP connections (no HTTP needed): catches preconnect/probes."""
+    import socket
+
+    counter = HitCounter()
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(16)
+    stop = threading.Event()
+
+    def loop() -> None:
+        while not stop.is_set():
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                return
+            counter.record("tcp")
+            conn.close()
+
+    thread = threading.Thread(target=loop, daemon=True)
+    thread.start()
+    try:
+        yield LocalServer(
+            base_url=f"http://127.0.0.1:{listener.getsockname()[1]}", counter=counter
+        )
+    finally:
+        stop.set()
+        listener.close()

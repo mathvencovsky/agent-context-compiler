@@ -36,6 +36,12 @@ from urllib.parse import urljoin
 import lxml.html
 from readability import Document as ReadabilityDocument
 
+from app.extract.hidden import hidden_text_warning
+from app.extract.invisible import (
+    invisible_text_warning,
+    strip_invisible,
+    strip_invisible_blocks,
+)
 from app.extract.ir import (
     Block,
     Document,
@@ -943,6 +949,7 @@ def extract_html(raw: bytes | str, source: SourceInfo) -> Document:
     walker = _Walker(source.final_url)
     walker.walk(content_root)
 
+    removed = strip_invisible_blocks(walker.blocks)
     assign_block_ids(walker.blocks)
     warnings = _finalize_warnings(walker)
     if used_fallback:
@@ -961,6 +968,16 @@ def extract_html(raw: bytes | str, source: SourceInfo) -> Document:
         )
 
     metadata = extract_metadata(text, source)
+    if metadata.title is not None:
+        title, n = strip_invisible(metadata.title)
+        if n:
+            metadata.title = normalize_text(title) or None
+            removed += n
+    if removed:
+        warnings.append(invisible_text_warning(removed))
+    hidden = hidden_text_warning(full_tree, walker.blocks)
+    if hidden is not None:
+        warnings.append(hidden)
     return Document(
         document_id=make_document_id(source.url),
         version_id=make_version_id(source.content_hash),

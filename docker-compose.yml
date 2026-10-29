@@ -12,8 +12,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    # Loopback only: Docker publishes ports around host firewalls, and this
+    # Postgres uses dev credentials (security audit 2026-10-28, M6).
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,9 +25,10 @@ services:
       retries: 10
 
   # SeaweedFS S3 gateway. `server -s3` brings up master+volume+filer+S3 on 8333.
-  # Default dev mode allows anonymous S3 access (no static credentials file),
-  # so S3_ACCESS_KEY/S3_SECRET_KEY are ignored locally and only matter against
-  # real AWS in production. The same container creates the bucket with
+  # Anonymous S3 access is OFF: the gateway gets one identity built from
+  # S3_ACCESS_KEY/S3_SECRET_KEY (the same values app.config uses), so nobody
+  # without them can read or rewrite the cached IR (security audit 2026-10-28,
+  # M6). The same container creates the bucket with
   # `weed shell` (idempotent), replacing a 567 MB aws-cli init image
   # (docs/ONBOARDING.md); it is healthy only once the bucket answers.
   seaweedfs:
@@ -35,16 +38,20 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
-        weed server -s3 -dir=/data -ip.bind=0.0.0.0 &
+        printf '{"identities":[{"name":"nina","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        "${S3_ACCESS_KEY:-nina-dev-access-key}" "${S3_SECRET_KEY:-nina-dev-secret-key}" > /tmp/s3.json &&
+        weed server -s3 -s3.config=/tmp/s3.json -dir=/data -ip.bind=0.0.0.0 &
         until echo "s3.bucket.list" | weed shell 2>/dev/null | grep -qw "${S3_BUCKET}"; do
         echo "s3.bucket.create -name ${S3_BUCKET}" | weed shell >/dev/null 2>&1; sleep 2;
         done; wait
     ports:
-      - "${S3_PORT:-8333}:8333"
+      - "127.0.0.1:${S3_PORT:-8333}:8333"
     volumes:
       - seaweed_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8333/${S3_BUCKET} || exit 1"]
+      # Anonymous requests now get 403, so check the bucket through weed shell
+      # and that the S3 port answers at all.
+      test: ["CMD-SHELL", "echo s3.bucket.list | weed shell 2>/dev/null | grep -qw ${S3_BUCKET} && nc -z localhost 8333"]
       interval: 5s
       timeout: 5s
       retries: 30

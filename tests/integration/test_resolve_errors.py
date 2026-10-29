@@ -173,3 +173,14 @@ def test_error_status_is_upstream_status_and_stores_nothing(
         from app.store.models import DocumentVersion
 
         assert session.query(DocumentVersion).count() == 0
+
+
+def test_url_rejected_secret(harness: Harness) -> None:
+    """A URL carrying a credential parameter is refused before any fetch."""
+    harness.transport.set(_PATH, lambda: html_response(b"<html><body>x</body></html>"))
+    response = harness.client.post(
+        "/v1/documents/resolve",
+        json={"url": harness.url(_PATH) + "?api_key=sk-live-0000"},
+    )
+    _assert_error_envelope(response, "url_rejected_secret", 400)
+    assert "sk-live-0000" not in response.text

@@ -254,3 +254,35 @@ async def test_assemble_description_names_the_tagged_format() -> None:
     tools = {t.name: t for t in await _build().list_tools()}
     description = tools["assemble_context"].description or ""
     assert '<fragment chunk="N">' in description and "<nina_notes>" in description
+
+
+async def test_only_assemble_context_declares_the_result_size_ceiling() -> None:
+    # Claude Code saves an MCP text result over 50,000 chars to a file unless
+    # the tool declares anthropic/maxResultSizeChars (ceiling 500,000).
+    tools = {t.name: t for t in await _build().list_tools()}
+    assert tools["assemble_context"].meta == {
+        "anthropic/searchHint": "answer questions from documentation docs",
+        "anthropic/maxResultSizeChars": 500_000,
+    }
+    for name in ("resolve_url", "get_document"):
+        assert "anthropic/maxResultSizeChars" not in (tools[name].meta or {}), name
+
+
+def test_result_size_ceiling_crosses_the_wire_as_meta() -> None:
+    import asyncio
+
+    from mcp import Client
+
+    async def metas() -> dict[str, object]:
+        async with Client(_build()) as client:
+            listed = await client.list_tools()
+            return {
+                t.name: t.model_dump(by_alias=True).get("_meta") for t in listed.tools
+            }
+
+    wire = asyncio.run(metas())
+    assert wire["assemble_context"] == {
+        "anthropic/searchHint": "answer questions from documentation docs",
+        "anthropic/maxResultSizeChars": 500_000,
+    }
+    assert "anthropic/maxResultSizeChars" not in (wire["resolve_url"] or {})

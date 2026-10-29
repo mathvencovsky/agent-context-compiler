@@ -10,6 +10,18 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-10-28: correções de segurança no `app/`, condição de validade do H1 e plano de produto antes do M10 (Emenda 17)
+Contexto: o humano decidiu não financiar nenhuma rodada paga enquanto o NINA não estiver no nível das melhores ferramentas ou acima, aprovou corrigir a auditoria de segurança (`docs/AUDITORIA_SEGURANCA.md`) e duas propostas da pesquisa, e deu autonomia para seguir o plano de `docs/PESQUISA_RODADA3.md` durante a noite.
+Decisão:
+- Navegador atrás de um proxy local de saída que aplica o guarda e conecta no IP validado (como o Firecrawl fez depois da CVE-2026-32857), e não `route.fetch` + `fulfill` (o desenho do Open WebUI): esse tiraria do Chromium HTTP/2, cookies, CORS e a base correta dos redirects, e mudaria o DOM de páginas normais. O proxy fecha também a janela de DNS rebinding registrada em 2026-10-11.
+- `ENV` continua com padrão `dev` (está nos `FROZEN_SETTINGS` do harness), mas `dev` só atende conexões de loopback.
+- Unicode invisível: removidos caracteres de tag, controles bidi de override e isolate, espaços de largura zero e controles; U+200E, U+200F e U+061C ficam, porque aparecem em texto legítimo (a fixture `fastapi_release_notes` tem três) e não escondem conteúdo. Texto escondido por CSS só gera aviso, porque o extrator já descarta `display:none`, `visibility:hidden` e `hidden`.
+- PDF sem limite de tempo (quebraria o determinismo); só orçamento de bytes e de páginas. CPU de PDF patológico fica para o M11 (subprocesso com rlimit).
+- Não recongelar o `app/` agora: a fase de produto (M10b) vai mudar o `app/` de novo, e nenhuma sessão roda antes dela. O harness continua recusando rodar até a emenda que recongelar.
+- Condição de validade do H1 com piso de 0,30 para o limite inferior de S(`full_page`) e margem de no máximo metade do efeito da documentação (orientação da FDA); `no_docs` roda de novo na rodada principal.
+Alternativas: recongelar já (dois recongelamentos sem ganho); mudar o padrão de `ENV` (mexeria no harness congelado); apagar texto escondido por CSS (apagaria abas e blocos recolhíveis de documentação real).
+Consequências: Emenda 17 do PREREG; SPEC §3.1, §3.4 e tabelas de erros e warnings (`url_rejected_secret`, `pdf_truncated`, `invisible_text_removed`, `hidden_text_present`); Postgres e SeaweedFS só em 127.0.0.1 e S3 local com autenticação; CI com permissões mínimas e actions fixadas por SHA.
+
 ## 2026-10-28: páginas que respondem 200 sem documentação (Emenda 16), a partir dos PDFs sobre Firecrawl
 Contexto: o humano trouxe 5 textos sobre o Firecrawl (Blott ×2, fastCRW, Jacar, ApiX-Drive). O único com conteúdo técnico novo, o do fastCRW, lista falhas que o código HTTP não mostra: soft 404 (200 com "página não encontrada"), parede de consentimento de cookies, desafio anti-bot e casca de SPA vazia. O NINA já não guarda páginas de erro HTTP (Emenda 15), mas não detecta essas quatro. O mesmo site relata que, desde 2026-09-15, a Cloudflare bloqueia por padrão crawlers de IA de uso misto em páginas com anúncios (o MDN tem anúncios).
 Decisão:
