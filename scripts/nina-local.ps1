@@ -175,7 +175,9 @@ switch ($Action) {
 
         if (Has "claude") {
             Say "registering the NINA MCP server in Claude Code (user scope)"
-            & claude mcp remove nina -s user 2>$null | Out-Null
+            # Windows PowerShell 5.1 turns a native command's stderr into a terminating
+            # error under "Stop"; "remove" writes there when nina is not registered yet.
+            cmd /c "claude mcp remove nina -s user >nul 2>&1"
             & claude mcp add nina -s user -e "API_URL=$ApiUrl" -e "API_KEY=nina_local_dev" -- `
                 uv --directory $Repo run python -m app.mcp_server
         } else {
