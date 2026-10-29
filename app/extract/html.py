@@ -29,6 +29,7 @@ markup-free text.
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
@@ -253,19 +254,227 @@ def _block_text(el: HtmlElement) -> str:
 # --------------------------------------------------------------------------- #
 # per-type data builders
 # --------------------------------------------------------------------------- #
-def _detect_language(el: HtmlElement) -> str | None:
-    """Detect a code language from ``language-``/``lang-``/``hljs`` classes."""
-    candidates: list[str] = []
-    for node in (el, *el.iter()):
-        cls = node.get("class")
-        if cls:
-            candidates.extend(cls.split())
-    for cls in candidates:
-        low = cls.lower()
-        for prefix in ("language-", "lang-", "highlight-source-", "hljs-"):
-            if low.startswith(prefix) and len(low) > len(prefix):
-                return low[len(prefix) :]
+#: Class prefixes that name a code block's language (Prism/highlight.js/
+#: Docusaurus/VitePress/Rouge ``language-``, Microsoft Learn ``lang-``, GitHub
+#: ``highlight-source-``, MediaWiki SyntaxHighlight ``mw-highlight-lang-``).
+#: ``hljs-`` is NOT one: ``hljs-keyword`` etc. are highlight.js token classes.
+_LANGUAGE_PREFIXES = ("language-", "lang-", "highlight-source-", "mw-highlight-lang-")
+#: Values that say "no particular language". Sphinx's ``default`` lexer guesses
+#: Python and silently falls back to none, so it does not name a language.
+_NO_LANGUAGE = frozenset({"default", "none", "nohighlight", "no-highlight"})
+_LANGUAGE_RE = re.compile(r"^[a-z0-9][a-z0-9+#._-]{0,31}$")
+#: How many ancestors of a ``<pre>`` may carry its language (Sphinx puts it two
+#: levels up: ``div.highlight-python3 > div.highlight > pre``).
+_LANGUAGE_ANCESTORS = 3
+
+
+def _clean_language(value: str | None) -> str | None:
+    """A lowercase language name, or ``None`` for empty/"no language" values."""
+    low = (value or "").strip().strip(";").lower()
+    if not low or low in _NO_LANGUAGE or not _LANGUAGE_RE.match(low):
+        return None
+    return low
+
+
+def _language_of(node: HtmlElement) -> str | None:
+    """The language one element declares by attribute or class, if any."""
+    for attr in ("data-lang", "data-language"):
+        found = _clean_language(node.get(attr))
+        if found:
+            return found
+    classes = (node.get("class") or "").split()
+    lows = [c.lower() for c in classes]
+    for i, low in enumerate(lows):
+        for prefix in _LANGUAGE_PREFIXES:
+            if low.startswith(prefix):
+                found = _clean_language(low[len(prefix) :])
+                if found:
+                    return found
+        # SyntaxHighlighter (MDN): class="brush: js" or "brush:js".
+        if low.startswith("brush:"):
+            rest = low[len("brush:") :] or (lows[i + 1] if i + 1 < len(lows) else "")
+            found = _clean_language(rest)
+            if found:
+                return found
+        # Sphinx: <div class="highlight-python3 notranslate"><div class="highlight">.
+        if low.startswith("highlight-") and _is_sphinx_highlight(node, lows):
+            found = _clean_language(low[len("highlight-") :])
+            if found:
+                return found
     return None
+
+
+def _is_sphinx_highlight(node: HtmlElement, classes: list[str]) -> bool:
+    """True for Sphinx's ``div.highlight-<lang>`` wrapper, not other ``highlight-*``."""
+    if "notranslate" in classes:
+        return True
+    return any(
+        "highlight" in (child.get("class") or "").split()
+        for child in node.iterchildren()
+        if isinstance(child.tag, str)
+    )
+
+
+def _detect_language(el: HtmlElement) -> str | None:
+    """Detect a code block's language (H6, M10b Phase P).
+
+    Looks at the ``<pre>``, its ``<code>`` children, then up to
+    ``_LANGUAGE_ANCESTORS`` ancestors that wrap no other ``<pre>`` (so a
+    wrapper's language never spreads to a sibling block). Token spans inside
+    the code are never read: their classes (``hljs-keyword``) are not
+    languages.
+    """
+    nodes: list[HtmlElement] = [el, *el.iterchildren("code")]
+    ancestor = el.getparent()
+    for _ in range(_LANGUAGE_ANCESTORS):
+        if ancestor is None or sum(1 for _ in ancestor.iter("pre")) > 1:
+            break
+        nodes.append(ancestor)
+        ancestor = ancestor.getparent()
+    for node in nodes:
+        found = _language_of(node)
+        if found:
+            return found
+    return None
+
+
+#: Class tokens of line-number gutters inside code (Sphinx/Pygments inline
+#: ``span.linenos``, ``.lineno``, Rouge ``.gutter``/``.rouge-gutter``,
+#: highlight.js line-numbers plugin, Prism ``.line-numbers-rows``).
+_LINENO_CLASSES = frozenset(
+    {
+        "linenos",
+        "lineno",
+        "linenodiv",
+        "line-number",
+        "line-numbers-rows",
+        "gutter",
+        "rouge-gutter",
+        "hljs-ln-numbers",
+        "hljs-ln-n",
+    }
+)
+#: A run of this many line-start numbers 1, 2, 3... glued to the code is a
+#: gutter even without a class (CSS-in-JS themes such as Twilio's).
+_LINENO_MIN_RUN = 3
+#: ... and it numbers at least this share of the block's lines.
+_LINENO_LINE_SHARE = 0.8
+
+
+def _is_lineno_element(node: HtmlElement) -> bool:
+    classes = {c.lower() for c in (node.get("class") or "").split()}
+    return bool(classes & _LINENO_CLASSES) or node.get("data-line-number") is not None
+
+
+def _strip_line_numbers(el: HtmlElement) -> HtmlElement:
+    """Return ``el`` (or a copy) without line-number gutter elements.
+
+    Removes elements marked as gutters by class/attribute, and runs of
+    unmarked leaf elements whose text is a consecutive line number placed at
+    the start of a line and followed by code on that line (``1import os``).
+    Code text itself is never altered; only whole gutter elements go, with
+    their tails kept.
+    """
+    marked = [n for n in el.iter() if n is not el and _is_lineno_element(n)]
+    unmarked = _unmarked_gutter(el) if not marked else []
+    if not marked and not unmarked:
+        return el
+    copy = deepcopy(el)
+    # deepcopy preserves document order, so map by position.
+    originals = list(el.iter())
+    copies = list(copy.iter())
+    index = {id(n): i for i, n in enumerate(originals)}
+    for node in [*marked, *unmarked]:
+        target = copies[index[id(node)]]
+        parent = target.getparent()
+        if parent is None:
+            continue
+        tail = target.tail or ""
+        previous = target.getprevious()
+        if previous is not None:
+            previous.tail = (previous.tail or "") + tail
+        else:
+            parent.text = (parent.text or "") + tail
+        parent.remove(target)
+    return copy
+
+
+_BLOCK_LINE_TAGS = frozenset({"div", "p", "br", "tr", "li"})
+
+
+def _unmarked_gutter(el: HtmlElement) -> list[HtmlElement]:
+    """Leaf number elements forming a 1, 2, 3... line gutter (see above)."""
+    # Walk text in order, tracking whether we are at the start of a line.
+    candidates: list[tuple[HtmlElement, int]] = []
+    glued: dict[int, bool] = {}
+    state = {"line_start": True, "pending": -1}
+
+    def feed_text(text: str) -> None:
+        if not text:
+            return
+        pending = state["pending"]
+        if pending >= 0 and text.strip():
+            first_line = text.split("\n", 1)[0]
+            glued[pending] = bool(first_line.strip())
+            state["pending"] = -1
+        elif pending >= 0 and "\n" in text:
+            glued[pending] = False
+            state["pending"] = -1
+        if "\n" in text:
+            state["line_start"] = not text.rsplit("\n", 1)[1].strip()
+        elif text.strip():
+            state["line_start"] = False
+
+    def visit(node: HtmlElement) -> None:
+        for child in node.iterchildren():
+            if not isinstance(child.tag, str):
+                feed_text(child.tail or "")
+                continue
+            if child.tag in _BLOCK_LINE_TAGS:
+                state["line_start"] = True
+            text = child.text_content() or ""
+            is_leaf = not any(isinstance(c.tag, str) for c in child)
+            stripped = text.strip()
+            if (
+                is_leaf
+                and state["line_start"]
+                and stripped.isdigit()
+                and len(stripped) <= 5
+            ):
+                candidates.append((child, int(stripped)))
+                state["pending"] = len(candidates) - 1
+                state["line_start"] = False
+            else:
+                feed_text(child.text or "")
+                visit(child)
+            if child.tag in _BLOCK_LINE_TAGS:
+                state["line_start"] = True
+            feed_text(child.tail or "")
+
+    feed_text(el.text or "")
+    visit(el)
+
+    found: list[HtmlElement] = []
+    run: list[int] = []
+
+    lines = len(_raw_code(el).strip("\n").splitlines()) or 1
+
+    def close_run() -> None:
+        # A gutter numbers (nearly) every line, and most numbers sit glued to
+        # code; an output block "1\n2\n3" or a list literal does not qualify.
+        if len(run) >= max(_LINENO_MIN_RUN, _LINENO_LINE_SHARE * lines) and sum(
+            glued.get(i, False) for i in run
+        ) * 2 >= len(run):
+            found.extend(candidates[i][0] for i in run)
+
+    for i, (_, number) in enumerate(candidates):
+        if run and number == candidates[run[-1]][1] + 1:
+            run.append(i)
+        else:
+            close_run()
+            run = [i]
+    close_run()
+    return found
 
 
 def _raw_code(el: HtmlElement) -> str:
@@ -618,9 +827,10 @@ class _Walker:
         self._heading_stack.append((level, text))
 
     def _visit_code(self, el: HtmlElement) -> None:
-        inner = el.find("code")
         language = _detect_language(el)
-        code = _raw_code(inner if inner is not None else el)
+        clean = _strip_line_numbers(el)
+        inner = clean.find("code")
+        code = _raw_code(inner if inner is not None else clean)
         self._emit(
             "code",
             el,

@@ -171,3 +171,20 @@ by humans; `main_content` is plain text, so code and table checks rely on
   tables and all 64 PDF facts unchanged; automatic gates pass. Phase P
   changes start from that tree, so this small loss belongs to Phase S (the
   invisible-text removal), not to Phase P. Test not looked at.
+- 2026-10-29: Phase P change H6 (code language + line-number gutters,
+  branch `claude/m10b-html`). Targets: code. Language from the `<pre>`, its
+  `<code>` children and up to 3 ancestors wrapping no other `<pre>`
+  (`language-`, `lang-`, `highlight-source-`, `mw-highlight-lang-`, Sphinx
+  `highlight-<lang>`, `brush: <lang>`, `data-lang`/`data-language`); Sphinx
+  `default`/`none` name no language; token spans and `hljs-*` never read.
+  Gutters stripped by class (`linenos`, `lineno`, `gutter`, `hljs-ln-*`,
+  `data-line-number`, ...) or as a classless run of 1, 2, 3... line-start
+  numbers glued to code covering >= 80% of lines. Dev: ΔF1 +0.0002
+  [+0.0000, +0.0005], Δrecall −0.0001, ΔP +0.0003, leak −0.0002, glued
+  251 → 251, code in text 93.5% → 93.5%, code as block 91.9% → 91.9%,
+  table cells unchanged, language rate 14.9% → 43.8%, token-class language
+  0 → 0, line-number leak 20 → 0, code duplicated in text 180 → 154 (Twilio's
+  gutter digits no longer differ from the container copy); gates PASS, H6
+  target met. Test (single look): ΔF1 +0.0000, Δrecall −0.0001, glued
+  119 → 119, code/table recall unchanged, language rate 21.6% → 54.1%,
+  line-number leak 1 → 0, PDF facts 15/64 unchanged; gates PASS. Accepted.
