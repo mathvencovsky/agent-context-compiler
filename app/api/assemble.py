@@ -63,6 +63,7 @@ from app.providers.rerank.base import RerankProvider
 from app.providers.rerank.fake import FakeRerankProvider
 from app.providers.rerank.jina import JinaRerankProvider
 from app.retrieve.assemble import AssembleResult, assemble_context
+from app.retrieve.compact import compact_result, pool_budget
 from app.retrieve.hints import build_hints
 from app.retrieve.render import render_concise
 
@@ -211,8 +212,15 @@ def assemble(
     if settings.env == "production":
         _reject_ablations_in_production(req)
 
+    # Low-budget mode selects from a larger pool, then keeps the relevant
+    # sentences within max_tokens (app/retrieve/compact.py; SPEC §8).
+    selection_req = (
+        req.model_copy(update={"max_tokens": pool_budget(req.max_tokens)})
+        if req.compact
+        else req
+    )
     result = assemble_context(
-        req,
+        selection_req,
         session_factory=session_factory,
         blobs=blobs,
         robots=robots,
@@ -223,6 +231,9 @@ def assemble(
         settings=settings,
         now=now,
     )
+    if req.compact:
+        compact_result(result, query=req.query, budget=req.max_tokens)
+    result.requested_version = req.version
 
     # All URLs failed to resolve: there is nothing to assemble (SPEC §8).
     if result.sources and all(src.status != "ok" for src in result.sources):

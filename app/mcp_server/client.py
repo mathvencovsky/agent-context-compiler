@@ -99,17 +99,31 @@ class NinaApiClient:
         max_tokens: int,
         response_format: str = "detailed",
         exclude_chunk_ids: list[str] | None = None,
+        version: str | None = None,
+        compact: bool = False,
     ) -> dict[str, Any]:
-        """Call ``POST /v1/context/assemble`` and return the JSON body."""
+        """Call ``POST /v1/context/assemble`` and return the JSON body.
+
+        ``version`` and ``compact`` are sent only when set, so a default call
+        sends exactly the body it sent before they existed.
+        """
+        payload: dict[str, Any] = {
+            "query": query,
+            "urls": urls,
+            "max_tokens": max_tokens,
+            "response_format": response_format,
+            "exclude_chunk_ids": exclude_chunk_ids or [],
+        }
+        if version:
+            payload["version"] = version
+        if compact:
+            payload["compact"] = True
+        return self._post_json("/v1/context/assemble", payload)
+
+    def site_index(self, url: str, *, max_tokens: int = 2000) -> dict[str, Any]:
+        """Call ``POST /v1/sites/index`` and return the JSON body."""
         return self._post_json(
-            "/v1/context/assemble",
-            {
-                "query": query,
-                "urls": urls,
-                "max_tokens": max_tokens,
-                "response_format": response_format,
-                "exclude_chunk_ids": exclude_chunk_ids or [],
-            },
+            "/v1/sites/index", {"url": url, "max_tokens": max_tokens}
         )
 
     def get_document(
