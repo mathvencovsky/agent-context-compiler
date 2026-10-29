@@ -116,6 +116,7 @@ class DocumentRepo:
         extractor_version: str,
         content_type_header: str | None,
         link_header: str | None,
+        tokens_raw_html: int | None = None,
     ) -> DocumentVersion:
         """Insert a version and set it as the source's current version."""
         version = DocumentVersion(
@@ -133,6 +134,7 @@ class DocumentRepo:
             extractor_version=extractor_version,
             content_type_header=content_type_header,
             link_header=link_header,
+            tokens_raw_html=tokens_raw_html,
         )
         self._session.add(version)
         self._session.flush()

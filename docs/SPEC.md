@@ -231,6 +231,7 @@ sources(id pk, url_normalized unique, domain, current_version_id null, created_a
 document_versions(id pk, source_id fk, content_hash, fetched_at, etag, last_modified,
                   render_mode, raw_blob_key, ir_blob_key, status, warnings jsonb,
                   extractor_version null, content_type_header null, link_header null,
+                  tokens_raw_html int null,
                   unique(source_id, content_hash, extractor_version))
 chunks(id pk, version_id fk, block_ids text[], heading_path text[], text, md,
        tokens int, tsv tsvector generated, embedding vector(DIM), embedding_model text null, ord int)
@@ -238,7 +239,7 @@ api_keys(id pk, key_hash unique, name, created_at, revoked_at null, limits jsonb
 usage_events(id pk, api_key_id fk, endpoint, ts, status_code, latency_ms, units jsonb)
 ```
 
-O HTML ou PDF bruto e a IR completa ficam no armazenamento S3 (SeaweedFS no dev local, AWS S3 em produção — ver DECISIONS.md 2026-10-11). O Postgres guarda metadados, chunks e índices. Chaves de API são armazenadas apenas como hash (sha256) e mostradas uma única vez na criação.
+O HTML ou PDF bruto e a IR completa ficam no armazenamento S3 (SeaweedFS no dev local, AWS S3 em produção — ver DECISIONS.md 2026-10-11). O Postgres guarda metadados, chunks e índices. `tokens_raw_html` guarda, desde a migração 0007, o `stats.tokens_raw_html` que toda resposta servida da versão armazenada devolve (tokens `cl100k_base` dos bytes brutos decodificados como UTF-8), calculado uma vez na criação da versão; linhas antigas (`NULL`) contam a partir do blob bruto, com o mesmo resultado. Chaves de API são armazenadas apenas como hash (sha256) e mostradas uma única vez na criação.
 
 ## 8. Contratos de API
 

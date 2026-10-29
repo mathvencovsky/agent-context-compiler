@@ -190,7 +190,7 @@ def _build_response(
     *,
     formats: list[ResolveFormat],
     cache_hit: bool,
-    raw_text: str,
+    tokens_raw_html: int,
 ) -> ResolveResponse:
     """Assemble the SPEC §8 envelope, including only the requested formats."""
     markdown = to_markdown(doc)
@@ -200,7 +200,7 @@ def _build_response(
     stats = Stats(
         blocks=len(doc.blocks),
         tokens_markdown=count_tokens(markdown),
-        tokens_raw_html=count_tokens(raw_text),
+        tokens_raw_html=tokens_raw_html,
         cache_hit=cache_hit,
     )
     return ResolveResponse(
@@ -379,6 +379,30 @@ def _extract_document(
     return doc, decoded
 
 
+def _raw_bytes_tokens(body: bytes, *, known: tuple[str, int] | None = None) -> int:
+    """cl100k tokens of ``body`` decoded as UTF-8 (errors replaced).
+
+    This is what a response served from a stored version reports as
+    ``stats.tokens_raw_html``. ``known`` is a (text, count) pair the caller
+    already has; when the text is that same string, its count is reused.
+    """
+    text = body.decode("utf-8", errors="replace")
+    if known is not None and known[0] == text:
+        return known[1]
+    return count_tokens(text)
+
+
+def _stored_tokens_raw_html(version: DocumentVersion, blobs: BlobStore) -> int:
+    """``stats.tokens_raw_html`` of a stored version, without the raw blob.
+
+    Stored at creation since migration 0007; older rows (NULL) still download
+    and count the raw body, which gives the same number.
+    """
+    if version.tokens_raw_html is not None:
+        return version.tokens_raw_html
+    return _raw_bytes_tokens(blobs.get_raw(version.id))
+
+
 def _render_charger(request: Request | None) -> Callable[[], None] | None:
     """Return an ``on_render`` callback charging the render quota, or None (M9)."""
     if request is None:
@@ -525,7 +549,7 @@ def resolve_document(
                 doc,
                 formats=req.formats,
                 cache_hit=True,
-                raw_text=blobs.get_raw(current.id).decode("utf-8", errors="replace"),
+                tokens_raw_html=_stored_tokens_raw_html(current, blobs),
             )
             session.commit()
             return response
@@ -558,7 +582,7 @@ def resolve_document(
                 doc,
                 formats=req.formats,
                 cache_hit=False,
-                raw_text=blobs.get_raw(current.id).decode("utf-8", errors="replace"),
+                tokens_raw_html=_stored_tokens_raw_html(current, blobs),
             )
             session.commit()
             return response
@@ -584,7 +608,7 @@ def resolve_document(
                 doc,
                 formats=req.formats,
                 cache_hit=False,
-                raw_text=blobs.get_raw(current.id).decode("utf-8", errors="replace"),
+                tokens_raw_html=_stored_tokens_raw_html(current, blobs),
             )
             session.commit()
             return response
@@ -690,9 +714,10 @@ def _store_version(
             ctx.blobs.get_ir(existing.id),
             formats=ctx.req.formats,
             cache_hit=cache_hit,
-            raw_text=raw_text,
+            tokens_raw_html=count_tokens(raw_text),
         )
     doc.version_id = version_id
+    response_tokens = count_tokens(raw_text)
     raw_key = ctx.blobs.put_raw(version_id, body)
     ir_key = ctx.blobs.put_ir(version_id, doc)
     ctx.repo.create_version(
@@ -709,11 +734,15 @@ def _store_version(
         extractor_version=extractor_version,
         content_type_header=content_type_header,
         link_header=link_header,
+        tokens_raw_html=_raw_bytes_tokens(body, known=(raw_text, response_tokens)),
     )
 
     # (11) build the response (markdown/blocks per req.formats).
     return _build_response(
-        doc, formats=ctx.req.formats, cache_hit=cache_hit, raw_text=raw_text
+        doc,
+        formats=ctx.req.formats,
+        cache_hit=cache_hit,
+        tokens_raw_html=response_tokens,
     )
 
 
@@ -801,8 +830,12 @@ def get_document(
         repo = DocumentRepo(session)
         version = _resolve_version(repo, document_id, version_id)
         doc = blobs.get_ir(version.id)
-        raw_text = blobs.get_raw(version.id).decode("utf-8", errors="replace")
-        return _build_response(doc, formats=wanted, cache_hit=True, raw_text=raw_text)
+        return _build_response(
+            doc,
+            formats=wanted,
+            cache_hit=True,
+            tokens_raw_html=_stored_tokens_raw_html(version, blobs),
+        )
     finally:
         session.close()
 
