@@ -102,6 +102,28 @@ def _sniff_bom(body: bytes) -> str | None:
     return None
 
 
+#: The PDF file signature (ISO 32000-1 §7.5.2: the header line starts with it).
+PDF_SIGNATURE = b"%PDF-"
+
+#: Warning code when the body's bytes contradict the declared Content-Type.
+CONTENT_TYPE_MISMATCH_WARNING_CODE = "content_type_mismatch"
+
+
+def looks_like_pdf(body: bytes) -> bool:
+    """True when ``body`` starts with the PDF signature ``%PDF-``.
+
+    Servers often label PDFs ``application/octet-stream``, ``binary/
+    octet-stream``, ``application/x-download`` or send no type at all (S3,
+    GitHub release assets, CDNs). The signature is checked at the very start
+    of the body, after an optional UTF-8 BOM or leading whitespace, so an HTML
+    page that merely mentions "%PDF-" never matches. Pure, no parsing.
+    """
+    head = body[:1024]
+    if head.startswith(codecs.BOM_UTF8):
+        head = head[len(codecs.BOM_UTF8) :]
+    return head.lstrip(b" \t\r\n\x00\x0c").startswith(PDF_SIGNATURE)
+
+
 def should_render(
     *,
     main_text_len: int,

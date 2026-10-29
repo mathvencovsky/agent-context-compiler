@@ -21,6 +21,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy.engine import Engine
 
 from app.api import documents
+from app.config import get_settings
 from app.providers.embeddings.fake import FakeEmbeddingProvider
 from app.providers.rerank.fake import FakeRerankProvider
 from bench.corpus_store import CorpusStore
@@ -117,3 +118,109 @@ def test_a_page_outside_the_corpus_fails_as_in_production(server: MCPServer) -> 
             )
         )
     assert "422" in str(info.value.__cause__)  # every source failed (SPEC §8)
+
+
+# --------------------------------------------------------------------------- #
+# Markdown alternates (SPEC §3.5, M10b): snapshot runs never fetch them
+# --------------------------------------------------------------------------- #
+_ALT_PAGE = "https://docs.example.com/guide/tokens.html"
+_ALT_HTML = b"""<!doctype html><html><head><title>Tokens</title>
+<link rel="alternate" type="text/markdown" href="/guide/tokens.md">
+</head><body><main><h1>Tokens</h1>
+<p>Tokens expire after one hour unless they are refreshed with the refresh
+endpoint. A refreshed token keeps the scopes of the original token and the
+same audience, and the refresh token itself is single use.</p>
+<h2>Refresh</h2>
+<p>Send the refresh token to the refresh endpoint to obtain a new access
+token before the old one expires.</p>
+</main></body></html>"""
+
+
+class _RecordingStore(CorpusStore):
+    """The frozen corpus, recording every URL the fetcher asks it for."""
+
+    def __init__(self, corpus_dir: Path) -> None:
+        super().__init__(corpus_dir)
+        self.requested: list[str] = []
+
+    def raw_bytes(self, url: str) -> bytes:
+        self.requested.append(url)
+        return super().raw_bytes(url)
+
+
+def _alternate_corpus(tmp_path: Path) -> _RecordingStore:
+    digest = hashlib.sha256(_ALT_HTML).hexdigest()
+    corpus = tmp_path / "corpus"
+    (corpus / "example").mkdir(parents=True)
+    (corpus / "example" / f"{digest}.html").write_bytes(_ALT_HTML)
+    entry = {
+        "site": "Example",
+        "site_key": "example",
+        "rich_categories": ["guide"],
+        "url": _ALT_PAGE,
+        "final_url": _ALT_PAGE,
+        "status": "ok",
+        "reason": None,
+        "content_type": "text/html",
+        "content_hash": digest,
+        "fetched_at": "2026-10-15T00:00:00+00:00",
+        "raw_path": f"example/{digest}.html",
+        "rendered_path": None,
+    }
+    manifest = {"created_at": "2026-10-15T00:00:00+00:00", "entries": [entry]}
+    (corpus / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return _RecordingStore(corpus)
+
+
+def _resolve_frozen_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[dict[str, Any], list[str]]:
+    store = _alternate_corpus(tmp_path)
+    monkeypatch.setattr(documents, "render_url", documents.render_url)
+    server = nina_server(
+        store,
+        embeddings=FakeEmbeddingProvider(),
+        reranker=FakeRerankProvider(),
+    )
+    return _call(server, "resolve_url", {"url": _ALT_PAGE}), store.requested
+
+
+@pytest.fixture
+def _fresh_settings(engine: Engine) -> Iterator[None]:
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+    _truncate(engine)
+
+
+@pytest.mark.usefixtures("_fresh_settings")
+def test_snapshot_run_never_fetches_a_declared_markdown_alternate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The frozen defaults (check_frozen_settings enforces them): the page is
+    # extracted from its frozen HTML exactly as before M10b.
+    monkeypatch.delenv("MARKDOWN_ALTERNATE", raising=False)
+    monkeypatch.delenv("FETCH_ACCEPT_MARKDOWN", raising=False)
+    resolved, requested = _resolve_frozen_page(tmp_path, monkeypatch)
+
+    assert requested == [_ALT_PAGE]
+    assert "alternate_url" not in resolved["source"]
+    assert "alternate_content_hash" not in resolved["source"]
+    assert not [w for w in resolved["warnings"] if "alternate" in w["code"]]
+    assert "Tokens expire after one hour" in resolved["markdown"]
+
+
+@pytest.mark.usefixtures("_fresh_settings")
+def test_markdown_alternate_on_would_reach_the_corpus(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Control for the test above: with the setting on, the alternate IS asked
+    # of the corpus (absent there: 404), the HTML is kept with a warning. This
+    # is why check_frozen_settings refuses MARKDOWN_ALTERNATE in M10 runs.
+    monkeypatch.setenv("MARKDOWN_ALTERNATE", "true")
+    resolved, requested = _resolve_frozen_page(tmp_path, monkeypatch)
+
+    assert requested == [_ALT_PAGE, "https://docs.example.com/guide/tokens.md"]
+    codes = [w["code"] for w in resolved["warnings"]]
+    assert "markdown_alternate_failed" in codes
+    assert "alternate_url" not in resolved["source"]

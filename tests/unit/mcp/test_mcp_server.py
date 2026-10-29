@@ -232,6 +232,8 @@ async def test_instructions_and_descriptions_let_a_deferred_agent_find_nina() ->
     assert server.instructions == INSTRUCTIONS
     assert "assemble_context" in INSTRUCTIONS and "documentation" in INSTRUCTIONS
     assert "untrusted" in INSTRUCTIONS.lower()
+    # Says when NOT to use NINA (Context7 4.4.4; research A, L8).
+    assert "Do not use" in INSTRUCTIONS and "web search" in INSTRUCTIONS
     assert count_tokens(INSTRUCTIONS) <= 100  # in every system prompt
     tools = await server.list_tools()
     for tool in tools:
@@ -286,3 +288,34 @@ def test_result_size_ceiling_crosses_the_wire_as_meta() -> None:
         "anthropic/maxResultSizeChars": 500_000,
     }
     assert "anthropic/maxResultSizeChars" not in (wire["resolve_url"] or {})
+
+
+#: Every NINA tool only reads public pages (research D3; MCP ToolAnnotations).
+#: destructiveHint/idempotentHint only mean something when readOnlyHint is
+#: false (MCP schema), so they are not sent.
+_READ_ONLY_HINTS = {"readOnlyHint": True, "openWorldHint": True}
+
+
+async def test_every_tool_has_a_title_and_read_only_annotations() -> None:
+    # readOnlyHint lets Claude Code run the calls in parallel and retry one
+    # after a dropped connection; the connector directory requires a title.
+    for tool in await _build().list_tools():
+        assert tool.title and "ocumentation" in tool.title, tool.name
+        assert tool.annotations is not None, tool.name
+        hints = tool.annotations.model_dump(by_alias=True, exclude_none=True)
+        assert hints == _READ_ONLY_HINTS, tool.name
+
+
+def test_titles_and_annotations_cross_the_wire() -> None:
+    import asyncio
+
+    from mcp import Client
+
+    async def listed() -> list[dict[str, Any]]:
+        async with Client(_build()) as client:
+            tools = (await client.list_tools()).tools
+            return [t.model_dump(by_alias=True, exclude_none=True) for t in tools]
+
+    for tool in asyncio.run(listed()):
+        assert tool["title"], tool["name"]
+        assert tool["annotations"] == _READ_ONLY_HINTS, tool["name"]

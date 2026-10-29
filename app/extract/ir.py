@@ -33,7 +33,7 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 BlockType = Literal[
     "heading",
@@ -69,6 +69,14 @@ class SourceInfo(BaseModel):
     last_modified: str | None
     content_hash: str  # sha256 of the raw body
     render_mode: RenderMode
+    # Set only when the blocks were extracted from the page's same-origin
+    # Markdown alternate (SPEC §3.5): its final URL and the sha256 of its body.
+    # Omitted from every serialization when unset, so documents that do not use
+    # an alternate serialize exactly as before (M10b).
+    alternate_url: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    alternate_content_hash: str | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
 
 class Metadata(BaseModel):

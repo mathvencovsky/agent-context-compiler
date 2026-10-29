@@ -67,6 +67,19 @@ class Settings(BaseSettings):
     pdf_max_stream_bytes: int = 64 * 1024 * 1024
     pdf_max_decoded_bytes: int = 256 * 1024 * 1024
 
+    # Markdown served by documentation sites (SPEC 3.5, M10b). OFF by default:
+    # with it on, resolve of an HTML page that declares a same-origin
+    # rel=alternate type=text/markdown fetches that alternate (guard + robots)
+    # and uses it when its text agrees with the visible HTML text
+    # (markdown_alternate_min_overlap = share of the alternate's word trigrams
+    # found in the page; uncalibrated, DECISIONS.md 2026-10-29).
+    # fetch_accept_markdown sends "Accept: text/markdown" first on every page
+    # fetch; OFF because some servers then return agent-only content that the
+    # agreement check cannot see (no HTML to compare with).
+    markdown_alternate: bool = False
+    markdown_alternate_min_overlap: float = 0.7
+    fetch_accept_markdown: bool = False
+
     # Render decision (SPEC 3.3).
     render_min_text_chars: int = 500
 

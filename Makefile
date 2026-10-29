@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate check test bench dev m10a-pending
+.PHONY: setup up down migrate check test bench dev m10a-pending extract-eval
 
 # First run: dependencies, .env (never over an existing one), services, schema.
 setup:
@@ -40,3 +40,12 @@ m10a-pending:
 	uv run python -m bench.m10a_section_expand --half A
 	uv run python -m bench.m10a_version --half A
 	uv run python -m bench.tokenizer_ratio
+
+# Zero-cost extraction eval (M10b, Phase P): downloads the pinned WCXB docs
+# subset and the PDF facts set from GitHub (checksum-verified, never
+# committed), then measures the extractors on dev + PDFs and checks the
+# committed baseline's automatic gates. The test split is one look per change:
+#   make extract-eval ARGS="--split test"
+extract-eval:
+	uv run python -m bench.extract_eval.fetch
+	uv run python -m bench.extract_eval.run $(ARGS)

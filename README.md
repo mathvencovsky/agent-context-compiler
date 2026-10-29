@@ -28,8 +28,8 @@ a token budget you set, with the source of every line.
 - **Deterministic.** No LLM in extraction or selection: the same URLs and
   question give the same output.
 - **Any public page, no index to maintain.** NINA reads the URLs the agent
-  passes, on demand (HTML, PDF and JavaScript-rendered pages). Nothing goes
-  stale.
+  passes, on demand (HTML, PDF, Markdown, plain text and JavaScript-rendered
+  pages). Nothing goes stale.
 - **Safe by default.** Every outbound request passes one SSRF guard and
   respects `robots.txt`. Page text is always marked as untrusted data, and a
   page cannot forge NINA's own notes.

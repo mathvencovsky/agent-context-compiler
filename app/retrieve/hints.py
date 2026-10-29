@@ -30,7 +30,8 @@ _SOURCE_OPTIONS = {
     "invalid_url": "the URL is not a valid public http(s) address",
     "too_large": "the page is larger than NINA's size limit; the option is a more "
     "specific page",
-    "unsupported_content_type": "the content type is neither HTML nor PDF",
+    "unsupported_content_type": "the content type is not HTML, PDF, Markdown or "
+    "plain text",
     "extraction_empty": "the page has no extractable text",
     "upstream_status": "the site answered with an HTTP error instead of the page "
     "(404: the URL is wrong or moved; 5xx: the options are retrying later or "

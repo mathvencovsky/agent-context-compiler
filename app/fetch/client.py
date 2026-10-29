@@ -233,13 +233,15 @@ def fetch(
     transport: httpx.BaseTransport | None = None,
     settings: Settings | None = None,
     method: str = "GET",
+    accept: str | None = None,
 ) -> FetchResult:
     """Fetch ``url`` safely and return a :class:`FetchResult`.
 
     Redirects are followed manually (max ``settings.max_redirects`` hops); each
     ``Location`` is re-validated by the guard, so a redirect to a private IP
     raises ``BlockedDestination``. Body size, connect and total timeouts are
-    enforced per SPEC §3.1.
+    enforced per SPEC §3.1. ``accept`` (None by default: no ``Accept`` header)
+    is sent as the ``Accept`` header on every hop (SPEC §3.5 opt-in).
     """
     settings = settings or get_settings()
     resolver = resolver or SocketResolver()
@@ -270,13 +272,16 @@ def fetch(
                     details={"url": current_url},
                 )
 
+            headers = {
+                "Host": _host_header(guard, current_url),
+                "User-Agent": user_agent,
+            }
+            if accept is not None:
+                headers["Accept"] = accept
             request = client.build_request(
                 method,
                 ip_url,
-                headers={
-                    "Host": _host_header(guard, current_url),
-                    "User-Agent": user_agent,
-                },
+                headers=headers,
                 extensions={"sni_hostname": guard.hostname},
                 # Per-operation timeouts never outlive the total deadline.
                 timeout=httpx.Timeout(

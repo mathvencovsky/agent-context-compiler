@@ -1,0 +1,192 @@
+# PDF "facts" set for the M10b extraction eval (Phase P, step 1).
+#
+# Every fact was written by reading the rendered page (pypdfium2 render at
+# 1.3x, looked at by eye), not copied from any extractor's output, on
+# 2026-10-28, before any change to app/extract/pdf.py. Facts are fixed: do not
+# edit one to make a change pass. Adding a document or a fact is allowed only
+# in a commit of its own, made before the measurement it affects.
+#
+# Matching rules (bench/extract_eval/metrics.py):
+#   present   - the string appears in the document text with whitespace
+#               collapsed (blocks joined by a newline). Exact characters: no
+#               ligature folding, no de-hyphenation by the harness.
+#   headings  - the string is contained in the text of some heading block.
+#   title     - contained in metadata.title, or in the heading blocks of
+#               pages 1-2 joined by a space.
+#   order     - both strings present and the first occurs before the second.
+#   tables    - table-block count within [min, max]; each cell string equals
+#               (whitespace-collapsed) some header or body cell of a table.
+#   paragraphs- number of text blocks (every type except heading and table)
+#               on that physical page (1-based) within [min, max].
+#
+# The data is never committed: `make extract-eval` downloads each file and
+# checks the sha256. License of each document is recorded below.
+
+documents:
+  - id: riscv_spec_20191213
+    description: "RISC-V ISA Manual, Vol. I, 20191213 (pdfTeX, 238 pages)"
+    producer: pdfTeX
+    download_url: https://github.com/riscv/riscv-isa-manual/releases/download/Ratified-IMAFDQC/riscv-spec-20191213.pdf
+    sha256: f392624cc815cd3f259413cbd9ae2f38678ee930878855a0f4673019410d7554
+    license: CC-BY-4.0
+    license_url: https://raw.githubusercontent.com/riscv/riscv-isa-manual/66bed2470f68520fadc4bf86c6c000d817fe73f2/LICENSE
+    license_sha256: cce5d01fa4a83b794271bd2c28cffdf99afd43c803e6ddefddae39b591ea7448
+    attribution: "The RISC-V Instruction Set Manual, Volume I: Unprivileged ISA, Document Version 20191213, eds. Andrew Waterman and Krste Asanovic, RISC-V Foundation; CC-BY-4.0; https://github.com/riscv/riscv-isa-manual (release Ratified-IMAFDQC)"
+    facts:
+      title: "The RISC-V Instruction Set Manual"
+      headings:
+        - "Introduction"
+        - "RV32I Base Integer Instruction Set"
+      present:
+        - "is a new instruction-set architecture (ISA) that was originally designed to support computer architecture research and education"
+        - "microcoded, in-order, decoupled, out-of-order"
+        - "A fully virtualizable ISA to ease hypervisor development."
+        - "An ISA that simplifies experiments with new privileged architecture designs."
+        - "Commentary on our design decisions is formatted as in this paragraph."
+        - "This chapter describes version 2.0 of the RV32I base integer instruction set."
+        - "Register x0 is hardwired with all bits equal to 0."
+        - "There is one additional unprivileged register: the program counter pc holds the address of the current instruction."
+        - "Most of the commentary for RV32I also applies to the RV64I base."
+      order:
+        - ["Our goals in defining RISC-V include", "A fully virtualizable ISA to ease hypervisor development."]
+      paragraphs:
+        - {page: 19, min: 2, max: 16}
+        - {page: 31, min: 5, max: 10}
+
+  - id: geotopo
+    description: "Einfuehrung in die Geometrie und Topologie, lecture notes (pdfTeX, German, 117 pages)"
+    producer: pdfTeX
+    download_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/009-pdflatex-geotopo/GeoTopo.pdf
+    sha256: a0b9242aef9b5a2c4850160cc9aaf64f5c7b8be705d6872ae28aebf5ab512540
+    license: CC-BY-SA-4.0
+    license_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/LICENSE
+    license_sha256: 23ee78c8bae49cf08ea2f0c84945c66b987ebe4520881fb51b3dad4fb43d07c2
+    attribution: "Martin Thoma, Einfuehrung in die Geometrie und Topologie (2016), via py-pdf/sample-files; CC-BY-SA-4.0"
+    facts:
+      title: "Einführung in die Geometrie und Topologie"
+      headings:
+        - "Danksagungen"
+        - "Was ist Topologie?"
+        - "Topologische Grundbegriffe"
+        - "Topologische Räume"
+      present:
+        - "Dieses Skript wurde im Wintersemester 2013/2014 von Martin Thoma geschrieben."
+        - "ihre Übungsaufgaben und Lösungen zu benutzen."
+        - "Es gibt auch Mengen, die weder abgeschlossen, noch offen sind"
+        - "Auch gibt es Mengen, die sowohl abgeschlossen als auch offen sind."
+        - "ist auch ein topologischer Raum."
+      paragraphs:
+        - {page: 2, min: 8, max: 10}
+        - {page: 6, min: 8, max: 30}
+
+  - id: latex_multicolumn
+    description: "Two-column LaTeX article with a booktabs table (3 pages)"
+    producer: pdfTeX
+    download_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/026-latex-multicolumn/multicolumn.pdf
+    sha256: bdb495e95b3e1afae95013099dc59b0cea047f1fa70f677ee9cb33f10faa1c6c
+    license: CC-BY-SA-4.0
+    license_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/LICENSE
+    license_sha256: 23ee78c8bae49cf08ea2f0c84945c66b987ebe4520881fb51b3dad4fb43d07c2
+    attribution: "py-pdf/sample-files 026-latex-multicolumn; CC-BY-SA-4.0"
+    facts:
+      title: "Two-Column Document with Lorem Ipsum"
+      headings:
+        - "Abstract"
+      present:
+        - "This is a sample document with two columns filled with Lorem Ipsum text."
+        - "Mauris ut leo. Cras viverra metus rhoncus sem."
+        - "Phasellus eu tellus sit amet tortor gravida placerat."
+      order:
+        - ["Nulla malesuada porttitor diam", "Quisque ullamcorper placerat ipsum"]
+        - ["Vivamus viverra fermentum felis", "pellentesque ante. Phasellus adipiscing semper elit."]
+      tables:
+        min: 1
+        max: 1
+        cells: ["Country", "Copenhagen", "Finnish, Swedish"]
+      paragraphs:
+        - {page: 1, min: 5, max: 14}
+        - {page: 3, min: 0, max: 2}
+
+  - id: latex_outline
+    description: "pdfTeX document with a table of contents and numbered sections (4 pages)"
+    producer: pdfTeX
+    download_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/006-pdflatex-outline/pdflatex-outline.pdf
+    sha256: 17b5a4dac75613b82749c7538fc93991a385a5d419cc9832fdba24c1726a031a
+    license: CC-BY-SA-4.0
+    license_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/LICENSE
+    license_sha256: 23ee78c8bae49cf08ea2f0c84945c66b987ebe4520881fb51b3dad4fb43d07c2
+    attribution: "py-pdf/sample-files 006-pdflatex-outline; CC-BY-SA-4.0"
+    facts:
+      headings:
+        - "1 Foo"
+        - "2 Bar"
+        - "9 Baz"
+      present:
+        - "Is there a difference between this text and some nonsense like"
+        - "but the length of words should match the language."
+      tables:
+        min: 0
+        max: 0
+      paragraphs:
+        - {page: 2, min: 4, max: 6}
+
+  - id: latex_minimal
+    description: "One-paragraph pdfTeX document with a hyphenated line break (1 page)"
+    producer: pdfTeX
+    download_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/001-trivial/minimal-document.pdf
+    sha256: f723638db6e763cf4ccadad38a3d38a02d9ecab95dab1f0bbf00e801991b5f92
+    license: CC-BY-SA-4.0
+    license_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/LICENSE
+    license_sha256: 23ee78c8bae49cf08ea2f0c84945c66b987ebe4520881fb51b3dad4fb43d07c2
+    attribution: "py-pdf/sample-files 001-trivial; CC-BY-SA-4.0"
+    facts:
+      present:
+        - "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore"
+        - "no sea takimata sanctus est Lorem ipsum dolor sit amet."
+      tables:
+        min: 0
+        max: 0
+      paragraphs:
+        - {page: 1, min: 1, max: 2}
+
+  - id: libreoffice_writer
+    description: "One-paragraph LibreOffice Writer document (1 page)"
+    producer: LibreOffice 6.4
+    download_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/002-trivial-libre-office-writer/002-trivial-libre-office-writer.pdf
+    sha256: fc67ce4f76ffb44e818ebe4f673dbeb6002ad93a59f3856ff14fb1d3625f10a5
+    license: CC-BY-SA-4.0
+    license_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/LICENSE
+    license_sha256: 23ee78c8bae49cf08ea2f0c84945c66b987ebe4520881fb51b3dad4fb43d07c2
+    attribution: "py-pdf/sample-files 002-trivial-libre-office-writer; CC-BY-SA-4.0"
+    facts:
+      present:
+        - "Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
+        - "At vero eos et accusam et justo duo dolores et ea rebum."
+      tables:
+        min: 0
+        max: 0
+      paragraphs:
+        - {page: 1, min: 1, max: 2}
+
+  - id: google_docs
+    description: "Google Docs export with a title, short lines and a bordered table (1 page)"
+    producer: Skia/PDF (Google Docs)
+    download_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/011-google-doc-document/google-doc-document.pdf
+    sha256: 69f6b7f493b1bc55d518942976cbeadc4ec0a36f6d8a6dc24feffc516d35b2c9
+    license: CC-BY-SA-4.0
+    license_url: https://raw.githubusercontent.com/py-pdf/sample-files/02aa148d618becd943a2a6bd78581de300fd75bc/LICENSE
+    license_sha256: 23ee78c8bae49cf08ea2f0c84945c66b987ebe4520881fb51b3dad4fb43d07c2
+    attribution: "py-pdf/sample-files 011-google-doc-document; CC-BY-SA-4.0"
+    facts:
+      title: "Example document"
+      present:
+        - "Special cases aren't special enough to break the rules."
+        - "Namespaces are one honking great idea -- let's do more of those!"
+      order:
+        - ["Beautiful is better than ugly.", "Namespaces are one honking great idea"]
+      tables:
+        min: 1
+        max: 1
+        cells: ["Jakarta", "Vatican City", "Population"]
+      paragraphs:
+        - {page: 1, min: 1, max: 24}

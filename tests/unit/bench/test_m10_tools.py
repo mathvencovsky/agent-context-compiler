@@ -131,6 +131,21 @@ def test_overridden_nina_settings_are_refused() -> None:
         check_frozen_settings(Settings(_env_file=None, selection_lambda=0.3))  # type: ignore[call-arg]
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"markdown_alternate": True},
+        {"markdown_alternate_min_overlap": 0.5},
+        {"fetch_accept_markdown": True},
+    ],
+)
+def test_markdown_source_settings_are_frozen_off(change: dict[str, object]) -> None:
+    # SPEC §3.5: snapshot runs must not fetch a Markdown alternate (absent from
+    # the frozen corpus) nor negotiate Markdown.
+    with pytest.raises(SystemExit, match="PREREG"):
+        check_frozen_settings(Settings(_env_file=None, **change))  # type: ignore[arg-type, call-arg]
+
+
 def test_candidate_log_appends_what_the_reranker_scored(tmp_path: Path) -> None:
     log = tmp_path / "candidates.jsonl"
     reranker = _CandidateLog(FakeRerankProvider(), log)
@@ -188,15 +203,18 @@ def test_full_page_server_speaks_mcp_over_stdio(
         cwd=str(tmp_path),
     )
 
-    async def session() -> tuple[list[str], str, list[object]]:
+    async def session() -> tuple[list[str], str, list[object], list[object]]:
         async with Client(params) as client:
             tools = await client.list_tools()
             result = await client.call_tool("fetch_page", {"url": _URL})
             metas = [t.model_dump(by_alias=True).get("_meta") for t in tools.tools]
-            return [t.name for t in tools.tools], result.content[0].text, metas  # type: ignore[union-attr]
+            hints = [t.annotations for t in tools.tools]
+            return [t.name for t in tools.tools], result.content[0].text, metas, hints  # type: ignore[union-attr]
 
-    names, text, metas = asyncio.run(session())
+    names, text, metas, hints = asyncio.run(session())
     assert names == ["fetch_page"]
     assert "absolute value" in text
     # the size annotation crosses the wire as `_meta`, where Claude Code reads it
     assert metas == [{"anthropic/maxResultSizeChars": 500_000}]
+    # same read-only hints as NINA's tools, so Claude Code treats the arms alike
+    assert [h.read_only_hint if h else None for h in hints] == [True]

@@ -1,0 +1,1201 @@
+{
+ "source": {
+  "name": "WCXB: Web Content Extraction Benchmark v1.0 (documentation subset)",
+  "repo": "https://github.com/Murrough-Foley/web-content-extraction-benchmark",
+  "commit": "c039d5ee9f5a3a984a0e167e63aacd04e76e78a9",
+  "license": "CC-BY-4.0",
+  "attribution": "WCXB by Murrough Foley (2026), https://github.com/Murrough-Foley/web-content-extraction-benchmark, licensed CC-BY-4.0. Used unmodified for evaluation; not redistributed here (only ids, URLs and checksums are committed).",
+  "citation": "Foley, M. (2026). WCXB: A Multi-Type Web Content Extraction Benchmark. arXiv:2605.21097."
+ },
+ "split_rule": "int(sha256(page_id as UTF-8).hexdigest(), 16) % 2: 0 -> dev, 1 -> test. Fixed on 2026-10-28 before any measurement with this harness.",
+ "files": {
+  "metadata.json": "f01ae8e0cf7d7a97f8a05e2a6c6416c56fcd758e5686bf932f1e59f3b3acdba5",
+  "LICENSE": "6410290cc35ef75d893240d3736e96dc383ed123780702e56cf1a090ae003c72"
+ },
+ "counts": {
+  "pages": 131,
+  "dev": 64,
+  "test": 67
+ },
+ "pages": [
+  {
+   "id": "0239",
+   "url": "http://docs.mcneel.com/rhino/6/usersguide/en-us/html/ch-15_headphones.htm",
+   "domain": "docs.mcneel.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "4676c2cce47e77025cae54b9a561c70451b2d33a573dd5574b63011b5574ed1f",
+   "gt_sha256": "5beeaa8a568e627926b0180dba21b942f48b377dd25e2df64b7e67340b5a6d1b"
+  },
+  {
+   "id": "0349",
+   "url": "http://www.osha.gov/electrical",
+   "domain": "osha.gov",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "7ce17181f3bc9f0dd078de8ef5bd2df545be6dca78a7db03b22ee4fded6cfe19",
+   "gt_sha256": "bd10e10a3b12bcf4e8809bb79924edcb37fb9e6fa93bfed6b91b494fcc528b66"
+  },
+  {
+   "id": "0369",
+   "url": "https://www.wellmeright.com/glossary/fitness-exercise-training",
+   "domain": "wellmeright.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "c73b1ff15b7c17abf86d03f0d48ffa83049b7fb0927be2d23bc42510efd6c0ee",
+   "gt_sha256": "01df34f6002b2f0d0788ca2ef1d4c6c5cacde904c7f46e5a9e1e5cb1e09da987"
+  },
+  {
+   "id": "0423",
+   "url": "https://qubit.guide/plan-and-intended-audience",
+   "domain": "qubit.guide",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "192cdd14ff1591f51f09304bed98156270172b76e982d7a1b350dde7fbd97431",
+   "gt_sha256": "4896e4b6c18976fc0848ba1484cd8db318a978c743a6ba55c228d376ea460ce6"
+  },
+  {
+   "id": "0424",
+   "url": "https://www.sitanchen.com/cs224/f23/index.html",
+   "domain": "sitanchen.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "dfbf911b96064aa20c4de8208e9fab020e9720b56c7fc9e5b4e0404e05cc0a31",
+   "gt_sha256": "903bfc3e625339355598e6429f05e98f70f8b0bcc079fdd832ddfbd7ace0a30d"
+  },
+  {
+   "id": "0497",
+   "url": "https://www.jfpossibilities.com/tech_notes/linux/survival-guide-sysv-init",
+   "domain": "jfpossibilities.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "75052623e6d32257001b5bba13e92e5d510c20d762d2bf5cb1578fa2101f385b",
+   "gt_sha256": "43815289038c3928b6f7c45e12f9c13b46b4842e3ec55d4becc6a81a6aad97ae"
+  },
+  {
+   "id": "0498",
+   "url": "https://mostly-adequate.gitbook.io/mostly-adequate-guide",
+   "domain": "mostly-adequate.gitbook.io",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "73ee3404b65a80e656e25f00603b8441cff1623127dbdba716214c6aeed523e0",
+   "gt_sha256": "ac8e2a45996b7b45cd371d2b505a29f0a976f3eef2e39106aea9623f0270b343"
+  },
+  {
+   "id": "0499",
+   "url": "https://sdiehl.github.io/zero-to-qed/01_introduction.html",
+   "domain": "sdiehl.github.io",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "a057631113bcc26f07748d653a87c3f2cd64b230c8db98c392e0977754c003dd",
+   "gt_sha256": "76a9337d73d1b22cd3648bfa6c24187911924f4b8f71c26a94752ce9dce295aa"
+  },
+  {
+   "id": "0661",
+   "url": "https://docs.djangoproject.com/en/5.1/ref/middleware/",
+   "domain": "docs.djangoproject.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "3e5b99861257e5cde428786cf41c58e25999dc875c77a0c3c78caba79f376aff",
+   "gt_sha256": "74a2f4934aa0e8ab82a6361a813e5c93d2eb10612ec4a43ce4c38e07b8f0401d"
+  },
+  {
+   "id": "0662",
+   "url": "https://flask.palletsprojects.com/en/stable/quickstart/",
+   "domain": "flask.palletsprojects.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "f0a630be2ba854baea6b464ffce99a01233b1dd4fbc16771b8ed58fef0b85e9b",
+   "gt_sha256": "f66a5d273df6491f8e51f70acb699e497b0fefa92bf7da70994dd70fc56f8916"
+  },
+  {
+   "id": "0663",
+   "url": "https://requests.readthedocs.io/en/latest/user/advanced/",
+   "domain": "requests.readthedocs.io",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "af846fe8b77abfe366e754c7a3f140dd6bfa491dc56516c4aaf3e10e34b9c8c0",
+   "gt_sha256": "5275bdd9950588a504c7a1b507b311612c67b1db280a9338149df37193305aa0"
+  },
+  {
+   "id": "0664",
+   "url": "http://docs.sqlalchemy.org/en/latest/orm/quickstart.html",
+   "domain": "docs.sqlalchemy.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "af39fae967ad2d8437301e7c99b984a8eb7a9072b3b59f6e87de916c9e09274f",
+   "gt_sha256": "ef564027dcaa546dd04980079536a435999b96b492b1f4ac8b8cf6bce7186081"
+  },
+  {
+   "id": "0665",
+   "url": "https://docs.celeryq.dev/en/stable/userguide/monitoring.html",
+   "domain": "docs.celeryq.dev",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "eeb882356e638800f8e49ca5020d184b216184db7702f087f23e64e40e0a59e9",
+   "gt_sha256": "752aa596c10119e866025a3a5dd7b40c78fee6dbf19fcc6dea2bcc84974537d5"
+  },
+  {
+   "id": "0666",
+   "url": "https://docs.python.org/3/library/itertools.html",
+   "domain": "docs.python.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "394d4aeff10fe67eac6010ad1d66917893cc8287a0c7bf8f43a877804ce2457a",
+   "gt_sha256": "f26661ce2480efd9990f2965e9343795e2180a2deabd2c215dab32b367f9a09e"
+  },
+  {
+   "id": "0667",
+   "url": "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html",
+   "domain": "doc.rust-lang.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "feb161265d076f2153aac9865800fcfd31300bce8699b445f801b53da9f59195",
+   "gt_sha256": "ae50c8a10be59d9b032ee1baaf9128235ffa57a0466c76e15497e274931c43f3"
+  },
+  {
+   "id": "0668",
+   "url": "https://go.dev/doc/modules/managing-dependencies",
+   "domain": "go.dev",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "5e6fb02a38fbce0dcd0c303c9ca3b55ebda97622d6a24f0f8ce4205692904202",
+   "gt_sha256": "63f3d1ee6acc233463aa2efa290b1c539fe441ba41dd97bc2b217d1631d269fd"
+  },
+  {
+   "id": "0669",
+   "url": "https://www.typescriptlang.org/docs/handbook/2/types-from-types.html",
+   "domain": "typescriptlang.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "fd1cba27d3f94e5f467f4ed053724bf9047e92ec005f5bfe11531813295d1d79",
+   "gt_sha256": "421b0a23dac7f33f82d841f27f8a2c0c4f70f78e923011cbb30ebaf3ee7d3b54"
+  },
+  {
+   "id": "0670",
+   "url": "https://www.postgresql.org/docs/18/sql-select.html",
+   "domain": "postgresql.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "5bfe83ea111fb7432685e4b56680e7391346452fdfc4e3feaf4bf17465ed4c34",
+   "gt_sha256": "9478925608fbf34502de6f5e7e5cbc7b79c3a1ba6a045e3404f8b7f70c581c8b"
+  },
+  {
+   "id": "0671",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "62869aff3fe8dfd22d3a2f75453f801c73878ea870d80958478188b30338aa78",
+   "gt_sha256": "78f410fbe4b912dfee50ac7124b677ef2ef9e9383da827fb4b83ac7c2247566e"
+  },
+  {
+   "id": "0672",
+   "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Flexbox",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "7cff4eab88df79c809f51914b520ef8ce972b74122aa93c80aafd53fe09f6fa3",
+   "gt_sha256": "6223d03fdb950bee33c7c6df7d108b7513fe8c8da1d381baa21a540381cebf45"
+  },
+  {
+   "id": "0673",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "b512b2cbfadbfe649d102586e5d6a8a24b2af1b40a7644b5d407972e4bf37223",
+   "gt_sha256": "0216ec6210edc8c30dc6eb24d45d309545a845822bbe2ec7f0cf7a5086791429"
+  },
+  {
+   "id": "0674",
+   "url": "https://react.dev/learn",
+   "domain": "react.dev",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "2e7712ea3de07091b3b3abb33660e566ad9e08bfd66ca92907388d6fedfd97b4",
+   "gt_sha256": "880409a749872b510b42bbc135c76f2e443c40898f9e9e2c8c007be1bd813a26"
+  },
+  {
+   "id": "0675",
+   "url": "https://docusaurus.io/docs",
+   "domain": "docusaurus.io",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "0c518bc1c20e346fd5740937e352220ea4db8a997d21911b8674bd90d7a4f281",
+   "gt_sha256": "adf5d563d777487a3c42b39f1eb678af639bae1f4e1f7e68c9635666c8e6ea8f"
+  },
+  {
+   "id": "0676",
+   "url": "https://supabase.com/docs/guides/auth",
+   "domain": "supabase.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "8018a84631d39b840e2ec87bd93ac208ef3783e2f4346c8f6669c3114bd89791",
+   "gt_sha256": "583b081dd486d7d4f5e22f077369fbd8c6725470cec845603b19e398175170f0"
+  },
+  {
+   "id": "0677",
+   "url": "https://v2.tauri.app/start/",
+   "domain": "v2.tauri.app",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "175f505600704f5a604c51b7dc66ba1c8dfafe6e81222c296a7f061212a2eb25",
+   "gt_sha256": "0c9318850c40a084498c45e72760d6d7569635f2b21265b0d069c054ea7944b3"
+  },
+  {
+   "id": "0678",
+   "url": "https://fastapi.tiangolo.com/tutorial/",
+   "domain": "fastapi.tiangolo.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "a23ba2a6b3d4dbfdf9256f919c73304ee2b76b1122ed9a15a715914bbd07f6c2",
+   "gt_sha256": "fd18459089d2e9ed8d63e42006a24d6fa85c76cd6c3d83ab2fa8c22952ece982"
+  },
+  {
+   "id": "0679",
+   "url": "https://docs.pydantic.dev/latest/concepts/fields/",
+   "domain": "docs.pydantic.dev",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "1c6b2a18c4539c4b4ccbfea40d24d42aa5828b2f732b567c0d9fd2ecc5bd7f21",
+   "gt_sha256": "7dd5223119ff7daa2fdf5e98bdc299c30c3c186e0877bcca74ad77926c492d2a"
+  },
+  {
+   "id": "0680",
+   "url": "https://docs.stripe.com/api/charges",
+   "domain": "docs.stripe.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "a1e91cadb739964e3f38b1b301780b7f4daac91970f5d73753d84197c8733f69",
+   "gt_sha256": "552756a07683098cf89026d51a9b1679583c598f7dc71ff2229ffd76d19645c0"
+  },
+  {
+   "id": "0681",
+   "url": "https://www.twilio.com/docs/messaging/quickstart",
+   "domain": "twilio.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "2835a1856653c91b7d5bed2dab1d18fdba3558979d4eaa892e7e368fc8c6d2a0",
+   "gt_sha256": "8dac0b142bb21756844ac41e926d2afccbe4d15172f679ce5ac23c7a237f5176"
+  },
+  {
+   "id": "0682",
+   "url": "https://wiki.archlinux.org/title/Sudo",
+   "domain": "wiki.archlinux.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "d6dd13f130f40a043fa35456048098fd00da2fd49dcc05d26d681cfd2261c859",
+   "gt_sha256": "fba911b4306854471f3542fda16f7bdcb4f1c0881c28bcf1520f15b16db44fed"
+  },
+  {
+   "id": "0683",
+   "url": "https://wiki.gentoo.org/wiki/Portage",
+   "domain": "wiki.gentoo.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "ff65e9dcea50e2816602d1ce443c5a313e2ccc565008e26f069721fa95305c10",
+   "gt_sha256": "d8f086a32015d2930888e3c8da6ad94a740904d114275e790b6cd7e29cd63541"
+  },
+  {
+   "id": "0684",
+   "url": "https://nginx.org/en/docs/http/ngx_http_rewrite_module.html",
+   "domain": "nginx.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "25c57704cbc1cb40e717ae9d913d6d7cc74cc6911c4bb1e8446e1694231b8453",
+   "gt_sha256": "c03486c4328151df5f9dabc18c3f093bb26c36f14301c3eef1d47080f1bc15b1"
+  },
+  {
+   "id": "0685",
+   "url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+   "domain": "kubernetes.io",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "566a7db1c232a34b4201bcd0f16cd4cece25c8a3349b286798940211176be4b6",
+   "gt_sha256": "879ea2ea6f52b0beba2c4fe17677d9f272b95fc1f97c94d3898f1bf584da7001"
+  },
+  {
+   "id": "0686",
+   "url": "https://developer.hashicorp.com/terraform/language/block/resource",
+   "domain": "developer.hashicorp.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "8f88a759db3942bca2ae5a9a1c23f2bad464b165a3ada7a269e938846fef6cf1",
+   "gt_sha256": "1d45280e0cc326d774ccdfe69a0d9ac97e8be3d55815530c234aad06e8995588"
+  },
+  {
+   "id": "0687",
+   "url": "https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_intro.html",
+   "domain": "docs.ansible.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "4df7e4b8a13aa498755b298ce7c1bdd53959f3dd98bfe6b0f2467c768709c37c",
+   "gt_sha256": "276e0a87a5c27b0ccf11f8f3cd9216eb6be2992318df47e7a7378e51e30e91ea"
+  },
+  {
+   "id": "0688",
+   "url": "https://man7.org/linux/man-pages/man1/grep.1.html",
+   "domain": "man7.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "68d835578c5ff8b5a728c2bf09c2c4a57e09cfd6b974ce0569fa6f34d35a3d1c",
+   "gt_sha256": "3482095e23f521f7f9e87e890f96061186b2a7bab9d11f12fe45ad5e87e9d94f"
+  },
+  {
+   "id": "0689",
+   "url": "https://git-scm.com/docs/git-commit",
+   "domain": "git-scm.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "60a0b94a34e3ace808c22fdc031363e0cba1059fa188f7a65c0226d1f8803673",
+   "gt_sha256": "ebaf8dcf31e6e676321d38f8f36aefa2cdb3bd32928a692ae6e0f93e2f0c2fa2"
+  },
+  {
+   "id": "0701",
+   "url": "https://cloud.google.com/bigquery/docs/introduction",
+   "domain": "cloud.google.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "0d72ea478b4b7b1a11847c93bfa631d5f43231fe66921a0e99d563647fa2acb5",
+   "gt_sha256": "8e5669c38c8075eaf605ec9c9097b8a25c85a7a2785b1c58a6249c13a46f364b"
+  },
+  {
+   "id": "0703",
+   "url": "https://ahrefs.com/seo",
+   "domain": "ahrefs.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "69ab4d0ecdba2a8dafeb41559876e32f630169340d8212aa6995a0431135f861",
+   "gt_sha256": "914a693e7c175887c9a9614ae3d7397f75aa0267af4d8dd339ce49af08b93c8e"
+  },
+  {
+   "id": "1442",
+   "url": "https://developer.android.com/get-started/overview",
+   "domain": "developer.android.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "501663d523fb681284542db14fe8fa9271754b228ecacbd05674b05995d3ee7e",
+   "gt_sha256": "48cdc424bb2c658d6aece08c6dc4510d5f5a1c8e9fd626dd97f4771f27303926"
+  },
+  {
+   "id": "1766",
+   "url": "https://www.browserstack.com/guide/automation-testing-tutorial",
+   "domain": "browserstack.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "2f0ae064f40f429da9d1121b824afd647f42e6cc60039990307a4b7ce194aa2c",
+   "gt_sha256": "790102ff42b5ab96b6e5eddee1bd39f7432f17d3834077817beca8882df97c75"
+  },
+  {
+   "id": "2393",
+   "url": "https://ai.google.dev/gemma/docs/functiongemma",
+   "domain": "ai.google.dev",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "c2d95ae38a43d38095815c6d3bbfede360953e850c779320fcccfe0df2778862",
+   "gt_sha256": "887bdf838cf8822a7dff869861a3f886ab97f4653fefa3083dd0c22df16bee30"
+  },
+  {
+   "id": "2660",
+   "url": "https://www.zotero.org/support/searching",
+   "domain": "zotero.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "1d744d22f700a4bab305d5b58046c77630120c464d996c97d51ef4abb4c39a73",
+   "gt_sha256": "bba4b1e6881a8068d7eda8a5e862c99aae6f7f689f849eac78477d1c9f7918b4"
+  },
+  {
+   "id": "2853",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Functions",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "bb05237362718f5441170d2b97f3ddda1fa4f6f70eb3397f8416f5ccd43a00a2",
+   "gt_sha256": "0a691bc5135220c862ceb600a0e5ef2ae75e364081df4e14abe8d1bb2d6d87ef"
+  },
+  {
+   "id": "2854",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Flexbox",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "88718f0650b9e8ddb07c812728b829cb02e7486172ab09f5f58a1e56b095a286",
+   "gt_sha256": "2815a83ee6719382a397e8324e29aea83524dbd5514198c6fe31e46e1b66dd67"
+  },
+  {
+   "id": "2855",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/table",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "bd18bf6e66044e1a6518089f098d75164b7103d962b19ef3750141cb66fc6512",
+   "gt_sha256": "679fe70e51c9cb73a86513938e385870ae84bfabc53ae0ff3a50c5907605efac"
+  },
+  {
+   "id": "2856",
+   "url": "https://developer.mozilla.org/en-US/docs/Learn/JavaScript/Asynchronous/Promises",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "0e1f1e10c1e29e6fea26bbc915116d107b92000302b937e29de12042ed1fd19b",
+   "gt_sha256": "61c2bda718ab27ec53cbe83cc1f28ce4ffa11526af7c14843b9d075607fee493"
+  },
+  {
+   "id": "2857",
+   "url": "https://docs.python.org/3/library/asyncio-task.html",
+   "domain": "docs.python.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "4dbcd9014d8664843ae9e8e0ae7a7d2a530f620faf4b5742479bd6afe44e9495",
+   "gt_sha256": "58d5a0f86efb08ca9ae5c625a15ee97927f2f40612c78bae677d597caf90f45c"
+  },
+  {
+   "id": "2858",
+   "url": "https://docs.python.org/3/tutorial/datastructures.html",
+   "domain": "docs.python.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "b9af38f5b25ceb4c3823b573cf922157b23b4355b8ac5f7e174507fa4fcd277c",
+   "gt_sha256": "473a11cca33ec399f96288ac6d19dccf14fa1e7cf7440e3068f1991cd2049afe"
+  },
+  {
+   "id": "2859",
+   "url": "https://docs.python.org/3/howto/logging.html",
+   "domain": "docs.python.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "565c2335afa56858b453574d9a111c36ab0e6b4446024bdd9b76158f1a17df78",
+   "gt_sha256": "0074f4e2885ee76390cae1fb5f710032380538da2a6df9755bef011cc201af92"
+  },
+  {
+   "id": "2860",
+   "url": "https://doc.rust-lang.org/book/ch10-02-traits.html",
+   "domain": "doc.rust-lang.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "6d2eccff1973301eb025c294e222c9776c8db8723b65e0588951a4ba1a6487e4",
+   "gt_sha256": "7b5a39adff6ef0d1154a75bcdf1d6ddcc263cc8ec5961bc7c83f77b5cd5bd4c0"
+  },
+  {
+   "id": "2861",
+   "url": "https://doc.rust-lang.org/std/result/enum.Result.html",
+   "domain": "doc.rust-lang.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "ccf3f81257a7ce8dfc572befd2dfb2df45ac372040d85c8fe4dde616dbf25582",
+   "gt_sha256": "8ced87272c7558565bb72d8d8c83dbf51070db9c5c55791c384a43c6f375febf"
+  },
+  {
+   "id": "2863",
+   "url": "https://www.postgresql.org/docs/current/sql-select.html",
+   "domain": "postgresql.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "afd5cf0af3aeddaf1b42abea55fad872c1c0490bb0a74d52d2b269afd8cc6e8c",
+   "gt_sha256": "6559755c94544c53b48babe3687b993e64e38c0d2b001fe16fc4dad8c2045c91"
+  },
+  {
+   "id": "2864",
+   "url": "https://www.postgresql.org/docs/current/indexes.html",
+   "domain": "postgresql.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "889e9be192b97cf4a7bd729ea718e8d62090802e0097874b3ff9ecffb813e70f",
+   "gt_sha256": "7005a24b86a9dc21ac424082d3678394b289255e7c3f76731a8f2251e1ccb628"
+  },
+  {
+   "id": "2865",
+   "url": "https://redis.io/docs/latest/develop/data-types/",
+   "domain": "redis.io",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "a1986298bf3f4d466227e594465eda741cc5c3dd7d117cad5e41efa66c9132b9",
+   "gt_sha256": "3f6da848f37d8f716e0193caa9fbf0a333507a43b63591391c2ec2bd1c3c5151"
+  },
+  {
+   "id": "2866",
+   "url": "https://kubernetes.io/docs/concepts/services-networking/service/",
+   "domain": "kubernetes.io",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "4c62e1b97c6b5aa57621c1ec104426107d11b7607921309613703366fd712725",
+   "gt_sha256": "b7e8027e587a341dee1388469b0c97935ef49dc7ad822fcf326d721b35c071d9"
+  },
+  {
+   "id": "2867",
+   "url": "https://docs.docker.com/get-started/introduction/",
+   "domain": "docs.docker.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "7050b6ab2a003d9a6ac95820ecd595bee97d5aa31d190b0a328fa1c20715d0c4",
+   "gt_sha256": "3b6fa9ccdc3a5a24fe26d2eab0874a3277af3ecf296bb4371e1f1d11304843a6"
+  },
+  {
+   "id": "2868",
+   "url": "https://docs.docker.com/compose/how-tos/networking/",
+   "domain": "docs.docker.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "edebf8efa54fad7364d4d26cdd18ed2e998fe46465283acad55a646b529604a4",
+   "gt_sha256": "3aafa6204ffa76e4d5d440612408417f88dbe627aa0cb7942b41c592b915c549"
+  },
+  {
+   "id": "2869",
+   "url": "https://git-scm.com/book/en/v2/Git-Branching-Branches-in-a-Nutshell",
+   "domain": "git-scm.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "1f6aab77d528c0c4ddf9009f32a364905bdb7b171abed52a0c2552a01fa30a24",
+   "gt_sha256": "4e7f70b36921704201b83422e4a6e044ae4b15e7b29ac6efdacee39030754964"
+  },
+  {
+   "id": "2870",
+   "url": "https://nginx.org/en/docs/beginners_guide.html",
+   "domain": "nginx.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "167017b48865640c68c593ad3c9bfd2366306ad7ba8d037ff880f63d2b246bcb",
+   "gt_sha256": "878ad383a00116f4372b8728c37de6c04ce030e28d6c388e552ce5414e51633a"
+  },
+  {
+   "id": "2871",
+   "url": "https://docs.djangoproject.com/en/5.1/topics/db/models/",
+   "domain": "docs.djangoproject.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "09e24f250909a5b80126d96751d219e32e07d343e594c2d9a327f8b0356f4906",
+   "gt_sha256": "b3abe87e053bd80847b503db85fff8bc0e1e6de1f0db44d8c56e4024815e9176"
+  },
+  {
+   "id": "2872",
+   "url": "https://react.dev/learn/thinking-in-react",
+   "domain": "react.dev",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "2f9cc69572ae788298ec825d5e0a02853a0a64cbed87ee34b6e8dd6ad2fd094e",
+   "gt_sha256": "64e486cb6d290a9afee63e26a6fe2957d464c7f2ef3ce4882270e120e0ec32b4"
+  },
+  {
+   "id": "2873",
+   "url": "https://react.dev/reference/react/useState",
+   "domain": "react.dev",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "0ea451b31910835b25657ed6f5fe0746a5eed38f61a49b3a636c8b8652d7bd5a",
+   "gt_sha256": "8616111751583df2255fb8cd161acac728bf7a2c05581b1722481d39679d9cdf"
+  },
+  {
+   "id": "2874",
+   "url": "https://www.kernel.org/doc/html/latest/process/submitting-patches.html",
+   "domain": "kernel.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "3306ee92a48c95162c9339fd3d67084b22d2ac5089b26cf17d94597d7a3530b3",
+   "gt_sha256": "61146fcf62c0e0dacff3e891401360aaffec5b9fe92f9856742b1fbfc9ff860f"
+  },
+  {
+   "id": "2875",
+   "url": "https://www.sqlite.org/lang_select.html",
+   "domain": "sqlite.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "f20d1857954d7611290aded8fb758f5c5e978265453e0b9700c7b494d8a40853",
+   "gt_sha256": "5f7d6df4e5f130707200ce0b597b4913e4ee205500a42ab1df6beddf0e2ba560"
+  },
+  {
+   "id": "2876",
+   "url": "https://tailwindcss.com/docs/installation",
+   "domain": "tailwindcss.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "8061d34902fd051adaa76f10a35e8b6b10063e5b9d1909ee7474c7550ecad2d9",
+   "gt_sha256": "bb8f2da5c3a6f290762502b5969ec841808358349495a04a65629b13374add31"
+  },
+  {
+   "id": "2878",
+   "url": "https://developer.hashicorp.com/terraform/language/resources",
+   "domain": "developer.hashicorp.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "f79bd8501aa9bae82ae01243d603ec401d6c481fca94a8075a61b78668892087",
+   "gt_sha256": "2e2b3f7fe124134d61d5591277431e4de79b4d3cc6e147afcf2918c7e9383a55"
+  },
+  {
+   "id": "2879",
+   "url": "https://wiki.archlinux.org/title/Systemd",
+   "domain": "wiki.archlinux.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "8871f3cffc37f80d09695e56443bb0d66655661df826c2f6f63258f0ac1a18cc",
+   "gt_sha256": "8600d81770b042018963871a57a29b8268aab8c1211c91c213f54844b55f07b4"
+  },
+  {
+   "id": "2992",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "5af0e99063faee16e85572f6a566ccdc57919988fe8818f6de53ab838f3b7a9b",
+   "gt_sha256": "9e46272d01f4fe21545b7553c67e64f8a148c55e6bba5314361079f1d43dbf93"
+  },
+  {
+   "id": "2993",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/API/WebSocket",
+   "domain": "developer.mozilla.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "528d159d7c11c8b65e8cc27fa7353fa2d2d6d7df3235ebf1a56745ded36cf7ea",
+   "gt_sha256": "b141e83cfae21f7fbf03f6d566edcb36346c41c3fd7f6b879e18c7f4c9a04a38"
+  },
+  {
+   "id": "2994",
+   "url": "https://docs.python.org/3/library/json.html",
+   "domain": "docs.python.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "86534189da731e935866095f0b1e183f2b4f2e3bc7e073f30fdd1e5c2032cfcb",
+   "gt_sha256": "b19d3bd30b42f123ab8f3f8907379c7dc506b794324657880cb73e0ce8a07aec"
+  },
+  {
+   "id": "2996",
+   "url": "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html",
+   "domain": "doc.rust-lang.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "586464838db41a8731ede6637988d2c358555a19e19a1745cd3a0bc6499db339",
+   "gt_sha256": "75af50eca9c6bc6c0ec22df3edd707e5226cff222eada7286114157d5bba0fd4"
+  },
+  {
+   "id": "2997",
+   "url": "https://go.dev/doc/tutorial/getting-started",
+   "domain": "go.dev",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "5e867a1cac56d95a99f7ecc3a95cf58f9423219df41253a6948d0e02a45862af",
+   "gt_sha256": "52a1cdd3e4abb7995b13caafbc5c51824c94d8a0173f6bfc385ac05d19d1a9ab"
+  },
+  {
+   "id": "2998",
+   "url": "https://wiki.archlinux.org/title/Pacman",
+   "domain": "wiki.archlinux.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "4ccf09a75c0f54680e2173a0b7edb7d8851b13a6700d8914b27b1169e89a2303",
+   "gt_sha256": "b27b76100cc7c3e139e3b26ab76b3644b57912d6c38660b7371cedc48212bf24"
+  },
+  {
+   "id": "2999",
+   "url": "https://docs.djangoproject.com/en/5.1/topics/forms/",
+   "domain": "docs.djangoproject.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "7b3127926c1a2c9277d808ba45059877ba709e9731cfb37b00e139da06d8ba31",
+   "gt_sha256": "ed5f86cd21b29ce2392cb996c254caa4e02b637f031519828216e7ac20a314a0"
+  },
+  {
+   "id": "3037",
+   "url": "https://cloud.google.com/iam/docs/overview",
+   "domain": "cloud.google.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "3d7623f671cd5eb164a85ea32622fecfb9ec46400eabb92920be7de58cfacf7b",
+   "gt_sha256": "88c29b7bc2016d11f0aa265cada8f917e09caa1178b023922a9424122762cc99"
+  },
+  {
+   "id": "4020",
+   "url": "https://www.geeksforgeeks.org/machine-learning/machine-learning/",
+   "domain": "geeksforgeeks.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "7dd864ecefea694b34530072b6dfb83b5037a13268db896ab4136301acd8b5b5",
+   "gt_sha256": "111fc0da0a6941bc9b6b628ca8204e1917e41ed8df93c6cf35d675a01f62a504"
+  },
+  {
+   "id": "4397",
+   "url": "https://docs.rs/tokio/latest/tokio/",
+   "domain": "docs.rs",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "dfccf45a4b5d8d05ed1afaabf7dc550cf29d590cedc3f6eba2d2d11394fecb59",
+   "gt_sha256": "ba9c7ee479ee763c659dc5679c30a279dfbb2a4c0541dfec7e735b399be65269"
+  },
+  {
+   "id": "4398",
+   "url": "https://docs.rs/tokio/latest/tokio/runtime/index.html",
+   "domain": "docs.rs",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "b0352a8d736c9f5b6c1a109ae4af575e3b3408c9b1d2824071e7a282935f745a",
+   "gt_sha256": "3777906bdbe03e380d4649bb1ca8851f7930b6827c9f251dc765eca09eff9159"
+  },
+  {
+   "id": "4400",
+   "url": "https://legacy.reactjs.org/docs/hooks-effect.html",
+   "domain": "legacy.reactjs.org",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "2aff0bc228eaa67563c0efcc13a51a9c0c13b6597f7d56b56d9d7f30428857c8",
+   "gt_sha256": "f23a79f8cc764e18296372a50450d146d103f40c4f6ec2f3791a0f15e779f7e1"
+  },
+  {
+   "id": "4401",
+   "url": "https://legacy.reactjs.org/docs/hooks-overview.html",
+   "domain": "legacy.reactjs.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "80096f0b8add13665fa10e06dbdbeb183ab94d9d2ce7974d5e443039f2d8d256",
+   "gt_sha256": "2a3a9720d0acee5887fb6d3e4bf3ac2250ff9486943fc333c853e12e6312e366"
+  },
+  {
+   "id": "4402",
+   "url": "https://legacy.reactjs.org/docs/hooks-custom.html",
+   "domain": "legacy.reactjs.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "b5b96371adfed083aaa97ac380772e53044532237191af2772148ab67667c522",
+   "gt_sha256": "059f61491a1dd0a23639ee74c65d89770c96591579c3ab91d1dc3b85b5d9e538"
+  },
+  {
+   "id": "4403",
+   "url": "https://id.legacy.reactjs.org/docs/hooks-effect.html",
+   "domain": "id.legacy.reactjs.org",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "edfa04eeca4f3f688b115b719734508a4ed3fd605198b8dc75180740460e1ec4",
+   "gt_sha256": "a6858485783a927efb23ff208a949ae52f6cb4b6f78e378d2349c9e73b23fc8a"
+  },
+  {
+   "id": "4407",
+   "url": "https://docs.github.com/en/actions/how-tos/write-workflows",
+   "domain": "docs.github.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "19fed2599095a2a60b2c4d5e687f8dd1ab558637e2c8ef4cc02f11f0b4daedc0",
+   "gt_sha256": "fd0079500ec27c18d84cc16931c108af384954ad413acf00c55ae024f057c6b5"
+  },
+  {
+   "id": "4408",
+   "url": "https://docs.github.com/en/actions/get-started/understand-github-actions",
+   "domain": "docs.github.com",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "5239085591e0a3f1b4a103a3a1c4d9225fefd4591e1fb391a975c3e9b4040613",
+   "gt_sha256": "7227c756ea029d92bda8b7c1e77f8d17e3b7010b3d8b42be7fb9961557b0c608"
+  },
+  {
+   "id": "4409",
+   "url": "https://learn.microsoft.com/en-us/azure/azure-functions/functions-overview",
+   "domain": "learn.microsoft.com",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "7b91ae5a83888c662b7c178852a9b42ab18a49b5612551f8e1f497484b8a1735",
+   "gt_sha256": "f8772bc2273750512512246b7708cdaa44fee5890585418a84f8bfe76d3d8e08"
+  },
+  {
+   "id": "4411",
+   "url": "https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local",
+   "domain": "learn.microsoft.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "a497b1da10fc4a097754a960bbd45bf796f65f31938bdf4370d68828b74be944",
+   "gt_sha256": "43a2e2f07ebe21a76190145ce3534a738ad0bcf76b7971d54e8ea6a12d5cdc63"
+  },
+  {
+   "id": "4412",
+   "url": "https://docs.aws.amazon.com/prescriptive-guidance/latest/postgresql-query-tuning/introduction.html",
+   "domain": "docs.aws.amazon.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "800c30af8b7a0fea51d644c66907324688809b523729f639b87e4a6382f6e0dd",
+   "gt_sha256": "45f747d05d89fa3ee50902508e7968dab445d2e755a7485144fe087594992c3d"
+  },
+  {
+   "id": "4415",
+   "url": "https://wiki.postgresql.org/wiki/Performance_Optimization",
+   "domain": "wiki.postgresql.org",
+   "upstream_split": "dev",
+   "split": "test",
+   "html_sha256": "2039b735d6b45a45e6309bb87ba0c425026d04ea896400b8d119868a7c90c3ab",
+   "gt_sha256": "c8ecd1ad8e51a872097a01f09d2115668624b4518abec32d434d49ebe121d124"
+  },
+  {
+   "id": "4841",
+   "url": "https://developers.openai.com/commerce/product-feeds/spec/",
+   "domain": "developers.openai.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "5f8bb774098f44ca2cc9376538907369f320d147164c1dc15781110d4f127dbf",
+   "gt_sha256": "9955b47934d594cdfe25cfb4261176d57ed9864b93a0b52936c2f5ee9ea2e353"
+  },
+  {
+   "id": "4843",
+   "url": "http://docs.sitesearch360.com/product-feed-specification/",
+   "domain": "docs.sitesearch360.com",
+   "upstream_split": "dev",
+   "split": "dev",
+   "html_sha256": "536e0d13dd62f6ce7d7b2e24f77c82fd868794475f789b94546835bb1f915150",
+   "gt_sha256": "5a64fbf4f4bb0eb1caca055f462609450665b42a1d3f994c906745a6014ddaae"
+  },
+  {
+   "id": "5249",
+   "url": "https://www.nafsa.org/about/about-international-education/financial-aid-undergraduate-international-students",
+   "domain": "nafsa.org",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "1c07c70058b14068fb5b237517a6ab104490eadbc39aa73521441f0001894dae",
+   "gt_sha256": "f35f11a0c32749da1df48562b5e76cb3ca10ca24049898e6f09eaefcd1e60aa5"
+  },
+  {
+   "id": "5286",
+   "url": "https://www.charitynavigator.org/about-us/our-methodology/ratings/",
+   "domain": "charitynavigator.org",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "3ab32e2e72d08b869fd8d23051524c14f9dadaa04ff7e3eacbec4785f0f28948",
+   "gt_sha256": "04e49fc786a3a611af3c2ee0733fb2d31a4da645a00eafa019b452152d82feda"
+  },
+  {
+   "id": "5287",
+   "url": "https://www.charitywatch.org/our-charity-rating-process",
+   "domain": "charitywatch.org",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "43936055ff7a169a000e90e3bed0a512a915a7d2b0c5712ab546e5c0dd7ccf3a",
+   "gt_sha256": "45357b0d03ce839a76ed54aa6930e6eb36eede62376f15186d83fd73c6dd76f3"
+  },
+  {
+   "id": "5371",
+   "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-lambda-function.html",
+   "domain": "docs.aws.amazon.com",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "43b1490e8acae81b8be919534995c0024532176914a2a38b99a6028dacd1c9a0",
+   "gt_sha256": "677140e7d7dd50fa40dd0f2d5a3a25c35cffa9f9bafb1ba6f9b6176a4d9e4c55"
+  },
+  {
+   "id": "5372",
+   "url": "https://docs.docker.com/compose/gettingstarted/",
+   "domain": "docs.docker.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "33d3832926c88c5a9197af465ff884704c8c00c585d651d62927c1df47951f50",
+   "gt_sha256": "4ce880cc8f9cdecb9a94d401cc81d967b92dd05359647920e497cdc286db9c85"
+  },
+  {
+   "id": "5373",
+   "url": "https://docs.flutter.dev/ui/widgets",
+   "domain": "docs.flutter.dev",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "c60ed6ed4eaac3409b2712510138b6ebba3499e36e568a0a35a38c80bceac13a",
+   "gt_sha256": "90fe574be53943071c3c4ef83625d9067d330259ab8f1278c2b9bf6aa235f5a0"
+  },
+  {
+   "id": "5374",
+   "url": "https://docs.flutter.dev/ui/widgets/material",
+   "domain": "docs.flutter.dev",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "28584091243bd28fb9aded9588c5881d160176315a53f82a6e213e4d17e5ec9d",
+   "gt_sha256": "7149cc6a97dcc28abf6d268b1edf4c2ed1c2eedca6de8e6a3a3615b86ade72da"
+  },
+  {
+   "id": "5375",
+   "url": "https://docs.flutter.dev/ui/widgets/layout",
+   "domain": "docs.flutter.dev",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "6c0e64b7ff403004f652493f176560d7edab1497bf1f44ad48a4b77869008274",
+   "gt_sha256": "a11655148bde5f93c232973b923aa63ad972a5a3f5004f5ae207e366e6451740"
+  },
+  {
+   "id": "5379",
+   "url": "https://v1.tailwindcss.com/",
+   "domain": "v1.tailwindcss.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "eb3a32fe09d37d073903cc691c4f40e8e3be153b8d541b780493eac133ae1b42",
+   "gt_sha256": "cf8c423c68e42c70afc15f0f3713ee99a8bee1e51e7a60e723beb88ae4c4fab0"
+  },
+  {
+   "id": "5380",
+   "url": "https://v3.tailwindcss.com/docs/utility-first",
+   "domain": "v3.tailwindcss.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "be184048591b16984d36336a3eae38010359a88865ef8b57042c5899c1da3c3f",
+   "gt_sha256": "faef56751a43791a97bf1ffea21f164595de80818a4f87971d1e60cf6ad9a7bb"
+  },
+  {
+   "id": "5381",
+   "url": "https://vuejs.org/guide/extras/composition-api-faq",
+   "domain": "vuejs.org",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "44485b1f728f3e47532b804ee96cf84b52d88a206f04f278a0c0662359f281f8",
+   "gt_sha256": "be641fc1e744bfbbf1c764f4326681b3347207651682da2e62bdc6b755e6876d"
+  },
+  {
+   "id": "5382",
+   "url": "https://vuejs.org/api/composition-api-setup",
+   "domain": "vuejs.org",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "64759304a253ddb6a02a9737f8df9b8f4931ff86933d01f90c615f46f3cf53a9",
+   "gt_sha256": "8431bec9c9feccf762048af08bc3bcae5f25c6c413370bd15d580be52d342352"
+  },
+  {
+   "id": "5384",
+   "url": "https://router.vuejs.org/guide/advanced/composition-api.html",
+   "domain": "router.vuejs.org",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "8e46d9b216c0ea26f3b9e06702a40c7f52b89913e038b05af0764f23a9e2da08",
+   "gt_sha256": "088083c8d0786374528c681255c6ab23b623559e10536ef67f30542c02033276"
+  },
+  {
+   "id": "5385",
+   "url": "https://vuex.vuejs.org/guide/composition-api",
+   "domain": "vuex.vuejs.org",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "37ad2237572f86013934a86c548cec9f666a129da7ea8256b28e259cdb46ea0c",
+   "gt_sha256": "163d556a8634b0c404f7a203719feeab67b970948164f7ab442eb1a59b8612fa"
+  },
+  {
+   "id": "5388",
+   "url": "https://nextjs.org/learn/dashboard-app",
+   "domain": "nextjs.org",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "79d3fd33a32d400b203455d0b7065d0a400b90c93b277aeb2969359e89e6101c",
+   "gt_sha256": "f844a80c2f07a1052eda62fd300b43194005f450efafc5a45132f0f2520ad25b"
+  },
+  {
+   "id": "5390",
+   "url": "https://docs.stripe.com/payments/use-cases/get-started",
+   "domain": "docs.stripe.com",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "8ca66033200c792bd4f17c71b98ed0407d6223fa0534979495a122834a5315c5",
+   "gt_sha256": "be822efd74633704310db0bc693a06c253a4a88beb8d16c7498f834aab084124"
+  },
+  {
+   "id": "5393",
+   "url": "https://docs.spring.io/spring-boot/tutorial/first-application/index.html",
+   "domain": "docs.spring.io",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "92ae362487216c8dbebce95405efbae973353c6853fab9efe3b07247e89727ac",
+   "gt_sha256": "18103c1644302299e116a35859e9e6968d8cd17e82d4429c0ec47dc7c0c61c0c"
+  },
+  {
+   "id": "5394",
+   "url": "https://docs.spring.io/spring-boot/index.html",
+   "domain": "docs.spring.io",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "0fde2723a38f883f5146efb5947c162969247500f00dc26ab7b793c7dc6ef92d",
+   "gt_sha256": "ddf66b702aaeb4c016ecde66c765214b541515c8bbc0ae8ea39fc1f12327cdb6"
+  },
+  {
+   "id": "5395",
+   "url": "https://docs.spring.io/spring-boot/docs/3.2.0-SNAPSHOT/reference/html/getting-started.html",
+   "domain": "docs.spring.io",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "bc191947aff7ae20457f9d539fd76603f28f574bfb9e5c3f7df1535ef1b8794b",
+   "gt_sha256": "94c3ae73adaec9e46c3b374cf595decc39c712c0aed423de9604848133b350ac"
+  },
+  {
+   "id": "5409",
+   "url": "https://rust-book.cs.brown.edu/ch04-01-what-is-ownership.html",
+   "domain": "rust-book.cs.brown.edu",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "d17c9f9c1ab47317fb205129b14ff9a140b54b4b50bd565930651ea32fd402f4",
+   "gt_sha256": "96734243d2fe7c0bd7b46128dabbe5531e82fade7fd58ceaa7a6634ca481c10b"
+  },
+  {
+   "id": "5410",
+   "url": "https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/book/first-edition/references-and-borrowing.html",
+   "domain": "web.mit.edu",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "682745d6d63740fbbcee74d088a8b1ea5cc445fd5837d8ade2a90891fa302bb5",
+   "gt_sha256": "06febb783c7146352db96db8f7aa20d77418fe1ddefe9d3f3423a478b2629778"
+  },
+  {
+   "id": "5411",
+   "url": "https://www.typescriptlang.org/docs/handbook/2/generics.html",
+   "domain": "typescriptlang.org",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "54214dd2c5cd90beafe59ec7c20d6206f1bedb27f6c9d1d7fb76f9bb77858c35",
+   "gt_sha256": "c56cc7a559f98b26af174a38eef10ce27529212efd034a7065d08467d6021c24"
+  },
+  {
+   "id": "5412",
+   "url": "https://typescript-v2-216.ortam.vercel.app/docs/handbook/generics.html",
+   "domain": "typescript-v2-216.ortam.vercel.app",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "da54c2a9ff2c2f51a5f59cf526006e3c2b154085e457e4826aa82b044eabb323",
+   "gt_sha256": "0f02ec3a2ac08f9d04229febf1d46901336022d831ca9d09c91977205593a23e"
+  },
+  {
+   "id": "5415",
+   "url": "https://www.typescriptlang.org/docs/",
+   "domain": "typescriptlang.org",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "197f75656e3a84fd8d6d4a94f17fddd08789d51a8dfbf7d7c64ff6f4b4be8bbd",
+   "gt_sha256": "18928c109919a08cf2ccdbcc9e5397be186e0672624b9813af8c45c8bb7b8b14"
+  },
+  {
+   "id": "5417",
+   "url": "https://graphql.org/learn/schema/",
+   "domain": "graphql.org",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "1df0c6615951052398e7bade2cbced3e2a1d348617125418535a2a3737502c64",
+   "gt_sha256": "d8ab0f1d427f7bf5ee21335c9b05024414b8ccb53547e8f23cd20e57152d4396"
+  },
+  {
+   "id": "5418",
+   "url": "https://graphql.org/learn/schema-design/",
+   "domain": "graphql.org",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "d0632ea5dac07636c5703da979dd181fb143683c7a33a9e1217877a7db48b544",
+   "gt_sha256": "f4a1f4f14cd2ac414725ffda660b5303cb0e56516a33faff999a2847eb483775"
+  },
+  {
+   "id": "5426",
+   "url": "https://developer.hashicorp.com/terraform/language/block/provider",
+   "domain": "developer.hashicorp.com",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "d9154fabd977dea74d77d1e16da42ed1fa5c9f1b89a9e98f8d5d172b7abe1ed4",
+   "gt_sha256": "5a859be5624e6ed7cfa56fb06298e58a80e008eb4b11b27955bd82a5d6379d3d"
+  },
+  {
+   "id": "5427",
+   "url": "https://hashicorp.github.io/terraform-provider-aws/",
+   "domain": "hashicorp.github.io",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "84ea85e2cf699f8745de0193db0b79f259abb6c2d631bf24b7b87b68cdd57884",
+   "gt_sha256": "54c9341ba9ccc89fbeee6bc481fe246b0cef05a07ab3209b14cac1e7dd1bed05"
+  },
+  {
+   "id": "5430",
+   "url": "https://docs.ansible.com/projects/ansible/latest/cli/ansible-playbook.html",
+   "domain": "docs.ansible.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "5d50c64f3b8308e2712372c25a1a12486b12fe092c9a40fac3aebb46e7e2c7dd",
+   "gt_sha256": "565fcb1a4a4aabf3d85857f5390c4ffe46111b42e0f8666ef4ca086a3f6754af"
+  },
+  {
+   "id": "5431",
+   "url": "https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/getting_started_with_playbooks/assembly-playbook-practical-example",
+   "domain": "docs.redhat.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "5bf7cd286f9287f6f0beb396c761ab38c55531dd721599081827d2ec12009fb9",
+   "gt_sha256": "42afe03852c0d8ed903288b4484c978b8bbc61011c8f516315c9c9a8faf2e22c"
+  },
+  {
+   "id": "5445",
+   "url": "https://idratherbewriting.com/learnapidoc/docapis_doc_getting_started_section.html",
+   "domain": "idratherbewriting.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "844209089c761de1f2af2e2586f7b792835629bb048db0c3f97e95b73120cf9d",
+   "gt_sha256": "3700aeef06392f33e111cb44696a8dcd108a698af4512df2a731eda4c9b493a8"
+  },
+  {
+   "id": "5446",
+   "url": "https://docs.readthedocs.com/platform/latest/tutorial/index.html",
+   "domain": "docs.readthedocs.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "46441838943d1d17ac05cd51031e021c1011bccf30155dcd6247d351b16c0ada",
+   "gt_sha256": "36e23b25fe3fb508828cd3bce607d42c2a887e0ffc80e70f96afd6305c42766f"
+  },
+  {
+   "id": "5449",
+   "url": "https://use.docs.page/getting-started",
+   "domain": "use.docs.page",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "3584ab640c902dab5b3d52aedabd97ea61f7e977fde438d6d3140b5bc59fd2b4",
+   "gt_sha256": "7d6c2a2b01363354cf07d3b1ec0f32c526685932b54de48cc3a86ebd28bfcddc"
+  },
+  {
+   "id": "5452",
+   "url": "https://docs.continue.dev/reference",
+   "domain": "docs.continue.dev",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "f4af47b6aa1418fc27bfbf1b05415f263267466fb96b0f5ff15022957f75d198",
+   "gt_sha256": "356077307b81ae7b327a73e34657840f3bfbea03a2a62b326bd490ca16045ad8"
+  },
+  {
+   "id": "5454",
+   "url": "https://docs.readthedocs.com/platform/stable/config-file/v2.html",
+   "domain": "docs.readthedocs.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "f23acbf7dfdc7ae889d9e00ef93674b1772391a265440ec4e48d44710be593f3",
+   "gt_sha256": "238a53faa0575940f132116b117273235ef4db4e45062db969ef862712518706"
+  },
+  {
+   "id": "5456",
+   "url": "https://collectionbuilder.github.io/cb-docs/docs/config/",
+   "domain": "collectionbuilder.github.io",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "5602ff0ddbc4de31542ce3e6900d32cb0b6c43cdf02dfe2d3f9551387a6b4332",
+   "gt_sha256": "7fe775c12da91f7a4903b62ae8ea5b09b599bdc67dc2b3c6abe0772139e63a27"
+  },
+  {
+   "id": "5458",
+   "url": "https://use.docs.page/configuration",
+   "domain": "use.docs.page",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "5f229625be221941f5487d7968bf8ab609d49199a9efdf11c174c608b9b4b8b3",
+   "gt_sha256": "7a2b7ffed6fed17823ddd6873bff34a32452d9d7a365e8603d813973f74a205b"
+  },
+  {
+   "id": "5461",
+   "url": "https://www.mediawiki.org/wiki/Manual:Installing_MediaWiki",
+   "domain": "mediawiki.org",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "302bafa5ebb71e55cc5a28be884c4701ef12ea3a6e7cee95c255fd9e5677c011",
+   "gt_sha256": "3dfe8f6f4717c9232b23e6e606f1122f80ccf8ce81bd99aedd83a7af56cb1bc1"
+  },
+  {
+   "id": "5467",
+   "url": "https://gendersec.tacticaltech.org/wiki/index.php/How_to_install_and_configure_this_wiki",
+   "domain": "gendersec.tacticaltech.org",
+   "upstream_split": "test",
+   "split": "dev",
+   "html_sha256": "dd1342169561bfe693759e012c753ddcf8c7fa54287c0458ed856b460bdfded9",
+   "gt_sha256": "d220fa41b673cf0bfb16f1393961d9e04fbf9400bc903878e5aa5fad18e41aab"
+  },
+  {
+   "id": "5469",
+   "url": "https://www.inmotionhosting.com/support/edu/mediawiki/install-mediawiki-manually/",
+   "domain": "inmotionhosting.com",
+   "upstream_split": "test",
+   "split": "test",
+   "html_sha256": "69a08cff1c0179dc38d56c02a010294372c5e1328554a7e312bdc8b8f926cf6e",
+   "gt_sha256": "7b778d02e487fa9bdd401c9b78fb64cc89edb66ec42f7008b0a2c2ccf9d8e50e"
+  }
+ ]
+}

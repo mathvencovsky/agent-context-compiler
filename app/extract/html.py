@@ -29,6 +29,7 @@ markup-free text.
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
@@ -122,6 +123,98 @@ _CHROME_TEXT_LABELS = (
     "back to top",
 )
 
+# --- page widgets (M10b Phase P H3) --------------------------------------- #
+# Removed only inside the chosen content subtree (``_clean_subtree``). They do
+# NOT feed ``_content_chars``: the content-root thresholds were calibrated with
+# ``_is_chrome`` alone (DECISIONS 2026-10-16) and must not move with this list.
+# Every rule below was derived from the WCXB dev pages only.
+
+# ``template`` content is inert (a browser never renders it), so it is not page
+# text; ``lite-youtube``/``lite-vimeo`` are video players whose only text is
+# the "Watch on YouTube" fallback link.
+_WIDGET_TAGS = frozenset({"template", "lite-youtube", "lite-vimeo"})
+
+# Whole class tokens of documentation-platform widgets.
+_WIDGET_CLASS_TOKENS = frozenset(
+    {
+        "printfooter",  # MediaWiki permanent-link footer
+        "mw-pt-languages",  # MediaWiki translation-language bar
+        "nocontent",  # Google's "not page content" marker (devsite)
+        "language-selection",  # Sphinx themes' translations bar
+    }
+)
+
+# Words inside one class name (or a ``<div>`` id) that mark a widget: feedback
+# prompts, article-column footers, breadcrumbs, pagination, in-page tables of
+# contents, site banners and cookie notices. A name is split into words at
+# non-alphanumerics and camelCase boundaries, so ``article-footer__inner``,
+# ``feedback--response`` and ``tocCollapsible`` match while ``footnote``,
+# ``toctree`` or ``feedbacks`` do not. A name that also holds a negation word
+# (``hide-from-toc``, ``no-feedback``) describes content and never matches.
+# Headings are never matched by name, and only elements holding at most
+# ``_WIDGET_NAME_MAX_CHARS`` of text are: a ``page-with-footer`` wrapper
+# around the whole article is never dropped. Ids name content too often (Sphinx
+# ``<dt id="flask.Request.cookies">``, heading slugs such as ``<section
+# id="pagination">``), so an id is read only on a plain ``<div>`` (no
+# ``section`` class) and only when it holds no ``.``/``:`` (API object names):
+# ``<div id="quick-feedback-yes">`` and ``<div id="site-banner">`` match.
+_WIDGET_NAME_WORDS = frozenset(
+    {
+        "feedback",
+        "footer",
+        "breadcrumb",
+        "breadcrumbs",
+        "pagination",
+        "pager",
+        "toc",
+        "banner",
+        "cookie",
+        "cookies",
+        "consent",
+    }
+)
+_WIDGET_NAME_NEGATIONS = frozenset({"hide", "hidden", "no", "not", "ignore", "skip"})
+_WIDGET_NAME_MAX_CHARS = 500
+_NAME_WORD_SPLIT = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+_HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+
+# Whole texts of page-action and page-metadata widgets: an element whose ENTIRE
+# normalized text, trailing punctuation aside, is one of these. Exact match, so
+# "On this page, you will learn..." is never removed.
+_WIDGET_EXACT_LABELS = frozenset(
+    {
+        "on this page",
+        "in this article",
+        "table of contents",
+        "copy page",
+        "copy as markdown",
+        "copy markdown",
+        "copy for llm",
+        "more page actions",
+        "edit this page",
+        "edit this page on github",
+        "edit on github",
+        "view this page on github",
+        "view source",
+        "report a problem with this content",
+        "report an issue",
+        "suggest a fix",
+        "send feedback",
+        "is this helpful",
+        "learn how to contribute",
+        "translate this page",
+    }
+)
+# Prefixes of widget lines ("This page was last modified on Oct 20, 2025 by
+# MDN contributors.", "Thanks for the feedback. If you have..."), only on
+# elements of at most ``_WIDGET_PREFIX_MAX_CHARS``. A bare "Last updated: <date>"
+# is kept: the date of the content can matter to the reader.
+_WIDGET_PREFIX_LABELS = (
+    "this page was last modified on",
+    "thanks for the feedback",
+)
+_WIDGET_PREFIX_MAX_CHARS = 200
+
 # Admonition class/role → canonical kind (SPEC §4 five-value set).
 _ADMONITION_KINDS = ("danger", "warning", "tip", "info", "note")
 _ADMONITION_SYNONYMS = {
@@ -201,6 +294,7 @@ def _clean_subtree(root: HtmlElement) -> None:
             or _is_copy_control(el)
             or _is_permalink(el)
             or _is_chrome(el)
+            or _is_page_widget(el)
         ):
             _drop(el)
 
@@ -228,6 +322,46 @@ def _is_chrome(el: HtmlElement) -> bool:
     return False
 
 
+def _is_page_widget(el: HtmlElement) -> bool:
+    """True if ``el`` is a page widget inside the content (M10b Phase P H3).
+
+    Feedback prompts, article footers, breadcrumbs, pagination, in-page ToCs,
+    banners, page-action buttons ("Copy page", "Edit this page") and metadata
+    lines ("Last updated on ...") that sit inside ``<main>``/``<article>``,
+    where ``_is_chrome`` does not look. Only used by ``_clean_subtree``.
+    """
+    if el.tag in _WIDGET_TAGS:
+        return True
+    raw_classes = el.get("class") or ""
+    if _WIDGET_CLASS_TOKENS.intersection(raw_classes.lower().split()):
+        return True
+    text = normalize_text(el.text_content() or "").lower()
+    if len(text) <= _WIDGET_NAME_MAX_CHARS and el.tag not in _HEADING_TAGS:
+        names = raw_classes.split()
+        widget_id = el.get("id") or ""
+        if (
+            el.tag == "div"
+            and "section" not in names
+            and not any(c in widget_id for c in ".:")
+        ):
+            names.append(widget_id)
+        if any(_is_widget_name(name) for name in names):
+            return True
+    if not text:
+        return False
+    if text.rstrip(" .:!?") in _WIDGET_EXACT_LABELS:
+        return True
+    return len(text) <= _WIDGET_PREFIX_MAX_CHARS and text.startswith(
+        _WIDGET_PREFIX_LABELS
+    )
+
+
+def _is_widget_name(name: str) -> bool:
+    """True if one class/id ``name`` holds a widget word and no negation."""
+    words = {w.lower() for w in _NAME_WORD_SPLIT.split(name) if w}
+    return bool(words & _WIDGET_NAME_WORDS) and not words & _WIDGET_NAME_NEGATIONS
+
+
 def _drop(el: HtmlElement) -> None:
     """Detach ``el`` from its parent, discarding its tail text too."""
     parent = el.getparent()
@@ -252,26 +386,288 @@ def _collect_links(el: HtmlElement, base_url: str) -> list[Link]:
 
 
 def _block_text(el: HtmlElement) -> str:
-    """Normalized, markup-free text content of ``el``."""
-    return normalize_text(el.text_content() or "")
+    """Normalized, markup-free text content of ``el`` (block boundaries kept)."""
+    return normalize_text(_raw_text_without(el, frozenset()))
+
+
+#: Elements a browser lays out as their own box or line. Where one starts or
+#: ends, text gets a separator: ``<p>Note</p><p>Since 3.9</p>`` is "Note Since
+#: 3.9", not "NoteSince 3.9" (M10b Phase P, research front C L3). Inline
+#: elements (``span``, ``a``, ``code``, ``em``...) never get one, so
+#: ``foo<b>bar</b>`` stays one word.
+_BLOCK_BOUNDARY_TAGS = frozenset(
+    {
+        "address", "article", "aside", "blockquote", "br", "caption", "dd",
+        "details", "dialog", "div", "dl", "dt", "fieldset", "figcaption",
+        "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+        "header", "hr", "legend", "li", "main", "nav", "ol", "p", "pre",
+        "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead",
+        "tr", "ul",
+    }
+)  # fmt: skip
+
+
+def _raw_text_without(el: HtmlElement, skip: frozenset[str]) -> str:
+    """Text of ``el`` (not normalized) with ``skip`` subtrees left out.
+
+    A container (list item, admonition, blockquote, definition list) emits its
+    nested code/tables/lists as blocks of their own; copying their text into
+    the container too duplicated every snippet, whitespace-collapsed (M10b
+    Phase P, research front C L3). A skipped subtree leaves a space so its
+    neighbours do not glue; its tail text is kept.
+    """
+    parts: list[str] = []
+
+    def walk(node: HtmlElement) -> None:
+        if node.text:
+            parts.append(node.text)
+        for child in node:
+            if isinstance(child.tag, str):
+                if child.tag in skip:
+                    parts.append(" ")
+                else:
+                    boundary = child.tag in _BLOCK_BOUNDARY_TAGS
+                    if boundary:
+                        parts.append(" ")
+                    walk(child)
+                    if boundary:
+                        parts.append(" ")
+            if child.tail:
+                parts.append(child.tail)
+
+    walk(el)
+    return "".join(parts)
+
+
+def _container_text(el: HtmlElement, skip: frozenset[str]) -> str:
+    """Normalized text of a container, nested ``skip`` blocks excluded."""
+    return normalize_text(_raw_text_without(el, skip))
 
 
 # --------------------------------------------------------------------------- #
 # per-type data builders
 # --------------------------------------------------------------------------- #
-def _detect_language(el: HtmlElement) -> str | None:
-    """Detect a code language from ``language-``/``lang-``/``hljs`` classes."""
-    candidates: list[str] = []
-    for node in (el, *el.iter()):
-        cls = node.get("class")
-        if cls:
-            candidates.extend(cls.split())
-    for cls in candidates:
-        low = cls.lower()
-        for prefix in ("language-", "lang-", "highlight-source-", "hljs-"):
-            if low.startswith(prefix) and len(low) > len(prefix):
-                return low[len(prefix) :]
+#: Class prefixes that name a code block's language (Prism/highlight.js/
+#: Docusaurus/VitePress/Rouge ``language-``, Microsoft Learn ``lang-``, GitHub
+#: ``highlight-source-``, MediaWiki SyntaxHighlight ``mw-highlight-lang-``).
+#: ``hljs-`` is NOT one: ``hljs-keyword`` etc. are highlight.js token classes.
+_LANGUAGE_PREFIXES = ("language-", "lang-", "highlight-source-", "mw-highlight-lang-")
+#: Values that say "no particular language". Sphinx's ``default`` lexer guesses
+#: Python and silently falls back to none, so it does not name a language.
+_NO_LANGUAGE = frozenset({"default", "none", "nohighlight", "no-highlight"})
+_LANGUAGE_RE = re.compile(r"^[a-z0-9][a-z0-9+#._-]{0,31}$")
+#: How many ancestors of a ``<pre>`` may carry its language (Sphinx puts it two
+#: levels up: ``div.highlight-python3 > div.highlight > pre``).
+_LANGUAGE_ANCESTORS = 3
+
+
+def _clean_language(value: str | None) -> str | None:
+    """A lowercase language name, or ``None`` for empty/"no language" values."""
+    low = (value or "").strip().strip(";").lower()
+    if not low or low in _NO_LANGUAGE or not _LANGUAGE_RE.match(low):
+        return None
+    return low
+
+
+def _language_of(node: HtmlElement) -> str | None:
+    """The language one element declares by attribute or class, if any."""
+    for attr in ("data-lang", "data-language"):
+        found = _clean_language(node.get(attr))
+        if found:
+            return found
+    classes = (node.get("class") or "").split()
+    lows = [c.lower() for c in classes]
+    for i, low in enumerate(lows):
+        for prefix in _LANGUAGE_PREFIXES:
+            if low.startswith(prefix):
+                found = _clean_language(low[len(prefix) :])
+                if found:
+                    return found
+        # SyntaxHighlighter (MDN): class="brush: js" or "brush:js".
+        if low.startswith("brush:"):
+            rest = low[len("brush:") :] or (lows[i + 1] if i + 1 < len(lows) else "")
+            found = _clean_language(rest)
+            if found:
+                return found
+        # Sphinx: <div class="highlight-python3 notranslate"><div class="highlight">.
+        if low.startswith("highlight-") and _is_sphinx_highlight(node, lows):
+            found = _clean_language(low[len("highlight-") :])
+            if found:
+                return found
     return None
+
+
+def _is_sphinx_highlight(node: HtmlElement, classes: list[str]) -> bool:
+    """True for Sphinx's ``div.highlight-<lang>`` wrapper, not other ``highlight-*``."""
+    if "notranslate" in classes:
+        return True
+    return any(
+        "highlight" in (child.get("class") or "").split()
+        for child in node.iterchildren()
+        if isinstance(child.tag, str)
+    )
+
+
+def _detect_language(el: HtmlElement) -> str | None:
+    """Detect a code block's language (H6, M10b Phase P).
+
+    Looks at the ``<pre>``, its ``<code>`` children, then up to
+    ``_LANGUAGE_ANCESTORS`` ancestors that wrap no other ``<pre>`` (so a
+    wrapper's language never spreads to a sibling block). Token spans inside
+    the code are never read: their classes (``hljs-keyword``) are not
+    languages.
+    """
+    nodes: list[HtmlElement] = [el, *el.iterchildren("code")]
+    ancestor = el.getparent()
+    for _ in range(_LANGUAGE_ANCESTORS):
+        if ancestor is None or sum(1 for _ in ancestor.iter("pre")) > 1:
+            break
+        nodes.append(ancestor)
+        ancestor = ancestor.getparent()
+    for node in nodes:
+        found = _language_of(node)
+        if found:
+            return found
+    return None
+
+
+#: Class tokens of line-number gutters inside code (Sphinx/Pygments inline
+#: ``span.linenos``, ``.lineno``, Rouge ``.gutter``/``.rouge-gutter``,
+#: highlight.js line-numbers plugin, Prism ``.line-numbers-rows``).
+_LINENO_CLASSES = frozenset(
+    {
+        "linenos",
+        "lineno",
+        "linenodiv",
+        "line-number",
+        "line-numbers-rows",
+        "gutter",
+        "rouge-gutter",
+        "hljs-ln-numbers",
+        "hljs-ln-n",
+    }
+)
+#: A run of this many line-start numbers 1, 2, 3... glued to the code is a
+#: gutter even without a class (CSS-in-JS themes such as Twilio's).
+_LINENO_MIN_RUN = 3
+#: ... and it numbers at least this share of the block's lines.
+_LINENO_LINE_SHARE = 0.8
+
+
+def _is_lineno_element(node: HtmlElement) -> bool:
+    classes = {c.lower() for c in (node.get("class") or "").split()}
+    return bool(classes & _LINENO_CLASSES) or node.get("data-line-number") is not None
+
+
+def _strip_line_numbers(el: HtmlElement) -> HtmlElement:
+    """Return ``el`` (or a copy) without line-number gutter elements.
+
+    Removes elements marked as gutters by class/attribute, and runs of
+    unmarked leaf elements whose text is a consecutive line number placed at
+    the start of a line and followed by code on that line (``1import os``).
+    Code text itself is never altered; only whole gutter elements go, with
+    their tails kept.
+    """
+    marked = [n for n in el.iter() if n is not el and _is_lineno_element(n)]
+    unmarked = _unmarked_gutter(el) if not marked else []
+    if not marked and not unmarked:
+        return el
+    copy = deepcopy(el)
+    # deepcopy preserves document order, so map by position.
+    originals = list(el.iter())
+    copies = list(copy.iter())
+    index = {id(n): i for i, n in enumerate(originals)}
+    for node in [*marked, *unmarked]:
+        target = copies[index[id(node)]]
+        parent = target.getparent()
+        if parent is None:
+            continue
+        tail = target.tail or ""
+        previous = target.getprevious()
+        if previous is not None:
+            previous.tail = (previous.tail or "") + tail
+        else:
+            parent.text = (parent.text or "") + tail
+        parent.remove(target)
+    return copy
+
+
+_BLOCK_LINE_TAGS = frozenset({"div", "p", "br", "tr", "li"})
+
+
+def _unmarked_gutter(el: HtmlElement) -> list[HtmlElement]:
+    """Leaf number elements forming a 1, 2, 3... line gutter (see above)."""
+    # Walk text in order, tracking whether we are at the start of a line.
+    candidates: list[tuple[HtmlElement, int]] = []
+    glued: dict[int, bool] = {}
+    state = {"line_start": True, "pending": -1}
+
+    def feed_text(text: str) -> None:
+        if not text:
+            return
+        pending = state["pending"]
+        if pending >= 0 and text.strip():
+            first_line = text.split("\n", 1)[0]
+            glued[pending] = bool(first_line.strip())
+            state["pending"] = -1
+        elif pending >= 0 and "\n" in text:
+            glued[pending] = False
+            state["pending"] = -1
+        if "\n" in text:
+            state["line_start"] = not text.rsplit("\n", 1)[1].strip()
+        elif text.strip():
+            state["line_start"] = False
+
+    def visit(node: HtmlElement) -> None:
+        for child in node.iterchildren():
+            if not isinstance(child.tag, str):
+                feed_text(child.tail or "")
+                continue
+            if child.tag in _BLOCK_LINE_TAGS:
+                state["line_start"] = True
+            text = child.text_content() or ""
+            is_leaf = not any(isinstance(c.tag, str) for c in child)
+            stripped = text.strip()
+            if (
+                is_leaf
+                and state["line_start"]
+                and stripped.isdigit()
+                and len(stripped) <= 5
+            ):
+                candidates.append((child, int(stripped)))
+                state["pending"] = len(candidates) - 1
+                state["line_start"] = False
+            else:
+                feed_text(child.text or "")
+                visit(child)
+            if child.tag in _BLOCK_LINE_TAGS:
+                state["line_start"] = True
+            feed_text(child.tail or "")
+
+    feed_text(el.text or "")
+    visit(el)
+
+    found: list[HtmlElement] = []
+    run: list[int] = []
+
+    lines = len(_raw_code(el).strip("\n").splitlines()) or 1
+
+    def close_run() -> None:
+        # A gutter numbers (nearly) every line, and most numbers sit glued to
+        # code; an output block "1\n2\n3" or a list literal does not qualify.
+        if len(run) >= max(_LINENO_MIN_RUN, _LINENO_LINE_SHARE * lines) and sum(
+            glued.get(i, False) for i in run
+        ) * 2 >= len(run):
+            found.extend(candidates[i][0] for i in run)
+
+    for i, (_, number) in enumerate(candidates):
+        if run and number == candidates[run[-1]][1] + 1:
+            run.append(i)
+        else:
+            close_run()
+            run = [i]
+    close_run()
+    return found
 
 
 def _raw_code(el: HtmlElement) -> str:
@@ -330,14 +726,26 @@ def _direct_text(li: HtmlElement) -> list[str]:
             if child.tail:
                 parts.append(child.tail)
             continue
-        parts.append(child.text_content() or "")
+        if not isinstance(child.tag, str):
+            pass
+        elif child.tag in _LI_STRUCTURAL:
+            parts.append(" ")  # emitted as its own block by _visit_list
+        else:
+            sep = " " if child.tag in _BLOCK_BOUNDARY_TAGS else ""
+            parts.append(sep + _raw_text_without(child, _LI_STRUCTURAL) + sep)
         if child.tail:
             parts.append(child.tail)
     return parts
 
 
 def _cell_text(cell: HtmlElement) -> str:
-    """Normalized text of a single table cell."""
+    """Normalized text of a single table cell.
+
+    Kept as the raw ``text_content`` on purpose: adding block-boundary
+    separators inside cells (as ``_block_text`` does) lowered table-cell
+    recall on the extraction eval's test split (rule H7, log 2026-10-29), so
+    cell text stays as before until that is understood on fresh data.
+    """
     return normalize_text(cell.text_content() or "")
 
 
@@ -512,9 +920,10 @@ def _build_definition_list(el: HtmlElement) -> dict[str, object]:
     current_term: str | None = None
     for child in el.iterchildren("dt", "dd"):
         if child.tag == "dt":
-            current_term = _block_text(child)
+            current_term = _container_text(child, _DD_STRUCTURAL)
         else:
-            items.append({"term": current_term or "", "definition": _block_text(child)})
+            definition = _container_text(child, _DD_STRUCTURAL)
+            items.append({"term": current_term or "", "definition": definition})
     return {"items": items}
 
 
@@ -624,9 +1033,10 @@ class _Walker:
         self._heading_stack.append((level, text))
 
     def _visit_code(self, el: HtmlElement) -> None:
-        inner = el.find("code")
         language = _detect_language(el)
-        code = _raw_code(inner if inner is not None else el)
+        clean = _strip_line_numbers(el)
+        inner = clean.find("code")
+        code = _raw_code(inner if inner is not None else clean)
         self._emit(
             "code",
             el,
@@ -685,8 +1095,9 @@ class _Walker:
 
     def _visit_blockquote(self, el: HtmlElement) -> None:
         """Emit the blockquote block plus any structural blocks nested in it."""
-        text = _block_text(el)
-        self._emit("blockquote", el, text=text, data={"text": text})
+        text = _container_text(el, _DD_STRUCTURAL)
+        if text:  # a quote holding only a list/code is just that block
+            self._emit("blockquote", el, text=text, data={"text": text})
         for struct in _structural_descendants(el):
             self._visit(struct)
 
@@ -700,7 +1111,8 @@ class _Walker:
         blocks are emitted as their own blocks in document order (DECISIONS
         2026-10-11).
         """
-        self._emit("admonition", el, text=_block_text(el), data={"kind": kind})
+        text = _container_text(el, _DD_STRUCTURAL)
+        self._emit("admonition", el, text=text, data={"kind": kind})
         for struct in _structural_descendants(el):
             self._visit(struct)
 
@@ -718,9 +1130,11 @@ class _Walker:
         <dl>/<dd> para preservar blocos estruturais aninhados").
         """
         data = _build_definition_list(el)
-        self._emit("definition_list", el, text=_block_text(el), data=data)
-        for dd in el.iterchildren("dd"):
-            self._emit_nested_structural(dd)
+        text = _container_text(el, _DD_STRUCTURAL)
+        self._emit("definition_list", el, text=text, data=data)
+        # Every structural block left out of the text above is emitted here,
+        # including ones in a <dt> or a <div>-wrapped <dd>.
+        self._emit_nested_structural(el)
 
     def _emit_nested_structural(self, dd: HtmlElement) -> None:
         """Emit structural blocks (code/table/list/dl) nested inside a ``<dd>``.
@@ -774,7 +1188,6 @@ _DD_STRUCTURAL = frozenset({"pre", "table", "ul", "ol", "dl"})
 # already flattened into the list's items text, so they are barriers (not
 # re-emitted) rather than new blocks.
 _LI_STRUCTURAL = frozenset({"pre", "table", "dl"})
-_LI_BARRIER = frozenset({"ul", "ol"})
 
 
 def _structural_descendants(root: HtmlElement) -> list[HtmlElement]:
@@ -783,8 +1196,12 @@ def _structural_descendants(root: HtmlElement) -> list[HtmlElement]:
 
 
 def _structural_descendants_in_item(li: HtmlElement) -> list[HtmlElement]:
-    """Outermost code/table/dl blocks nested inside a ``<li>`` (sub-lists excluded)."""
-    return _outermost_structural(li, _LI_STRUCTURAL, barrier=_LI_BARRIER)
+    """Outermost code/table/dl blocks inside a ``<li>``, sub-list items included.
+
+    Sub-lists are flattened into the items text, but their code/tables/dl are
+    left out of that text (``_direct_text``), so they are emitted here.
+    """
+    return _outermost_structural(li, _LI_STRUCTURAL, barrier=frozenset())
 
 
 # --------------------------------------------------------------------------- #

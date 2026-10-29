@@ -47,7 +47,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from app.config import Settings, get_settings
 from app.fetch.render import RenderResult
-from app.mcp_server.server import UNTRUSTED_NOTICE, build_server
+from app.mcp_server.server import READ_ONLY, UNTRUSTED_NOTICE, build_server
 from app.providers.embeddings.base import EmbeddingProvider
 from app.providers.rerank.base import RerankProvider
 from bench.corpus_store import CorpusStore
@@ -81,6 +81,12 @@ FROZEN_SETTINGS = (
     "embedding_dim",
     "reranker_model",
     "render_min_text_chars",
+    # Markdown sources (SPEC §3.5, M10b): the frozen corpus holds only the
+    # cited pages, so a Markdown alternate would 404 and add a warning, and an
+    # Accept preference would be ignored by the corpus transport. Both stay off.
+    "markdown_alternate",
+    "markdown_alternate_min_overlap",
+    "fetch_accept_markdown",
 )
 
 
@@ -100,6 +106,8 @@ def full_page_server(store: CorpusStore) -> MCPServer:
     @server.tool(
         description="Return the whole documentation page at `url` as Markdown. "
         + UNTRUSTED_NOTICE,
+        title="Read a whole documentation page",
+        annotations=READ_ONLY,
         meta=RESULT_META,
     )
     def fetch_page(url: str) -> str:
@@ -121,6 +129,8 @@ def strong_rag_server(store: CorpusStore, runner: StrongRagRunner) -> MCPServer:
         description="Search the documentation pages at `urls` for `query` and "
         "return the most relevant passages, at most `max_tokens` tokens, each "
         "headed by its page URL. " + UNTRUSTED_NOTICE,
+        title="Search documentation pages",
+        annotations=READ_ONLY,
         meta=RESULT_META,
     )
     def search_docs(query: str, urls: list[str], max_tokens: int = 4000) -> str:

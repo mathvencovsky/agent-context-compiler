@@ -190,6 +190,10 @@ class SourceStatusModel(BaseModel):
     version_id: str | None = None
     fetched_at: str | None = None
     status: str
+    #: Tokens of the whole page as Markdown (what ``resolve`` would return).
+    page_tokens: int | None = None
+    #: The page's own date (``YYYY-MM-DD``) from its metadata, if it states one.
+    date: str | None = None
 
 
 class TokenUsage(BaseModel):

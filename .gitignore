@@ -39,6 +39,8 @@ __snapshots__/*.ambr.tmp
 bench/corpus/
 bench/results/
 bench/.cache/
+# Downloaded third-party eval data (licensed upstream; only manifests are committed)
+bench/data/
 
 # IDE / OS
 .vscode/

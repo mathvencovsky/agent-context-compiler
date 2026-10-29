@@ -5,6 +5,27 @@ M10)**. O humano não financia rodada paga até lá (2026-10-28).
 **`app/` mudou depois da Emenda 15 (correções de segurança, Emenda 17): o
 harness recusa rodar até o recongelamento no fim do M10b.**
 
+### M10b — Fase P, produto (2026-10-29, Emenda 18)
+
+- Régua sem custo: `make extract-eval` (WCXB-docs com dev/test fixos e 64
+  fatos em 7 PDFs), regras de aceite escritas antes da primeira mudança em
+  `bench/results/extract_eval_baseline.md`.
+- PDF reescrito: fatos 15/64 → 64/64, palavras coladas 22,8% → 0,1%, tabelas
+  vazias 15 → 0; conferido num PDF fora da régua (WebArena: 187 → 0 palavras
+  coladas).
+- HTML e código: F1 dev +0,022, precisão +0,033, palavras coladas 251 → 2,
+  linguagem do código 15% → 44%, números de linha 20 → 0.
+- Markdown e texto puro viram documento; alternativo Markdown e
+  `Accept: text/markdown` existem, desligados.
+- Interface: anotações MCP, aviso de trecho e data em cada `<document>`.
+- Pendente (máquina do humano, sem custo de API): `make m10a-pending` de novo
+  (os números do dev mudaram com a extração), e o passo de recuperação
+  (reranker e embedding abertos, modelos baixados do Hugging Face). Depois,
+  emenda de recongelamento e benchmarks externos.
+- Propostas abertas: código inline e links no Markdown (muda o contrato da
+  IR), OpenAPI no lugar de Swagger UI/Redoc, calibrar o alternativo Markdown,
+  `max_age_seconds` e `allow_stale` (frescor).
+
 ### M10b — pesquisa, segurança e protocolo (2026-10-28)
 
 - Pesquisa em sete frentes e plano: `docs/PESQUISA_RODADA3.md` (relatórios em
@@ -20,6 +41,29 @@ harness recusa rodar até o recongelamento no fim do M10b.**
   (estão `TODO`); publicar o carimbo do PREREG antes do piloto; salvar os PDFs
   da seção 8 da pesquisa.
 - Em andamento: Fase P (produto), começando pelo banco de testes de extração.
+- Fase P, passo 5 (interface, branch `claude/m10b-interface`): `title` e
+  `readOnlyHint`/`openWorldHint` nas ferramentas MCP, `excerpt` e `date` em
+  cada `<document>` do conciso (`page_tokens` e `date` em `sources[]`), linha
+  "Do not use" nas instruções do servidor e skill pedindo URL e `chunk`
+  (DECISIONS.md 2026-10-28, M10b interface). Muda `app/`: listar na emenda de
+  recongelamento. Fora: âncora `#seção` (muda seleção) e `max_age` (contrato).
+  Teste manual: `assemble` conciso de uma página com
+  `article:modified_time` mostra `excerpt="N fragments of a ~T-token page"
+  date="AAAA-MM-DD"`.
+- Fase P, passo 3 (Markdown, branch `claude/m10b-markdown`): `text/markdown`,
+  `text/x-markdown` e `text/plain` viram documento (`app/extract/markdown.py`,
+  `markdown-it-py`, MIT); Markdown alternativo da mesma origem
+  (`markdown_alternate`) e `Accept: text/markdown` (`fetch_accept_markdown`),
+  os dois desligados e travados no harness (`FROZEN_SETTINGS`). DECISIONS.md
+  2026-10-29, SPEC §3.5. Muda `app/`: listar na emenda de recongelamento,
+  inclusive que páginas `text/plain` congeladas (ex.: `rfc2046.txt`) deixam de
+  falhar. Pendente: calibrar o limiar 0,7 em páginas com alternativo antes de
+  ligar `markdown_alternate`; spec OpenAPI no lugar de Swagger UI/Redoc (resto
+  do passo 3). Teste manual: `resolve` de
+  `https://www.rfc-editor.org/rfc/rfc2046.txt` devolve títulos `1. Introduction`
+  etc.; com `MARKDOWN_ALTERNATE=true`, uma página com
+  `<link rel="alternate" type="text/markdown">` traz `source.alternate_url` e o
+  warning `markdown_alternate_used`.
 Últimas etapas (2026-10-28): pesquisa sem custo a partir de estudos e
 publicações, e as propostas de context engineering P1–P7 (seções abaixo); cinco
 medições esperam o humano rodar com corpus e cache.
@@ -32,6 +76,40 @@ gratuitas do M10; termina com nova emenda de recongelamento. A trilha 2 (medir
 respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
+
+### M10b — Fase P passo 1: extração de PDF (2026-10-29)
+
+Muda `app/` (recongelar no fim da Fase P, com emenda própria):
+- `app/extract/pdf.py` reescrito: palavras sem colagem (pdfTeX), parágrafos
+  reais com hifenização desfeita, duas colunas na ordem certa, tabelas
+  espúrias descartadas e tabelas booktabs achadas, títulos pelo outline,
+  `metadata.title`, warning `pages_without_text` (sem OCR).
+- `%PDF-` detectado no corpo (`app/fetch/detect.py::looks_like_pdf`): PDF com
+  `Content-Type` errado ou ausente é extraído, com warning
+  `content_type_mismatch`.
+- Medida (`bench/results/extract_eval_baseline.md`, log): fatos 15/64 ->
+  64/64, tokens longos 22,8% -> 0,1%, tabelas vazias 15 -> 0; HTML com delta 0
+  em dev e test; portões P1–P5 e meta >= 52/64 passam.
+- Pendente/dívida: PDFs cujo texto usa CMap embutido (ex.: gerados pelo
+  Prince) perdem essas páginas no pdfminer (sai `pages_without_text`); um
+  reserva com pypdfium2 precisaria de trava global e limites próprios.
+  `metadata.title` pode sair "Contents" quando a página 1 é um sumário.
+- Testar: `make extract-eval`; `uv run pytest tests/unit/extract
+  tests/unit/fetch/test_detect.py tests/integration/test_resolve_errors.py`.
+
+### M10b — régua de extração sem custo (2026-10-28)
+
+Medida "antes" da Fase P (`docs/PESQUISA_RODADA3.md` §7, passos 1–2), sem
+tocar em `app/`:
+- `bench/extract_eval/`: baixa do GitHub o WCXB-docs (131 páginas, CC-BY-4.0)
+  e 7 PDFs com 64 fatos verificados à mão, confere o sha256 e mede o NINA
+  contra trafilatura e readability (F1, vazamento, palavras coladas, código,
+  tabelas) e os fatos de PDF. Split dev/test por hash, fixado antes de medir.
+- Linha de base e regras de aceite: `bench/results/extract_eval_baseline.md`.
+  Dev: NINA F1 0,912 (R 0,949, vazamento 4,3%) contra trafilatura 0,915
+  (R 0,904, 2,3%); PDF: 15 de 64 fatos.
+- Testar: `make extract-eval` (dev + PDF, portões automáticos) e
+  `uv run pytest tests/unit/bench/test_extract_eval.py`.
 
 ### M10a/M10 — páginas que respondem 200 sem documentação (2026-10-28)
 
