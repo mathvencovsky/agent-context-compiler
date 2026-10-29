@@ -232,6 +232,8 @@ async def test_instructions_and_descriptions_let_a_deferred_agent_find_nina() ->
     assert server.instructions == INSTRUCTIONS
     assert "assemble_context" in INSTRUCTIONS and "documentation" in INSTRUCTIONS
     assert "untrusted" in INSTRUCTIONS.lower()
+    # Says when NOT to use NINA (Context7 4.4.4; research A, L8).
+    assert "Do not use" in INSTRUCTIONS and "web search" in INSTRUCTIONS
     assert count_tokens(INSTRUCTIONS) <= 100  # in every system prompt
     tools = await server.list_tools()
     for tool in tools:
@@ -254,3 +256,66 @@ async def test_assemble_description_names_the_tagged_format() -> None:
     tools = {t.name: t for t in await _build().list_tools()}
     description = tools["assemble_context"].description or ""
     assert '<fragment chunk="N">' in description and "<nina_notes>" in description
+
+
+async def test_only_assemble_context_declares_the_result_size_ceiling() -> None:
+    # Claude Code saves an MCP text result over 50,000 chars to a file unless
+    # the tool declares anthropic/maxResultSizeChars (ceiling 500,000).
+    tools = {t.name: t for t in await _build().list_tools()}
+    assert tools["assemble_context"].meta == {
+        "anthropic/searchHint": "answer questions from documentation docs",
+        "anthropic/maxResultSizeChars": 500_000,
+    }
+    for name in ("resolve_url", "get_document"):
+        assert "anthropic/maxResultSizeChars" not in (tools[name].meta or {}), name
+
+
+def test_result_size_ceiling_crosses_the_wire_as_meta() -> None:
+    import asyncio
+
+    from mcp import Client
+
+    async def metas() -> dict[str, object]:
+        async with Client(_build()) as client:
+            listed = await client.list_tools()
+            return {
+                t.name: t.model_dump(by_alias=True).get("_meta") for t in listed.tools
+            }
+
+    wire = asyncio.run(metas())
+    assert wire["assemble_context"] == {
+        "anthropic/searchHint": "answer questions from documentation docs",
+        "anthropic/maxResultSizeChars": 500_000,
+    }
+    assert "anthropic/maxResultSizeChars" not in (wire["resolve_url"] or {})
+
+
+#: Every NINA tool only reads public pages (research D3; MCP ToolAnnotations).
+#: destructiveHint/idempotentHint only mean something when readOnlyHint is
+#: false (MCP schema), so they are not sent.
+_READ_ONLY_HINTS = {"readOnlyHint": True, "openWorldHint": True}
+
+
+async def test_every_tool_has_a_title_and_read_only_annotations() -> None:
+    # readOnlyHint lets Claude Code run the calls in parallel and retry one
+    # after a dropped connection; the connector directory requires a title.
+    for tool in await _build().list_tools():
+        assert tool.title and "ocumentation" in tool.title, tool.name
+        assert tool.annotations is not None, tool.name
+        hints = tool.annotations.model_dump(by_alias=True, exclude_none=True)
+        assert hints == _READ_ONLY_HINTS, tool.name
+
+
+def test_titles_and_annotations_cross_the_wire() -> None:
+    import asyncio
+
+    from mcp import Client
+
+    async def listed() -> list[dict[str, Any]]:
+        async with Client(_build()) as client:
+            tools = (await client.list_tools()).tools
+            return [t.model_dump(by_alias=True, exclude_none=True) for t in tools]
+
+    for tool in asyncio.run(listed()):
+        assert tool["title"], tool["name"]
+        assert tool["annotations"] == _READ_ONLY_HINTS, tool["name"]

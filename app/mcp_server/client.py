@@ -15,7 +15,9 @@ an ``httpx.MockTransport`` and never touch the network.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -114,10 +116,19 @@ class NinaApiClient:
         self, document_id: str, *, version_id: str | None = None
     ) -> dict[str, Any]:
         """Call ``GET /v1/documents/{document_id}`` and return the JSON body."""
+        # The id is interpolated into the request PATH: an agent steered by a
+        # page could otherwise send "../usage" and reach another endpoint with
+        # the user's key (audit B2). Ids have a fixed shape (SPEC §4).
+        if not _DOCUMENT_ID.fullmatch(document_id):
+            raise ValueError("document_id must look like doc_<hex>")
+        if version_id is not None and not _VERSION_ID.fullmatch(version_id):
+            raise ValueError("version_id must look like ver_<hex>")
         params: dict[str, str] = {}
         if version_id is not None:
             params["version_id"] = version_id
-        response = self._client.get(f"/v1/documents/{document_id}", params=params)
+        response = self._client.get(
+            f"/v1/documents/{quote(document_id, safe='')}", params=params
+        )
         response.raise_for_status()
         return _as_json_object(response)
 
@@ -126,6 +137,10 @@ class NinaApiClient:
         response = self._client.post(path, json=payload)
         response.raise_for_status()
         return _as_json_object(response)
+
+
+_DOCUMENT_ID = re.compile(r"doc_[0-9a-f]{1,64}")
+_VERSION_ID = re.compile(r"ver_[0-9a-f]{1,64}")
 
 
 def _as_json_object(response: httpx.Response) -> dict[str, Any]:

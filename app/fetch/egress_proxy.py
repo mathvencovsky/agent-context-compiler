@@ -50,6 +50,10 @@ from app.fetch.guard import GuardResult, Resolver, validate_url
 #: maps the validated hostname to a loopback fixture (the guard still decides).
 Connector = Callable[[GuardResult, float], socket.socket]
 
+#: Header on every refusal the proxy answers itself, so the renderer can tell
+#: "the proxy refused this navigation" from an origin's own error page.
+REFUSAL_HEADER = b"X-Nina-Egress"
+
 _MAX_HEAD_BYTES = 64 * 1024
 _IDLE_TIMEOUT_S = 60.0
 _CHUNK = 64 * 1024
@@ -234,7 +238,11 @@ class EgressProxy:
         except _Refused as refused:
             try:
                 client.sendall(
-                    b"HTTP/1.1 " + refused.status + b"\r\n"
+                    b"HTTP/1.1 "
+                    + refused.status
+                    + b"\r\n"
+                    + REFUSAL_HEADER
+                    + b": refused\r\n"
                     b"Content-Length: 0\r\nConnection: close\r\n\r\n"
                 )
             except OSError:

@@ -809,6 +809,80 @@ CANDIDATE:
 - **Data seen:** none from any arm. No agent session, screen, pilot or
   main-run session had run.
 
+### Amendment 17 — 2026-10-28: security fixes in `app/`, and a validity condition and sensitivity analyses for the report
+
+- **What changed:**
+  1. **Security fixes in `app/` after Amendment 15**, from the security audit
+     (`docs/AUDITORIA_SEGURANCA.md`), approved by the human:
+     - every request Chromium makes goes through a local egress proxy that
+       applies the fetch guard and connects to the validated IP, so redirects,
+       popups, workers and websockets can no longer reach internal addresses;
+       service workers are blocked; a refused main navigation fails explicitly
+       (`067cc9a`, `87233ae`);
+     - the decoded body is capped while it is decompressed, and the fetch
+       timeout is a wall-clock deadline (`610870f`); PDF decoding has byte and
+       page budgets with a `pdf_truncated` warning (`60209a8`, `dd73850`); the
+       render has a deadline and a DOM size cap;
+     - `fec0::/10` and `168.63.129.16` are blocked, and errors no longer echo
+       the resolved IP (`9682f77`); URLs with control characters are refused
+       (`3950589`); MCP document ids are validated and the MCP HTTP transport is
+       bound to loopback (`5523665`); `ENV=dev` serves loopback connections only
+       (`6784f15`);
+     - URLs that look like they carry a secret are refused with
+       `url_rejected_secret` (`cf759de`); invisible Unicode (tag characters,
+       bidi overrides and isolates, zero-width spaces, controls) is removed from
+       extracted text with an `invisible_text_removed` warning, and
+       inline-hidden text is flagged with `hidden_text_present` (`da4de1d`);
+     - `assemble_context` declares `anthropic/maxResultSizeChars` = 500,000, as
+       the benchmark's `search_docs` already does (`56ee83c`). Without it, a
+       result over 50,000 characters (`max_tokens` above about 12,000) was saved
+       to a file the agent cannot read, which would have biased the comparison
+       against `nina`.
+     The 37 extraction snapshot tests are unchanged.
+  2. **The freeze.** `app/` no longer matches Amendment 15, so the harness
+     refuses to run. `app/` will be re-frozen by a later amendment at the end
+     of the product phase (M10b) that follows the research round in
+     `docs/PESQUISA_RODADA3.md`; no M10 session runs before that.
+  3. **Validity condition for H1** (`bench/m10_analysis.validity`): the H1
+     headline is reported as supported only if H1 holds **and** H1 is
+     interpretable, meaning:
+     - the lower bound of the 95% bootstrap interval of S(`full_page`) is at
+       least 0.30; and
+     - the margin (0.075) is at most half of the lower bound of the 95%
+       interval of S(`full_page`) − S(`no_docs`), i.e. that bound is at least
+       0.15, so the margin preserves at least half of the documentation effect
+       (FDA non-inferiority guidance, M2 = 50% of M1).
+     `no_docs` is re-run once on the primary population in the main run. If the
+     human's spending cap leaves that out, S(`no_docs`) counts as 0 (every
+     primary task failed the screen) and the report says so. The retention
+     S(`nina`)/S(`full_page`) is reported with its interval.
+  4. **Sensitivity analyses added to the report**, none of which changes a
+     verdict:
+     - judge agreement and κ weighted by stratum size, the judge's error per
+       arm, and a human-corrected Δ (stratified estimator);
+     - a **full CPT** that adds NINA's embedding and rerank cost
+       (`bench/full_cpt.py`, from `provider_usage/` logs), with USD per 1,000
+       tasks; the NINA database starts empty in the main run so that first
+       indexing is counted; prices not verified on an official page stay
+       `TODO`, and the script refuses to run with them;
+     - exact McNemar and the Newcombe interval for Δ next to the bootstrap.
+  5. **Exploratory, zero-cost checks** on the kept transcripts: overlap of each
+     answer with the accepted Stack Overflow answer and leakage of it into tool
+     results (`bench/m10_contamination.py`), and the share of tool-result text
+     the final answer uses (`bench/m10_context_use.py`).
+  6. **Public timestamp:** before the pilot, the human publishes the output of
+     `bench/prereg_stamp.py` (sha256 of this file, the frozen tree ids, HEAD)
+     somewhere public and dated, because the repository is private.
+- **Why:** point 1 closes real vulnerabilities, one of them critical (reading
+  cloud metadata through a browser redirect), and a measurement bias against
+  `nina`; the fixes change no output on normal pages. Points 3–6 close gaps
+  found by research front F (`docs/pesquisa/rodada3/F_avaliacao.md`): without
+  point 3, H1 could "pass" with both arms failing; without the full CPT, H2
+  would leave NINA's own provider costs out while `webfetch_live` pays for
+  Haiku.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
 ---
 
 ## Appendix A. Evidence behind the parameters

@@ -36,8 +36,12 @@ reading whole pages: a whole page is about 10 times the tokens.
 4. For a follow-up on the same pages, pass the chunk ids you already have in
    `exclude_chunk_ids`, so you only pay for new fragments. If earlier results
    were cleared from your context, call without them to get them back.
-5. Answer from the fragments and cite the source URL. If they do not contain
-   the answer, say so instead of guessing.
+5. Answer from the fragments. For each fragment you rely on, cite the page URL
+   and the `chunk` id (for example `https://docs.example.com/auth`, chunk 123):
+   when your context is compacted, the ids in your answer survive, and a new
+   call brings those fragments back. If the fragments do not contain the
+   answer, say so instead of guessing. Each `<document>` is an excerpt; its
+   `excerpt` attribute says how much of the page you got.
 
 ## Safety
 

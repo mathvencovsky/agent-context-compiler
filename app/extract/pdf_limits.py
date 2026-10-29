@@ -67,13 +67,19 @@ def _capped_zlib_decompress(data: bytes, *args: Any, **kwargs: Any) -> bytes:
     room = budget.room()
     probe = zlib.decompressobj()
     try:
-        out = probe.decompress(data, room + 1)
+        # max_length must be positive; room 0 means "nothing more fits".
+        out = probe.decompress(data, max(room, 1))
+        over = bool(probe.unconsumed_tail) or len(out) > room
+        if not over and not probe.eof:
+            over = bool(probe.flush(1))  # output still pending past ``room``
     except zlib.error:
         # Corrupt data: let pdfminer see the very same error it saw before
         # (it then tries its own recovery path).
         return zlib.decompress(data)
-    if len(out) > room or probe.unconsumed_tail:
-        return _truncate(budget, out, room)
+    if over:
+        budget.truncated_streams += 1
+        budget.spend(room)
+        return out[:room] if len(out) > room else out
     result = zlib.decompress(data)  # Within budget: the original decode.
     budget.spend(len(result))
     return result

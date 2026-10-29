@@ -53,6 +53,7 @@ from typing import TYPE_CHECKING, Any
 import pdfplumber
 
 from app.config import Settings, get_settings
+from app.extract.invisible import invisible_text_warning, strip_invisible_blocks
 from app.extract.ir import (
     Block,
     Document,
@@ -545,8 +546,11 @@ def extract_pdf(
     for page_lines in pages:
         builder.consume_page(page_lines)
 
+    removed = strip_invisible_blocks(builder.blocks)
     assign_block_ids(builder.blocks)
     warnings = _finalize_warnings(builder)
+    if removed:
+        warnings.append(invisible_text_warning(removed))
     warnings.extend(_limit_warnings(settings, truncated_pages, budget))
 
     main_text_len = sum(

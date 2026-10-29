@@ -7,6 +7,12 @@ Run over stdio (default, for a local agent) or streamable HTTP (for remote use):
     python -m app.mcp_server --transport streamable-http
     MCP_TRANSPORT=streamable-http python -m app.mcp_server
 
+Streamable HTTP binds to 127.0.0.1 only and validates the ``Host`` and
+``Origin`` headers (DNS-rebinding protection, an MCP specification MUST). It
+has NO authentication of its own: anyone who can reach it uses the server's
+``API_KEY``. Exposing it beyond loopback requires an authenticating proxy (or
+MCP OAuth) in front; it is not supported as is.
+
 ``API_URL`` and ``API_KEY`` must be set in the environment; the server fails
 loudly (exit code 2) before serving if either is missing, rather than starting
 and erroring on the first tool call.
@@ -19,6 +25,8 @@ import os
 import sys
 from typing import Literal
 
+from mcp.server.transport_security import TransportSecuritySettings
+
 from app.mcp_server.client import MissingApiConfig, NinaApiClient
 from app.mcp_server.server import build_server
 
@@ -29,6 +37,23 @@ Transport = Literal["stdio", "streamable-http"]
 
 _STDIO: Transport = "stdio"
 _HTTP: Transport = "streamable-http"
+
+
+#: Streamable HTTP is served on loopback only (see module docstring).
+HTTP_HOST = "127.0.0.1"
+
+
+def http_transport_security() -> TransportSecuritySettings:
+    """Host/Origin allow-lists for the loopback HTTP transport.
+
+    Stated explicitly rather than relying on the SDK's implicit default, so an
+    SDK change cannot silently turn the DNS-rebinding protection off.
+    """
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
+        allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+    )
 
 
 def _parse_args(argv: list[str]) -> Transport:
@@ -73,7 +98,11 @@ def main(argv: list[str] | None = None) -> int:
     server = build_server(client=client)
     # Dispatch on the concrete literal so the correct run() overload is selected.
     if transport == _HTTP:
-        server.run(transport=_HTTP)
+        server.run(
+            transport="streamable-http",
+            host=HTTP_HOST,
+            transport_security=http_transport_security(),
+        )
     else:
         server.run(transport=_STDIO)
     return 0

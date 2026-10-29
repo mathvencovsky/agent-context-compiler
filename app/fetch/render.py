@@ -54,6 +54,7 @@ from playwright.sync_api import (
     Browser,
     Page,
     Request,
+    Response,
     Route,
     WebSocketRoute,
     sync_playwright,
@@ -62,8 +63,14 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.config import Settings, get_settings
-from app.fetch.egress_proxy import Connector, EgressProxy
-from app.fetch.errors import FetchError, Timeout, TooLarge
+from app.fetch.egress_proxy import REFUSAL_HEADER, Connector, EgressProxy
+from app.fetch.errors import (
+    BlockedDestination,
+    FetchError,
+    FetchFailed,
+    Timeout,
+    TooLarge,
+)
 from app.fetch.guard import Resolver, validate_url
 
 #: Warning code the caller appends when a document was rendered with the browser.
@@ -78,6 +85,13 @@ _ECONOMY_RESOURCE_TYPES = frozenset({"image", "media", "font"})
 _GOTO_TIMEOUT_MS = 30_000
 
 _HOST_RULES_FLAG = "--host-resolver-rules="
+
+#: Playwright stops forcing ``<-loopback>`` into Chromium's proxy bypass list
+#: when this variable is set, which would let loopback/link-local traffic skip
+#: the egress proxy. Rendering refuses to run with it (fail closed).
+_LOOPBACK_BYPASS_ENV = "PLAYWRIGHT_DISABLE_FORCED_CHROMIUM_PROXIED_LOOPBACK"
+
+_REFUSAL_HEADER = REFUSAL_HEADER.decode().lower()
 
 #: Chromium flags that keep every connection on the proxy. Chromium cannot
 #: resolve any name itself (the proxy address is a literal IP and excluded), and
@@ -107,6 +121,7 @@ class RenderResult:
 def _make_route_handler(
     resolver: Resolver | None,
     settings: Settings,
+    on_refused: Callable[[Request], None] | None = None,
 ) -> Callable[[Route, Request], None]:
     """Build the ``context.route`` handler closing over the guard dependencies.
 
@@ -122,10 +137,9 @@ def _make_route_handler(
             return
         try:
             validate_url(request.url, resolver=resolver, settings=settings)
-        except FetchError:
-            route.abort()
-            return
-        except Exception:  # noqa: BLE001 — fail closed on any unexpected error.
+        except Exception:  # noqa: BLE001 — fail closed on ANY error.
+            if on_refused is not None:
+                on_refused(request)
             route.abort()
             return
         route.continue_()
@@ -237,6 +251,59 @@ def _close_extra_pages(main: Page) -> Callable[[Page], None]:
     return on_page
 
 
+class _MainFrameMonitor:
+    """Records whether the top-level document was refused by the egress proxy.
+
+    A refused main-frame navigation (the entry URL, any redirect hop of it, or
+    a later script navigation) must never be extracted as content: the proxy's
+    empty 403 or a ``chrome-error://`` page is not the document.
+    """
+
+    def __init__(self) -> None:
+        self._page: Page | None = None
+        self.refused = False
+
+    def attach(self, page: Page) -> None:
+        self._page = page
+        page.on("response", self.on_response)
+        page.on("requestfailed", self.on_request_failed)
+
+    def on_route_refused(self, request: Request) -> None:
+        if self._is_main_navigation(request):
+            self.refused = True
+
+    def _is_main_navigation(self, request: Request) -> bool:
+        if self._page is None:
+            return False
+        try:
+            return (
+                request.is_navigation_request()
+                and request.frame == self._page.main_frame
+            )
+        except PlaywrightError:
+            return False
+
+    def on_response(self, response: Response) -> None:
+        if _REFUSAL_HEADER in response.headers and self._is_main_navigation(
+            response.request
+        ):
+            self.refused = True
+
+    def on_request_failed(self, request: Request) -> None:
+        failure = request.failure or ""
+        if "ERR_TUNNEL_CONNECTION_FAILED" in failure and self._is_main_navigation(
+            request
+        ):
+            self.refused = True
+
+
+def _blocked(url: str) -> BlockedDestination:
+    return BlockedDestination(
+        "the page navigated to a destination the guard refuses",
+        details={"url": url},
+    )
+
+
 def render_url(
     url: str,
     *,
@@ -268,6 +335,11 @@ def render_url(
     always appended last, so it cannot turn the proxy off.
     """
     settings = settings or get_settings()
+    if os.environ.get(_LOOPBACK_BYPASS_ENV):
+        raise RuntimeError(
+            f"refusing to render: {_LOOPBACK_BYPASS_ENV} is set, so Chromium "
+            "would bypass the egress proxy for loopback addresses"
+        )
     started = time.monotonic()
     deadline = started + settings.render_total_timeout_s
 
@@ -279,7 +351,8 @@ def render_url(
     def remaining_ms(cap: int) -> int:
         return max(1, min(cap, int((deadline - time.monotonic()) * 1000)))
 
-    handler = _make_route_handler(resolver, settings)
+    monitor = _MainFrameMonitor()
+    handler = _make_route_handler(resolver, settings, monitor.on_route_refused)
     ws_handler = _make_ws_route_handler(resolver, settings)
 
     watchdog: _Watchdog | None = None
@@ -306,12 +379,18 @@ def render_url(
                 context.route("**/*", handler)
                 page = context.new_page()
                 context.on("page", _close_extra_pages(page))
+                monitor.attach(page)
 
-                response = page.goto(
-                    url,
-                    wait_until="domcontentloaded",
-                    timeout=remaining_ms(_GOTO_TIMEOUT_MS),
-                )
+                try:
+                    response = page.goto(
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=remaining_ms(_GOTO_TIMEOUT_MS),
+                    )
+                except PlaywrightError as exc:
+                    if monitor.refused:
+                        raise _blocked(url) from exc
+                    raise
                 try:
                     page.wait_for_load_state(
                         "networkidle",
@@ -325,6 +404,13 @@ def render_url(
                 html = page.content()
                 final_url = page.url
                 status = response.status if response is not None else None
+                if monitor.refused:
+                    raise _blocked(url)
+                if final_url.startswith("chrome-error://"):
+                    raise FetchFailed(
+                        "the browser ended on an error page, not a document",
+                        details={"url": url},
+                    )
             finally:
                 try:
                     context.close()

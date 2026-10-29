@@ -3,7 +3,8 @@
 :mod:`bench.m10_agent` starts one per session. ``--data-root`` is the checkout
 holding the data: its ``.env``, ``bench/corpus`` and ``bench/.cache``::
 
-    python -m bench.m10_tools {full_page|strong_rag|nina} --data-root DIR [--log FILE]
+    python -m bench.m10_tools {full_page|strong_rag|nina} --data-root DIR \
+        [--log FILE] [--usage FILE]
 
 * ``full_page``: ``fetch_page(url)``, the whole frozen page as trafilatura
   Markdown (:func:`bench.page_length.page_markdown`, SPEC §10.3).
@@ -21,7 +22,9 @@ holding the data: its ``.env``, ``bench/corpus`` and ``bench/.cache``::
 Embeddings and reranker are the real providers behind SQLite caches in
 ``bench/.cache/m10/`` (the JSON caches there are too large to load once per
 session). Each candidate set NINA's reranker scores is appended to ``--log``
-for the PREREG §8 failure causes; the agent never sees it. A URL outside the
+for the PREREG §8 failure causes; the agent never sees it. ``--usage`` logs the
+size of every embedding and rerank call, cache hits included, for the full CPT
+(:func:`usage_logged`). A URL outside the
 frozen corpus is not found, in every arm. An internal failure reaches the agent
 as a tool error starting with :data:`INFRA_ERROR` (``nina``: an HTTP 500), which
 the runner counts as an infrastructure failure (PREREG §10).
@@ -324,6 +327,79 @@ class _CandidateLog:
         return scores
 
 
+def _append_usage(path: Path, row: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+
+class _EmbedUsage:
+    """Embeddings that append each call's billed size to ``path``."""
+
+    def __init__(self, delegate: EmbeddingProvider, path: Path) -> None:
+        self.model = delegate.model
+        self.dim = delegate.dim
+        self._delegate = delegate
+        self._path = path
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        from app.index.tokens import count_tokens
+
+        vectors = self._delegate.embed(texts)
+        tokens = sum(count_tokens(t) for t in texts)
+        _append_usage(
+            self._path,
+            {
+                "kind": "embed",
+                "model": self.model,
+                "texts": len(texts),
+                "tokens": tokens,
+            },
+        )
+        return vectors
+
+
+class _RerankUsage:
+    """Reranker that appends each call's billed size to ``path``."""
+
+    def __init__(self, delegate: RerankProvider, path: Path) -> None:
+        self.model = delegate.model
+        self._delegate = delegate
+        self._path = path
+
+    def rerank(self, query: str, documents: list[str]) -> list[float]:
+        from app.index.tokens import count_tokens
+
+        scores = self._delegate.rerank(query, documents)
+        _append_usage(
+            self._path,
+            {
+                "kind": "rerank",
+                "model": self.model,
+                "documents": len(documents),
+                "query_tokens": count_tokens(query),
+                "document_tokens": sum(count_tokens(d) for d in documents),
+            },
+        )
+        return scores
+
+
+def usage_logged(
+    embeddings: EmbeddingProvider, reranker: RerankProvider, path: Path
+) -> tuple[EmbeddingProvider, RerankProvider]:
+    """Providers that log every call to ``path`` (research front F, L3).
+
+    They wrap the caching providers, so a cache hit is logged like a paid call:
+    the log is the usage of a customer without the bench's cache, which
+    :mod:`bench.full_cpt` prices as the "full CPT". Tokens are ``cl100k_base``,
+    the encoding of ``text-embedding-3-small``; for the Jina reranker, whose
+    tokenizer differs, they are an estimate. NINA's own document store still
+    applies: a page already indexed in :data:`NINA_DB` is not embedded again,
+    as for a customer of the hosted product.
+    """
+    return _EmbedUsage(embeddings, path), _RerankUsage(reranker, path)
+
+
 class _AppTransport(httpx.BaseTransport):
     """Sends the API client's requests to the in-process app (no socket)."""
 
@@ -350,6 +426,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - a subproc
     parser.add_argument("arm", choices=("full_page", "strong_rag", "nina"))
     parser.add_argument("--data-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--log", type=Path, help="nina: scored candidates file")
+    parser.add_argument("--usage", type=Path, help="provider calls file (full CPT)")
     args = parser.parse_args(argv)
 
     os.chdir(args.data_root)
@@ -362,6 +439,8 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - a subproc
             get_settings.cache_clear()
             check_frozen_settings(get_settings())
         embeddings, reranker = real_providers(CACHE_DIR)
+        if args.usage is not None:
+            embeddings, reranker = usage_logged(embeddings, reranker, args.usage)
         if args.arm == "strong_rag":
             runner = StrongRagRunner(embeddings=embeddings, reranker=reranker)
             server = strong_rag_server(store, runner)

@@ -21,6 +21,14 @@ async def test_skill_names_only_real_tools_and_hint_codes() -> None:
         assert f"`{code}`" in text
 
 
+def test_skill_asks_to_cite_url_and_chunk_ids() -> None:
+    # After compaction the tool results become a summary; ids written in the
+    # answer survive it, so the fragments can be fetched again (research D4).
+    text = " ".join(SKILL.read_text(encoding="utf-8").split())  # unwrap lines
+    assert "cite the page URL and the `chunk` id" in text
+    assert "compact" in text
+
+
 def test_skill_frontmatter_and_size() -> None:
     text = SKILL.read_text(encoding="utf-8")
     front = text.split("---")[1]

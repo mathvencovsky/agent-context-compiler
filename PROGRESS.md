@@ -1,8 +1,34 @@
 # PROGRESS
 
-Marco atual: **M10a (aprofundar o NINA antes do piloto), melhorias sem custo**.
-**`app/` congelado na Emenda 15 (2026-10-28): pronto para o piloto quando
-houver chaves e teto de gasto.**
+Marco atual: **M10b (deixar o NINA no nível dos melhores antes de financiar o
+M10)**. O humano não financia rodada paga até lá (2026-10-28).
+**`app/` mudou depois da Emenda 15 (correções de segurança, Emenda 17): o
+harness recusa rodar até o recongelamento no fim do M10b.**
+
+### M10b — pesquisa, segurança e protocolo (2026-10-28)
+
+- Pesquisa em sete frentes e plano: `docs/PESQUISA_RODADA3.md` (relatórios em
+  `docs/pesquisa/rodada3/`), com a lista de fontes para o humano salvar em PDF.
+- Fase S (feita): auditoria de segurança pelo agente `nina-engineer`
+  (`docs/AUDITORIA_SEGURANCA.md`) e correções no `app/`: proxy de saída do
+  navegador, bomba de gzip, prazos, limites de PDF, faixas de IP, `ENV=dev` só
+  em loopback, URLs com segredo recusadas, Unicode invisível removido,
+  `maxResultSizeChars` no `assemble_context`. 1008 testes + 19 de navegador.
+- Fase V (feita): condição de validade do H1, juiz ponderado, CPT completo,
+  carimbo público (`bench/prereg_stamp.py`), contaminação e uso do contexto.
+- Pendente (humano): preços de embedding e rerank em `bench/prices.yaml`
+  (estão `TODO`); publicar o carimbo do PREREG antes do piloto; salvar os PDFs
+  da seção 8 da pesquisa.
+- Em andamento: Fase P (produto), começando pelo banco de testes de extração.
+- Fase P, passo 5 (interface, branch `claude/m10b-interface`): `title` e
+  `readOnlyHint`/`openWorldHint` nas ferramentas MCP, `excerpt` e `date` em
+  cada `<document>` do conciso (`page_tokens` e `date` em `sources[]`), linha
+  "Do not use" nas instruções do servidor e skill pedindo URL e `chunk`
+  (DECISIONS.md 2026-10-28, M10b interface). Muda `app/`: listar na emenda de
+  recongelamento. Fora: âncora `#seção` (muda seleção) e `max_age` (contrato).
+  Teste manual: `assemble` conciso de uma página com
+  `article:modified_time` mostra `excerpt="N fragments of a ~T-token page"
+  date="AAAA-MM-DD"`.
 Últimas etapas (2026-10-28): pesquisa sem custo a partir de estudos e
 publicações, e as propostas de context engineering P1–P7 (seções abaixo); cinco
 medições esperam o humano rodar com corpus e cache.

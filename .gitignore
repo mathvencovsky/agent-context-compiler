@@ -60,3 +60,6 @@ test-results/
 
 # graphify knowledge graph (local, regenerated)
 graphify-out/
+
+# Agent worktrees (Claude Code)
+.claude/worktrees/

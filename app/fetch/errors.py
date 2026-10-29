@@ -117,3 +117,13 @@ class Timeout(FetchError):
 
     code = "timeout"
     http_status = 504
+
+
+class UrlRejectedSecret(FetchError):
+    """The URL looks like it carries a secret (userinfo, a credential parameter,
+    a known key format or a long high-entropy value): refused before any
+    network access, so a prompt-injected agent cannot exfiltrate a secret
+    through the request itself (``app/fetch/url_secrets.py``)."""
+
+    code = "url_rejected_secret"
+    http_status = 400

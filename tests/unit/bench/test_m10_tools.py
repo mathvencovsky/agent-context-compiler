@@ -27,6 +27,7 @@ from bench.m10_tools import (
     frozen_render,
     full_page_server,
     strong_rag_server,
+    usage_logged,
 )
 from bench.page_length import page_markdown
 from bench.runners.strong_rag import StrongRagRunner
@@ -140,6 +141,39 @@ def test_candidate_log_appends_what_the_reranker_scored(tmp_path: Path) -> None:
     assert row["query"] == "abs value"
     assert [c["score"] for c in row["candidates"]] == scores
     assert row["candidates"][0]["text"] == "abs returns the value"
+
+
+def test_usage_log_counts_every_provider_call_cache_or_not(tmp_path: Path) -> None:
+    """Front F L3: the calls a session makes, as if no bench cache existed."""
+    from app.index.tokens import count_tokens
+    from app.providers.embeddings.fake import FakeEmbeddingProvider
+
+    usage = tmp_path / "usage.jsonl"
+    embeddings, reranker = usage_logged(
+        FakeEmbeddingProvider(), FakeRerankProvider(), usage
+    )
+    vectors = embeddings.embed(["abs returns", "the value"])
+    scores = reranker.rerank("abs value", ["abs returns the value", "other"])
+    reranker.rerank("abs value", ["abs returns the value", "other"])  # repeat
+
+    assert len(vectors) == 2 and len(scores) == 2
+    rows = [json.loads(line) for line in usage.read_text(encoding="utf-8").splitlines()]
+    assert rows[0] == {
+        "kind": "embed",
+        "model": embeddings.model,
+        "texts": 2,
+        "tokens": count_tokens("abs returns") + count_tokens("the value"),
+    }
+    assert rows[1] == {
+        "kind": "rerank",
+        "model": reranker.model,
+        "documents": 2,
+        "query_tokens": count_tokens("abs value"),
+        "document_tokens": count_tokens("abs returns the value")
+        + count_tokens("other"),
+    }
+    assert rows[2] == rows[1]  # a repeated call is counted again
+    assert embeddings.dim == FakeEmbeddingProvider().dim
 
 
 def test_full_page_server_speaks_mcp_over_stdio(
