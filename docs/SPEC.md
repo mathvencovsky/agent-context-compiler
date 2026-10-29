@@ -102,8 +102,9 @@ Os limiares ficam em `config.py`.
 - Além disso, `context.route("**/*")` e `context.route_web_socket` (no contexto, não na página) validam cada URL pelo guard e abortam destinos bloqueados; service workers ficam bloqueados e páginas extras (popups) são fechadas.
 - Se a navegação principal for recusada (entrada, salto de redirect ou navegação por script), o resultado é `blocked_destination`; uma página `chrome-error://` nunca vira documento (`fetch_failed`).
 - Prazo total de relógio por renderização (`render_total_timeout_s`, 60 s; ao estourar, o Chromium é morto e o erro é `timeout`) e DOM serializado limitado a `max_body_bytes` (`too_large`).
-- Bloquear tipos `image`, `media` e `font` para economizar.
-- Esperar `domcontentloaded` + `networkidle` com teto de 15 s, e então capturar `page.content()`.
+- Bloquear tipos `image`, `media` e `font` para economizar; bloquear também `ping` (beacons) e `eventsource`, e os sub-recursos (nunca a navegação) de uma lista curta e versionada de hosts de analytics (`_ANALYTICS_HOSTS` em `app/fetch/render.py`). Scripts, XHR e `fetch` de outros hosts passam: trazem o conteúdo das SPAs.
+- Esperar `domcontentloaded` e então texto estável: o tamanho do texto principal (`main`, `article` ou `[role=main]`, senão `body`) é lido a cada `render_stable_interval_ms` (250 ms); a espera termina quando ele fica igual por `render_stable_window_ms` (500 ms) e tem ao menos `render_min_text_chars` caracteres ou não há requisição em andamento, com teto de `render_stable_cap_ms` (5 s; chegar ao teto não é erro). Então capturar `page.content()`. (Antes: `networkidle` com teto de 15 s, que analytics, long polling e chats nunca deixavam acontecer.)
+- No máximo `render_concurrency` (2) renderizações ao mesmo tempo por processo; quem espera vaga gasta o próprio prazo e, sem vaga, recebe `timeout`.
 
 ### 3.5 Markdown e texto servidos pelo site
 
@@ -211,7 +212,7 @@ class Document(BaseModel):
 
 ## 6. Recuperação e seleção (`assemble`)
 
-1. Resolver as URLs (cache válido por padrão de 24 h) e garantir que as versões atuais estejam indexadas.
+1. Resolver as URLs (cache válido por padrão de 24 h) e garantir que as versões atuais estejam indexadas. As resoluções correm em paralelo (`assemble_fetch_concurrency`, 6; no máximo `assemble_per_host_concurrency`, 2, por host); URLs que podem ser o mesmo documento correm uma depois da outra, na ordem do pedido, e a indexação segue a ordem do pedido. A saída é a mesma da resolução uma a uma.
 2. Recuperar os 50 melhores por busca lexical e os 50 melhores por busca vetorial, restritos às versões atuais das URLs pedidas.
 3. Fundir com RRF: `score(d) = Σ 1 / (k + rank_j(d))`, com `k = 60`.
 4. Rerank dos 30 melhores pelo provedor de reranking. Normalize os scores para [0, 1].

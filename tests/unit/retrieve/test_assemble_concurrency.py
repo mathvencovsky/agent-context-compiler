@@ -33,9 +33,7 @@ def test_same_document_urls_share_a_group() -> None:
     assert group("http://docs.example.com:8080/a?x=1") == base  # coarser: fine
     assert group("https://docs.example.com/b?x=1") != base
     assert group("https://docs.example.com/a?x=2") != base
-    assert group("https://bücher.example/a") == group(
-        "https://xn--bcher-kva.example/a"
-    )
+    assert group("https://bücher.example/a") == group("https://xn--bcher-kva.example/a")
     assert _url_keys("http://[::1/")[1] == "http://[::1/"  # unsplittable
 
 
@@ -125,8 +123,7 @@ def test_context_follows_into_worker_threads() -> None:
     _VAR.set("request-42")
     urls = [f"https://h{i}.example/" for i in range(4)]
     seen = [
-        f.result()
-        for f in _in_request_order(urls, lambda _u: _VAR.get(), _settings())
+        f.result() for f in _in_request_order(urls, lambda _u: _VAR.get(), _settings())
     ]
     assert seen == ["request-42"] * 4
 
