@@ -39,7 +39,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 import httpx
 from mcp.server.mcpserver import MCPServer
@@ -274,37 +274,152 @@ def real_providers(cache_dir: Path) -> tuple[EmbeddingProvider, RerankProvider]:
     return embeddings, reranker
 
 
-def prepare_nina_database() -> None:
-    """Create :data:`NINA_DB` if it is missing and migrate it to head."""
-    import psycopg
-    from psycopg import sql
+#: Tables whose rows mean NINA_DB is not empty: what resolve and assemble cache.
+_NINA_DATA_TABLES = ("sources", "document_versions", "chunks")
 
-    s = get_settings()
-    with psycopg.connect(
-        host=s.postgres_host,
-        port=s.postgres_port,
-        user=s.postgres_user,
-        password=s.postgres_password,
-        dbname="postgres",
-        autocommit=True,
-    ) as conn:
-        query = "SELECT 1 FROM pg_database WHERE datname = %s"
-        if conn.execute(query, (NINA_DB,)).fetchone() is None:
-            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(NINA_DB)))
-    env = {
-        **os.environ,
-        "POSTGRES_HOST": s.postgres_host,
-        "POSTGRES_PORT": str(s.postgres_port),
-        "POSTGRES_USER": s.postgres_user,
-        "POSTGRES_PASSWORD": s.postgres_password,
-        "POSTGRES_DB": NINA_DB,
-    }
-    subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=REPO_ROOT,
-        env=env,
-        check=True,
-    )
+
+class NinaDatabase(Protocol):
+    """The operations :func:`prepare_nina_database` needs on :data:`NINA_DB`."""
+
+    def exists(self) -> bool: ...
+    def has_data(self) -> bool: ...
+    def create(self) -> None: ...
+    def drop(self) -> None: ...
+    def migrate(self) -> None: ...
+
+
+class PostgresNinaDatabase:
+    """:data:`NINA_DB` on the Postgres server of the ``.env`` settings.
+
+    ``name`` exists for the integration test, which must never touch the real
+    :data:`NINA_DB`.
+    """
+
+    def __init__(
+        self, settings: Settings | None = None, *, name: str = NINA_DB
+    ) -> None:
+        self._s = settings if settings is not None else get_settings()
+        self._name = name
+        if self._s.postgres_db == name:
+            # Never let a reset drop the database the dev API or the tests use.
+            raise SystemExit(
+                f"POSTGRES_DB is {name!r}; the benchmark database must be "
+                "separate from the configured one"
+            )
+
+    def _connect(self, dbname: str) -> Any:
+        import psycopg
+
+        return psycopg.connect(
+            host=self._s.postgres_host,
+            port=self._s.postgres_port,
+            user=self._s.postgres_user,
+            password=self._s.postgres_password,
+            dbname=dbname,
+            autocommit=True,
+        )
+
+    def exists(self) -> bool:
+        with self._connect("postgres") as conn:
+            query = "SELECT 1 FROM pg_database WHERE datname = %s"
+            return conn.execute(query, (self._name,)).fetchone() is not None
+
+    def has_data(self) -> bool:
+        from psycopg import sql
+
+        with self._connect(self._name) as conn:
+            for table in _NINA_DATA_TABLES:
+                if conn.execute("SELECT to_regclass(%s)", (table,)).fetchone()[0]:
+                    stmt = sql.SQL("SELECT EXISTS (SELECT 1 FROM {})").format(
+                        sql.Identifier(table)
+                    )
+                    if conn.execute(stmt).fetchone()[0]:
+                        return True
+        return False
+
+    def create(self) -> None:
+        from psycopg import sql
+
+        with self._connect("postgres") as conn:
+            conn.execute(
+                sql.SQL("CREATE DATABASE {}").format(sql.Identifier(self._name))
+            )
+
+    def drop(self) -> None:
+        from psycopg import sql
+
+        with self._connect("postgres") as conn:
+            conn.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+                    sql.Identifier(self._name)
+                )
+            )
+
+    def migrate(self) -> None:
+        env = {
+            **os.environ,
+            "POSTGRES_HOST": self._s.postgres_host,
+            "POSTGRES_PORT": str(self._s.postgres_port),
+            "POSTGRES_USER": self._s.postgres_user,
+            "POSTGRES_PASSWORD": self._s.postgres_password,
+            "POSTGRES_DB": self._name,
+        }
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=REPO_ROOT,
+            env=env,
+            check=True,
+        )
+
+
+def prepare_nina_database(
+    *, resuming: bool, reset: bool, db: NinaDatabase | None = None
+) -> str:
+    """Make :data:`NINA_DB` ready for a run and return what was done.
+
+    PREREG Amendment 17: the NINA database starts EMPTY in a run, so that first
+    indexing (embeddings, rerank) is counted in the full CPT. So:
+
+    * a new run (``resuming`` false: no ``results.csv`` yet) gets an empty
+      database: ``"created"`` if it was missing, ``"empty"`` if it exists with
+      no rows in ``sources``/``document_versions``/``chunks``; a database that
+      holds rows is refused unless ``reset`` (``--reset-nina-db``), which drops
+      and recreates it (``"reset"``). Dropping is never implicit;
+    * a resumed run (``results.csv`` exists) keeps the database as it is
+      (``"kept"``; ``"created"`` if an earlier invocation ran without the
+      ``nina`` arm); ``reset`` is refused, since it would count first indexing
+      twice within one run.
+
+    The database is migrated to head in every case.
+    """
+    db = db if db is not None else PostgresNinaDatabase()
+    if resuming:
+        if reset:
+            raise SystemExit(
+                "--reset-nina-db with an existing results.csv: a resumed run keeps "
+                f"{NINA_DB} (PREREG Amendment 17); move results.csv away to start "
+                "a new run"
+            )
+        action = "kept" if db.exists() else "created"
+        if action == "created":
+            db.create()
+    elif not db.exists():
+        db.create()
+        action = "created"
+    elif not db.has_data():
+        action = "empty"
+    elif reset:
+        db.drop()
+        db.create()
+        action = "reset"
+    else:
+        raise SystemExit(
+            f"{NINA_DB} already holds documents but no results.csv exists: a new "
+            "run must start with an empty NINA database (PREREG Amendment 17). "
+            "Pass --reset-nina-db to drop and recreate it."
+        )
+    db.migrate()
+    return action
 
 
 class _PublicResolver:
