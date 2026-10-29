@@ -76,6 +76,8 @@ class _JsonFileCache:
         self._path = path
         self._log = path.with_suffix(".jsonl")
         self._data: dict[str, object] = {}
+        # assemble resolves URLs on worker threads (M10b): one append at a time.
+        self._lock = threading.Lock()
         if path.exists():
             self._data = json.loads(path.read_text(encoding="utf-8"))
         if self._log.exists():
@@ -90,10 +92,12 @@ class _JsonFileCache:
         return self._data.get(key)
 
     def put(self, key: str, value: object) -> None:
-        self._data[key] = value
-        self._log.parent.mkdir(parents=True, exist_ok=True)
-        with self._log.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps([key, value], ensure_ascii=False) + "\n")
+        line = json.dumps([key, value], ensure_ascii=False) + "\n"
+        with self._lock:
+            self._data[key] = value
+            self._log.parent.mkdir(parents=True, exist_ok=True)
+            with self._log.open("a", encoding="utf-8") as fh:
+                fh.write(line)
 
     def __len__(self) -> int:
         return len(self._data)
@@ -216,6 +220,8 @@ class CachingEmbeddingProvider:
         )
         self.api_calls = 0
         self.hits = 0
+        # assemble embeds from worker threads (M10b): keep the counts exact.
+        self._counts = threading.Lock()
 
     def embed_query(self, text: str) -> list[float]:
         """The query's vector: ``embed([query_prefix + text])[0]``, cached."""
@@ -231,13 +237,15 @@ class CachingEmbeddingProvider:
             cached = self._cache.get(key)
             if cached is not None:
                 results[i] = [float(x) for x in cached]  # type: ignore[union-attr]
-                self.hits += 1
             else:
                 missing_idx.append(i)
+        with self._counts:
+            self.hits += len(texts) - len(missing_idx)
 
         if missing_idx:
             fresh = self._delegate.embed([texts[i] for i in missing_idx])
-            self.api_calls += 1
+            with self._counts:
+                self.api_calls += 1
             for slot, vector in zip(missing_idx, fresh, strict=True):
                 results[slot] = vector
                 self._cache.put(keys[slot], vector)

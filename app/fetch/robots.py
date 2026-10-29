@@ -14,11 +14,20 @@ Failure semantics (fail closed):
 
 Both the clock and the fetch callable are injectable so tests are deterministic
 and never touch the network.
+
+Process-wide cache (M10b efficiency, DECISIONS.md 2026-10-29): the API keeps ONE
+checker per process (``app.api.documents.provide_robots_checker``), so the TTL
+holds across requests instead of dying with each request's checker. The cache
+is therefore thread-safe and bounded: at most ``max_entries`` origins (least
+recently used evicted first), and concurrent lookups of the same origin wait
+for a single robots.txt fetch instead of each fetching it.
 """
 
 from __future__ import annotations
 
+import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -33,6 +42,12 @@ from app.fetch.errors import FetchError, RobotsDisallowed, RobotsUnavailable
 
 class _Fetcher(Protocol):
     def __call__(self, url: str) -> FetchResult: ...
+
+
+#: Default bound on cached origins (one parsed robots.txt each, a few KB).
+DEFAULT_MAX_ENTRIES = 1024
+#: Striped locks serializing the fetch of one origin (bounded, never cleaned).
+_FETCH_LOCK_STRIPES = 64
 
 
 @dataclass
@@ -55,6 +70,8 @@ class RobotsChecker:
         a controllable fake to exercise TTL expiry.
     settings:
         Runtime settings (TTL, UA). Defaults to the process settings.
+    max_entries:
+        Most origins kept in the cache; the least recently used is evicted.
     """
 
     def __init__(
@@ -63,11 +80,17 @@ class RobotsChecker:
         fetch_fn: _Fetcher | None = None,
         time_fn: Callable[[], float] = time.monotonic,
         settings: Settings | None = None,
+        max_entries: int = DEFAULT_MAX_ENTRIES,
     ) -> None:
+        if max_entries < 1:
+            raise ValueError("max_entries must be at least 1")
         self._settings = settings or get_settings()
         self._fetch: _Fetcher = fetch_fn or _default_fetch
         self._time = time_fn
-        self._cache: dict[str, _CacheEntry] = {}
+        self._max_entries = max_entries
+        self._cache: OrderedDict[str, _CacheEntry] = OrderedDict()
+        self._cache_lock = threading.Lock()
+        self._fetch_locks = tuple(threading.Lock() for _ in range(_FETCH_LOCK_STRIPES))
 
     def is_allowed(self, url: str, *, user_agent: str | None = None) -> None:
         """Return ``None`` if ``url`` may be fetched, else raise a typed error.
@@ -95,15 +118,37 @@ class RobotsChecker:
         return origin, path
 
     def _get_parser(self, origin: str) -> robotparser.RobotFileParser:
-        """Return a fresh-enough parser for ``origin``, fetching if needed."""
-        now = self._time()
-        entry = self._cache.get(origin)
-        if entry is not None and (now - entry.fetched_at) < self._ttl():
-            return entry.parser
+        """Return a fresh-enough parser for ``origin``, fetching if needed.
 
-        parser = self._fetch_rules(origin)
-        self._cache[origin] = _CacheEntry(parser=parser, fetched_at=now)
-        return parser
+        A miss takes the origin's fetch lock and looks again, so threads that
+        miss together wait for one fetch. A failed fetch raises and caches
+        nothing (fail closed, as before).
+        """
+        cached = self._cached(origin)
+        if cached is not None:
+            return cached
+        stripe = hash(origin) % len(self._fetch_locks)
+        with self._fetch_locks[stripe]:
+            cached = self._cached(origin)
+            if cached is not None:
+                return cached
+            now = self._time()
+            parser = self._fetch_rules(origin)
+            with self._cache_lock:
+                self._cache[origin] = _CacheEntry(parser=parser, fetched_at=now)
+                self._cache.move_to_end(origin)
+                while len(self._cache) > self._max_entries:
+                    self._cache.popitem(last=False)
+            return parser
+
+    def _cached(self, origin: str) -> robotparser.RobotFileParser | None:
+        """The cached parser for ``origin`` if still within the TTL, else None."""
+        with self._cache_lock:
+            entry = self._cache.get(origin)
+            if entry is None or (self._time() - entry.fetched_at) >= self._ttl():
+                return None
+            self._cache.move_to_end(origin)
+            return entry.parser
 
     def _ttl(self) -> int:
         return self._settings.robots_cache_ttl_seconds

@@ -7,7 +7,13 @@ into one deterministic pipeline:
 1. Resolve each URL through the M5 resolve path (24h cache) and ensure its
    current version is indexed (reusing ``index_version``). Each URL fails
    INDEPENDENTLY — a failure is recorded in ``sources[].status`` + ``warnings``
-   and never aborts the others (SPEC §8).
+   and never aborts the others (SPEC §8). The resolves run CONCURRENTLY on a
+   small thread pool (``settings.assemble_fetch_concurrency``, at most
+   ``settings.assemble_per_host_concurrency`` per host); URLs that may name
+   the same document run one after the other, in request order, so they never
+   race on its rows. Indexing stays in request order on the calling thread, so
+   chunk rows, ``sources[]``, ``warnings`` and everything after are exactly
+   what the one-by-one loop produced.
 2. Collect the current ``version_id`` of every OK URL.
 3. Lexical top-50 + vector top-50 over those versions (ablation ``use_lexical`` /
    ``use_vector`` may drop a list). The lexical scorer and the page prior come
@@ -31,13 +37,19 @@ step 7). The whole path is deterministic and never calls an LLM (CLAUDE.md).
 
 from __future__ import annotations
 
+import contextvars
 import re
+import threading
+from collections.abc import Callable, Generator
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import date as calendar_date
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 from app.api.documents import resolve_document
-from app.api.schemas import AssembleRequest, ResolveRequest
+from app.api.schemas import AssembleRequest, ResolveRequest, ResolveResponse
 from app.index.indexer import index_version
 from app.providers.embeddings.base import embed_query
 from app.retrieve.lexical import LexicalConfig, lexical_search_ranked
@@ -185,6 +197,144 @@ def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(text.lower())
 
 
+@dataclass
+class _UrlOutcome:
+    """What one URL contributes to ``sources[]``, ``warnings`` and the search."""
+
+    source: SourceStatus
+    warning: dict[str, object] | None = None
+    resolved: _ResolvedUrl | None = None
+
+
+def _failed(url: str, exc: Exception) -> _UrlOutcome:
+    """The outcome of a URL whose resolve raised (SPEC §8: it fails alone)."""
+    code = getattr(exc, "code", "fetch_failed")
+    upstream = getattr(exc, "details", {}).get("upstream_status")
+    reason = f"{code} (HTTP {upstream})" if upstream else code
+    return _UrlOutcome(
+        source=SourceStatus(
+            url=url,
+            document_id=None,
+            version_id=None,
+            fetched_at=None,
+            status=code,
+        ),
+        warning={
+            "code": code,
+            "message": f"failed to resolve {url}: {reason}",
+            "url": url,
+        },
+    )
+
+
+def _resolved(url: str, response: ResolveResponse) -> _UrlOutcome:
+    """The outcome of a URL that resolved (and whose version is indexed)."""
+    warning: dict[str, object] | None = None
+    if response.stats.blocks == 0:
+        # Explicit failure (CLAUDE.md): the page resolved but holds no text,
+        # so it can contribute no fragment. Say so, with the document's own
+        # warning codes (NINA's codes, never page text).
+        codes = sorted({w.code for w in response.warnings})
+        reason = f" ({', '.join(codes)})" if codes else ""
+        warning = {
+            "code": "empty_content",
+            "message": f"{url} resolved but has no extractable text{reason}",
+            "url": url,
+        }
+
+    fetched_at = response.source.fetched_at.isoformat()
+    return _UrlOutcome(
+        source=SourceStatus(
+            url=url,
+            document_id=response.document_id,
+            version_id=response.version_id,
+            fetched_at=fetched_at,
+            status="ok",
+            page_tokens=response.stats.tokens_markdown,
+            date=page_date(response.metadata),
+        ),
+        warning=warning,
+        resolved=_ResolvedUrl(
+            url=url,
+            document_id=response.document_id,
+            version_id=response.version_id,
+            fetched_at=fetched_at,
+        ),
+    )
+
+
+def _url_keys(url: str) -> tuple[str, str]:
+    """``(host, document group)`` scheduling keys of a requested URL.
+
+    The group over-approximates the guard's normalization (host lowercased,
+    one trailing dot dropped, IDNA; fragment dropped; scheme and port ignored):
+    any two URLs the guard could normalize to the same document share a group,
+    so they are resolved one after the other and never race on the same rows.
+    Over-grouping only costs parallelism. A URL that cannot be split keys on
+    itself; the guard rejects it before any database access anyway.
+    """
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").rstrip(".")
+        if not host.isascii():
+            host = host.encode("idna").decode("ascii")
+    except (ValueError, UnicodeError):
+        return url, url
+    return host, f"{host}|{parts.path}|{parts.query}"
+
+
+def _in_request_order[T](
+    urls: list[str],
+    resolve: Callable[[str], T],
+    settings: Settings,
+) -> Generator[Future[T]]:
+    """Run ``resolve`` over ``urls`` on a bounded pool; yield futures in order.
+
+    Same-group URLs run sequentially, in request order, inside one task; at
+    most ``assemble_per_host_concurrency`` URLs of one host run at once. Each
+    task runs in a copy of the caller's context, so request-scoped log context
+    follows it into the worker thread. With one worker (one group, or the
+    concurrency setting at 1) everything runs inline, one URL at a time, like
+    the original loop. Tasks not started when the consumer stops are dropped.
+    """
+    groups: dict[str, list[int]] = {}
+    host_of: list[str] = []
+    for index, url in enumerate(urls):
+        host, group = _url_keys(url)
+        groups.setdefault(group, []).append(index)
+        host_of.append(host)
+    results: list[Future[T]] = [Future() for _ in urls]
+
+    def run(index: int) -> None:
+        try:
+            results[index].set_result(resolve(urls[index]))
+        except BaseException as exc:  # noqa: BLE001 — handed to the consumer.
+            results[index].set_exception(exc)
+
+    workers = min(max(1, settings.assemble_fetch_concurrency), len(groups))
+    if workers <= 1:
+        for index in range(len(urls)):
+            run(index)
+            yield results[index]
+        return
+
+    per_host = max(1, settings.assemble_per_host_concurrency)
+    host_slots = {host: threading.BoundedSemaphore(per_host) for host in host_of}
+
+    def run_group(indices: list[int]) -> None:
+        for index in indices:
+            with host_slots[host_of[index]]:
+                run(index)
+
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="assemble")
+    try:
+        for indices in groups.values():
+            pool.submit(contextvars.copy_context().run, run_group, indices)
+        yield from results
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
 def _resolve_and_index(
     req: AssembleRequest,
     *,
@@ -201,15 +351,16 @@ def _resolve_and_index(
 
     Returns the resolved URLs, the per-URL ``SourceStatus`` list, and warnings
     for any URL that failed. A failure in one URL never aborts the others
-    (SPEC §8).
+    (SPEC §8). The resolves (fetch, render, extract, store) run concurrently
+    (:func:`_in_request_order`); indexing then runs here, one URL at a time
+    and in request order, as each resolve completes, so chunk rows are written
+    in the same order as by the one-by-one loop and every list comes back in
+    request order.
     """
-    resolved: list[_ResolvedUrl] = []
-    sources: list[SourceStatus] = []
-    warnings: list[dict[str, object]] = []
 
-    for url in req.urls:
+    def resolve(url: str) -> ResolveResponse | Exception:
         try:
-            response = resolve_document(
+            return resolve_document(
                 ResolveRequest(url=url, formats=[], force_refresh=False),
                 session_factory=session_factory,
                 blobs=blobs,
@@ -220,72 +371,30 @@ def _resolve_and_index(
                 settings=settings,
             )
         except Exception as exc:  # noqa: BLE001 — each URL fails independently.
-            code = getattr(exc, "code", "fetch_failed")
-            sources.append(
-                SourceStatus(
-                    url=url,
-                    document_id=None,
-                    version_id=None,
-                    fetched_at=None,
-                    status=code,
+            return exc
+
+    outcomes: list[_UrlOutcome] = []
+    with closing(_in_request_order(list(req.urls), resolve, settings)) as futures:
+        for url, future in zip(req.urls, futures, strict=True):
+            response = future.result()
+            if isinstance(response, Exception):
+                outcomes.append(_failed(url, response))
+                continue
+            # Ensure the current version is indexed (idempotent
+            # delete-then-insert).
+            with session_factory() as session:
+                index_version(
+                    response.version_id,
+                    session=session,
+                    embeddings=embeddings,
+                    blob_store=blobs,
                 )
-            )
-            upstream = getattr(exc, "details", {}).get("upstream_status")
-            reason = f"{code} (HTTP {upstream})" if upstream else code
-            warnings.append(
-                {
-                    "code": code,
-                    "message": f"failed to resolve {url}: {reason}",
-                    "url": url,
-                }
-            )
-            continue
+                session.commit()
+            outcomes.append(_resolved(url, response))
 
-        # Ensure the current version is indexed (idempotent delete-then-insert).
-        with session_factory() as session:
-            index_version(
-                response.version_id,
-                session=session,
-                embeddings=embeddings,
-                blob_store=blobs,
-            )
-            session.commit()
-
-        if response.stats.blocks == 0:
-            # Explicit failure (CLAUDE.md): the page resolved but holds no text,
-            # so it can contribute no fragment. Say so, with the document's own
-            # warning codes (NINA's codes, never page text).
-            codes = sorted({w.code for w in response.warnings})
-            reason = f" ({', '.join(codes)})" if codes else ""
-            warnings.append(
-                {
-                    "code": "empty_content",
-                    "message": f"{url} resolved but has no extractable text{reason}",
-                    "url": url,
-                }
-            )
-
-        fetched_at = response.source.fetched_at.isoformat()
-        resolved.append(
-            _ResolvedUrl(
-                url=url,
-                document_id=response.document_id,
-                version_id=response.version_id,
-                fetched_at=fetched_at,
-            )
-        )
-        sources.append(
-            SourceStatus(
-                url=url,
-                document_id=response.document_id,
-                version_id=response.version_id,
-                fetched_at=fetched_at,
-                status="ok",
-                page_tokens=response.stats.tokens_markdown,
-                date=page_date(response.metadata),
-            )
-        )
-
+    resolved = [o.resolved for o in outcomes if o.resolved is not None]
+    sources = [o.source for o in outcomes]
+    warnings = [o.warning for o in outcomes if o.warning is not None]
     return resolved, sources, warnings
 
 

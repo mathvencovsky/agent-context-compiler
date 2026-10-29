@@ -106,8 +106,9 @@ Os limiares ficam em `config.py`.
 - Além disso, `context.route("**/*")` e `context.route_web_socket` (no contexto, não na página) validam cada URL pelo guard e abortam destinos bloqueados; service workers ficam bloqueados e páginas extras (popups) são fechadas.
 - Se a navegação principal for recusada (entrada, salto de redirect ou navegação por script), o resultado é `blocked_destination`; uma página `chrome-error://` nunca vira documento (`fetch_failed`).
 - Prazo total de relógio por renderização (`render_total_timeout_s`, 60 s; ao estourar, o Chromium é morto e o erro é `timeout`) e DOM serializado limitado a `max_body_bytes` (`too_large`).
-- Bloquear tipos `image`, `media` e `font` para economizar.
-- Esperar `domcontentloaded` + `networkidle` com teto de 15 s, e então capturar `page.content()`.
+- Bloquear tipos `image`, `media` e `font` para economizar; bloquear também `ping` (beacons) e `eventsource`, e os sub-recursos (nunca a navegação) de uma lista curta e versionada de hosts de analytics (`_ANALYTICS_HOSTS` em `app/fetch/render.py`). Scripts, XHR e `fetch` de outros hosts passam: trazem o conteúdo das SPAs.
+- Esperar `domcontentloaded` e então texto estável: o tamanho do texto principal (`main`, `article` ou `[role=main]`, senão `body`) é lido a cada `render_stable_interval_ms` (250 ms); a espera termina quando ele fica igual por `render_stable_window_ms` (500 ms) e tem ao menos `render_min_text_chars` caracteres ou não há requisição em andamento, com teto de `render_stable_cap_ms` (5 s; chegar ao teto não é erro). Então capturar `page.content()`. (Antes: `networkidle` com teto de 15 s, que analytics, long polling e chats nunca deixavam acontecer.)
+- No máximo `render_concurrency` (2) renderizações ao mesmo tempo por processo; quem espera vaga gasta o próprio prazo e, sem vaga, recebe `timeout`.
 
 ### 3.5 Markdown e texto servidos pelo site
 
@@ -213,11 +214,12 @@ class Document(BaseModel):
 - Embeddings: o `EmbeddingProvider` tem `embed(textos)` para documentos e `embed_query(texto)` para a consulta. Em modelos simétricos (OpenAI, fake) `embed_query(t) = embed([t])[0]`; modelos assimétricos (Qwen3-Embedding) põem uma instrução só na consulta (`embeddings_query_prefix`). Quem chama usa `app/providers/embeddings/base.embed_query`, que cai em `embed([t])[0]` para um provedor sem o método.
 - Provedores locais (M10b): com `embeddings_base_url` / `reranker_base_url`, o produto usa um servidor local compatível com OpenAI (`/v1/embeddings`) ou com a Jina (`/v1/rerank`), como o llama.cpp server. A URL vem só da configuração e precisa ser um IP literal de loopback (`127.0.0.0/8`, `::1`); o cliente não segue redirecionamentos nem usa proxy (DECISIONS 2026-10-29). Embeddings locais exigem `embedding_dim` igual à dimensão da coluna (hoje 1536) até a migração planejada no DECISIONS.
 - Chunks pertencem a uma `version_id`. Uma versão nova de um documento gera chunks novos; os antigos ficam até a limpeza.
+- **Revalidação condicional do `resolve`:** vencido o TTL, se a versão atual tem `ETag` ou `Last-Modified` gravados, o `resolve` os reenvia como `If-None-Match` / `If-Modified-Since` (o cliente auditado aceita só esses dois validadores, além do `Accept`, e só valores ASCII imprimíveis e curtos). Um `304` atualiza `fetched_at` e serve a versão guardada, a mesma resposta que o GET completo dava para bytes iguais (dedup por `content_hash`), sem baixar nem hashear o corpo. O `304` só vale para a URL de onde vieram os validadores: se a cadeia de redirecionamentos agora termina em outra URL final, a página é buscada de novo sem eles. `force_refresh` sempre faz GET completo. Qualquer outro status segue o caminho do GET completo.
 - **Cache do `resolve` e versão do extrator:** a versão atual de uma URL só é servida do armazenamento (cache válido, `304`, ou mesmo `content_hash` depois do TTL) se o `extractor_version` gravado nela for o `EXTRACTOR_VERSION` atual; `NULL` (linhas anteriores à migração 0006) nunca é. Senão o `resolve` reextrai os bytes brutos: no cache válido e no `304`, os bytes GUARDADOS, sem buscar a página de novo (`stats.cache_hit` continua `true` no cache válido); com o mesmo hash depois do TTL, o corpo recém-buscado. A reextração grava uma versão nova (id novo, IR e blobs novos, `fetched_at` do snapshot) e a torna atual; a versão antiga (linha, blobs e chunks) fica intacta e acessível por `GET /v1/documents/{id}?version_id=`. O `assemble` indexa a versão atual, então os chunks são refeitos na próxima chamada. A reextração usa o `Content-Type` e o `Link` gravados com a versão (para charset e Markdown alternativo); linhas antigas sem eles caem na detecção de charset pelo corpo. O DOM renderizado não é guardado, só o corpo HTTP: uma versão que precisou de navegador (`render_mode: "browser"`) é renderizada de novo, depois da checagem de robots e cobrando a cota de renderização. Se os bytes voltam a um conteúdo já visto (A → B → A), a versão existente volta a ser a atual em vez de duplicar.
 
 ## 6. Recuperação e seleção (`assemble`)
 
-1. Resolver as URLs (cache válido por padrão de 24 h) e garantir que as versões atuais estejam indexadas.
+1. Resolver as URLs (cache válido por padrão de 24 h) e garantir que as versões atuais estejam indexadas. As resoluções correm em paralelo (`assemble_fetch_concurrency`, 6; no máximo `assemble_per_host_concurrency`, 2, por host); URLs que podem ser o mesmo documento correm uma depois da outra, na ordem do pedido, e a indexação segue a ordem do pedido. A saída é a mesma da resolução uma a uma.
 2. Recuperar os 50 melhores por busca lexical e os 50 melhores por busca vetorial, restritos às versões atuais das URLs pedidas.
 3. Fundir com RRF: `score(d) = Σ 1 / (k + rank_j(d))`, com `k = 60`. Com `page_prior = "rrf"` (desligado por padrão, §5), cada candidato soma ainda `page_prior_weight / (k + posição da sua página)`.
 4. Rerank dos 30 melhores pelo provedor de reranking. Normalize os scores para [0, 1].
@@ -238,6 +240,7 @@ sources(id pk, url_normalized unique, domain, current_version_id null, created_a
 document_versions(id pk, source_id fk, content_hash, fetched_at, etag, last_modified,
                   render_mode, raw_blob_key, ir_blob_key, status, warnings jsonb,
                   extractor_version null, content_type_header null, link_header null,
+                  tokens_raw_html int null,
                   unique(source_id, content_hash, extractor_version))
 chunks(id pk, version_id fk, block_ids text[], heading_path text[], text, md,
        tokens int, tsv tsvector generated, embedding vector(DIM), embedding_model text null, ord int)
@@ -245,7 +248,7 @@ api_keys(id pk, key_hash unique, name, created_at, revoked_at null, limits jsonb
 usage_events(id pk, api_key_id fk, endpoint, ts, status_code, latency_ms, units jsonb)
 ```
 
-O HTML ou PDF bruto e a IR completa ficam no armazenamento S3 (SeaweedFS no dev local, AWS S3 em produção — ver DECISIONS.md 2026-10-11). O Postgres guarda metadados, chunks e índices. Chaves de API são armazenadas apenas como hash (sha256) e mostradas uma única vez na criação.
+O HTML ou PDF bruto e a IR completa ficam no armazenamento S3 (SeaweedFS no dev local, AWS S3 em produção — ver DECISIONS.md 2026-10-11). O Postgres guarda metadados, chunks e índices. `tokens_raw_html` guarda, desde a migração 0007, o `stats.tokens_raw_html` que toda resposta servida da versão armazenada devolve (tokens `cl100k_base` dos bytes brutos decodificados como UTF-8), calculado uma vez na criação da versão; linhas antigas (`NULL`) contam a partir do blob bruto, com o mesmo resultado. Chaves de API são armazenadas apenas como hash (sha256) e mostradas uma única vez na criação.
 
 ## 8. Contratos de API
 

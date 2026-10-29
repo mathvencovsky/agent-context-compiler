@@ -83,12 +83,26 @@ class Settings(BaseSettings):
     # Render decision (SPEC 3.3).
     render_min_text_chars: int = 500
 
-    # Browser render wait cap (SPEC 3.4 — domcontentloaded + networkidle, 15s).
-    render_networkidle_timeout_ms: int = 15000
+    # Browser render wait (SPEC 3.4, M10b): after domcontentloaded, sample the
+    # main text every interval; stop once it is unchanged for the window and
+    # is long enough (render_min_text_chars) or nothing is in flight; the cap
+    # bounds the wait (it replaced networkidle and its 15 s cap).
+    render_stable_interval_ms: int = 250
+    render_stable_window_ms: int = 500
+    render_stable_cap_ms: int = 5000
     # Wall-clock deadline of a whole browser render (audit M2, 2026-10-28):
-    # goto (30 s) + networkidle (15 s) + serialization fit inside it, so it only
-    # cuts a render that would otherwise hang (a JS busy loop); Timeout (504).
+    # goto (30 s) + the stable-text wait (5 s) + serialization fit inside it,
+    # so it only cuts a render that would otherwise hang (a JS busy loop).
     render_total_timeout_s: int = 60
+    # Browser renders running at once in this process (M10b efficiency): each
+    # is a Chromium; a render waiting for a slot spends its own deadline.
+    render_concurrency: int = 2
+
+    # assemble resolves its URLs concurrently (M10b efficiency): at most this
+    # many at once, and at most assemble_per_host_concurrency on one host. The
+    # output is the same as resolving them one by one, in request order.
+    assemble_fetch_concurrency: int = 6
+    assemble_per_host_concurrency: int = 2
 
     # Embeddings (M6, SPEC §5). text-embedding-3-small produces 1536-dim vectors
     # (human decision, DECISIONS.md 2026-10-12). embeddings_api_key is the
