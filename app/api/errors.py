@@ -119,7 +119,8 @@ def _error_response(
     """
     error: dict[str, object] = {"code": code, "message": message, "details": details}
     merged = dict(headers or {})
-    request_id = request_id_of(request.state)
+    # getattr: a handler must never fail itself (unit tests call it bare).
+    request_id = request_id_of(getattr(request, "state", None))
     if request_id is not None:
         error["request_id"] = request_id
         merged[REQUEST_ID_HEADER] = request_id
