@@ -1036,6 +1036,17 @@ CANDIDATE:
 
 ---
 
+### Amendment 21 — 2026-10-29: tracking parameters leave the normalized URL
+
+- **What changed in `app/`** (freeze still open): the guard removes a closed
+  list of tracking query parameters (`utm_*`, `gclid`, `dclid`, `fbclid`,
+  `msclkid`, `yclid`, `mc_cid`, `mc_eid`, `_ga`, `_gl`, `authuser`) from the
+  normalized URL, so one page keeps one `document_id` (DECISIONS 2026-10-29).
+- **Effect on M10:** none on URLs without those parameters, which is every
+  cited URL in `bench/tasks/external.yaml` at the time of writing (checked).
+  An agent-supplied URL with a tracking parameter now maps to the same
+  document as the clean URL, in every arm that uses NINA.
+
 ## Appendix A. Evidence behind the parameters
 
 - **Noise floor.** `naive_rag` got byte-identical context in runs

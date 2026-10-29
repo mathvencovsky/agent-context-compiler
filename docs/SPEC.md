@@ -76,7 +76,7 @@ migrations/
 
 - Esquemas permitidos: `http` e `https`.
 - Portas permitidas: 80 e 443 (configurável).
-- Normalização da URL: minúsculas no host, remoção do fragmento, IDNA.
+- Normalização da URL: minúsculas no host, remoção do fragmento, IDNA, remoção dos parâmetros de rastreamento da query (`utm_*`, `gclid`, `dclid`, `fbclid`, `msclkid`, `yclid`, `mc_cid`, `mc_eid`, `_ga`, `_gl`, `authuser`, sem diferenciar maiúsculas; o resto da query fica byte a byte e na ordem; `hl`/`lang` ficam porque mudam o idioma). Assim a mesma página tem um só `document_id` (DECISIONS 2026-10-29, URL de rastreamento).
 - Rejeitar hosts que sejam IPs literais em notações alternativas (decimal, octal, hexadecimal).
 - Resolver **todos** os registros A e AAAA. Rejeitar se **qualquer** IP não for global (`ipaddress.ip_address(x).is_global` falso), incluindo IPv6 mapeado para IPv4, loopback, link-local, faixas privadas, `169.254.169.254`, `168.63.129.16` (Azure), `fec0::/10` (site-local IPv6 obsoleto) e `100.64.0.0/10`. A mensagem de recusa não repete o IP resolvido.
 - **Conectar no IP validado**, e não resolver de novo. Com httpx, faça a requisição para o IP, com header `Host` original e a extensão `sni_hostname` para HTTPS. Isso fecha a janela de DNS rebinding. Se não for viável, pare e registre a alternativa em DECISIONS.md.

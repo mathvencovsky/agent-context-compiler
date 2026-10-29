@@ -22,7 +22,7 @@ import re
 import socket
 from dataclasses import dataclass
 from typing import Protocol
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from app.config import Settings, get_settings
 from app.fetch.errors import BlockedDestination, FetchFailed, InvalidURL
@@ -30,6 +30,16 @@ from app.fetch.errors import BlockedDestination, FetchFailed, InvalidURL
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 _DEFAULT_PORTS = {"http": 80, "https": 443}
+
+#: Query parameters that only track the visitor and never change the page:
+#: removed from the normalized URL so one page keeps one document id
+#: (research round 5, "Do Not Crawl in the DUST"). ``hl``/``lang`` stay: they
+#: change the language. Names compare case-insensitively.
+_TRACKING_PARAMS = frozenset(
+    {"gclid", "dclid", "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid", "_ga", "_gl"}
+    | {"authuser"}
+)
+_TRACKING_PREFIXES = ("utm_",)
 
 # NAT64 well-known prefix (RFC 6052): the last 32 bits embed an IPv4 address.
 _NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
@@ -326,7 +336,13 @@ def validate_url(
         validated_ip = ips[0]
 
     normalized_url = urlunsplit(
-        (scheme, _rebuild_netloc(hostname, explicit_port), parts.path, parts.query, "")
+        (
+            scheme,
+            _rebuild_netloc(hostname, explicit_port),
+            parts.path,
+            strip_tracking_params(parts.query),
+            "",
+        )
     )
     return GuardResult(
         normalized_url=normalized_url,
@@ -334,6 +350,19 @@ def validate_url(
         validated_ip=validated_ip,
         port=port,
     )
+
+
+def strip_tracking_params(query: str) -> str:
+    """``query`` without tracking parameters, the rest byte for byte and in order."""
+    if not query:
+        return query
+    kept = []
+    for part in query.split("&"):
+        name = unquote(part.split("=", 1)[0]).lower()
+        if name in _TRACKING_PARAMS or name.startswith(_TRACKING_PREFIXES):
+            continue
+        kept.append(part)
+    return "&".join(kept)
 
 
 def _is_ascii(value: str) -> bool:
