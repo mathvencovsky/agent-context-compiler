@@ -171,3 +171,80 @@ by humans; `main_content` is plain text, so code and table checks rely on
   tables and all 64 PDF facts unchanged; automatic gates pass. Phase P
   changes start from that tree, so this small loss belongs to Phase S (the
   invisible-text removal), not to Phase P. Test not looked at.
+- 2026-10-29: Phase P change H6 (code language + line-number gutters,
+  branch `claude/m10b-html`). Targets: code. Language from the `<pre>`, its
+  `<code>` children and up to 3 ancestors wrapping no other `<pre>`
+  (`language-`, `lang-`, `highlight-source-`, `mw-highlight-lang-`, Sphinx
+  `highlight-<lang>`, `brush: <lang>`, `data-lang`/`data-language`); Sphinx
+  `default`/`none` name no language; token spans and `hljs-*` never read.
+  Gutters stripped by class (`linenos`, `lineno`, `gutter`, `hljs-ln-*`,
+  `data-line-number`, ...) or as a classless run of 1, 2, 3... line-start
+  numbers glued to code covering >= 80% of lines. Dev: ΔF1 +0.0002
+  [+0.0000, +0.0005], Δrecall −0.0001, ΔP +0.0003, leak −0.0002, glued
+  251 → 251, code in text 93.5% → 93.5%, code as block 91.9% → 91.9%,
+  table cells unchanged, language rate 14.9% → 43.8%, token-class language
+  0 → 0, line-number leak 20 → 0, code duplicated in text 180 → 154 (Twilio's
+  gutter digits no longer differ from the container copy); gates PASS, H6
+  target met. Test (single look): ΔF1 +0.0000, Δrecall −0.0001, glued
+  119 → 119, code/table recall unchanged, language rate 21.6% → 54.1%,
+  line-number leak 1 → 0, PDF facts 15/64 unchanged; gates PASS. Accepted.
+- 2026-10-29: Phase P change "container text" (code/tables/lists copied into
+  list-item, admonition, blockquote and definition-list text). Targets:
+  boundaries (duplication part of H4). Containers now leave out the nested
+  blocks they emit on their own (`pre`, `table`, `ul`/`ol`/`dl` in dd,
+  admonitions and quotes; `pre`/`table`/`dl` in list items, now also from
+  sub-list items, which were not emitted before); a quote holding only such
+  blocks emits no empty quote. Dev, cumulative vs baseline: ΔF1 +0.0103
+  [+0.0036, +0.0189], Δrecall −0.0016 (pages whose ground truth repeats the
+  text, e.g. kernel DCO, Twilio gutter digits), ΔP +0.0187, leak −0.0010,
+  glued 251 → 247, code/table recall unchanged, code blocks 987 → 992,
+  code duplicated in text 154 → 4 (baseline 180); gates PASS, H4
+  duplication target met. Test (single look, HTML only; PDF untouched by an
+  HTML-only change): ΔF1 +0.0083 [+0.0042, +0.0131], Δrecall −0.0015, ΔP
+  +0.0172, glued 119 → 94, code duplicated 85 → 1, code/table recall
+  unchanged; gates PASS. Accepted.
+- 2026-10-29: Phase P change "block boundaries" (H4 glued words), first
+  design: a space where any block-level element starts or ends, in container
+  text, `_block_text` (paragraph, heading, table text) and table cells. Dev,
+  cumulative vs baseline: ΔF1 +0.0176 [+0.0075, +0.0302], Δrecall +0.0081,
+  ΔP +0.0232, leak −0.0057, glued 251 → 2, code and table-cell recall
+  unchanged; gates PASS. Test (first look): ΔF1 +0.0096, Δrecall +0.0009,
+  glued 119 → 34, but table-cell recall 79.5% → 77.0%: **H7 FAIL**. Not
+  accepted. The test pages were not opened to diagnose it.
+- 2026-10-29 (written before the second test look of this change, rule C1):
+  redesign on dev. Table-cell recall depends only on the cell strings
+  (`_cell_text`), so the redesign keeps cell strings exactly as in the
+  baseline (raw `text_content`) and keeps the separators everywhere else
+  (container text, paragraph/heading text, the table block's `text`). No
+  rule is derived from test pages; by construction table-cell recall must
+  equal the baseline. Dev after redesign: identical to the first design
+  (ΔF1 +0.0176, glued 251 → 2, table cells 76.9% → 76.9%). The second test
+  look is run once, next, and accepted only under the same C1 criteria.
+- 2026-10-29: "block boundaries" second (and last) test look, after the
+  note above: ΔF1 +0.0096 [+0.0053, +0.0145], Δrecall +0.0009, ΔP +0.0178,
+  leak −0.0008, glued 119 → 34 (94 → 34 for this change, −64%; dev −99%),
+  code recall unchanged, table-cell recall 79.5% → 79.5%; gates PASS.
+  Accepted. Separators inside table cells stay deferred.
+- 2026-10-29: Phase P change H3 (page widgets inside the content, commit
+  `18e0286`). Targets: boilerplate. Removed only in `_clean_subtree` (not in
+  the content-root measure): `<template>`, `lite-youtube`/`lite-vimeo`;
+  class tokens `printfooter`, `mw-pt-languages`, `nocontent`,
+  `language-selection`; class-name words (`feedback`, `footer`,
+  `breadcrumb(s)`, `pagination`, `pager`, `toc`, `banner`, `cookie(s)`,
+  `consent`; plain-`div` ids without `.`/`:` too) on non-heading elements of
+  at most 500 chars, no negation word; exact page-action labels ("On this
+  page", "Copy page", "Edit this page", ...) and two prefixes. Rules derived
+  from dev pages only; the H6 hljs check still reads 0 token-class
+  languages. Dev, cumulative vs baseline: ΔF1 +0.0228 [+0.0119, +0.0364],
+  Δrecall +0.0076, ΔP +0.0333, leak 4.32% → 3.22% (−0.0110, −25.5%
+  relative), without 4.4% → 3.3%, with 70.8% → 70.4%, glued 2, code/table
+  recall unchanged; gates PASS, H3 target met (≤ 3.2% rounded; precision
+  +0.0101 for this change alone, +0.0333 cumulative). For this change alone
+  (vs the previous commit): ΔF1 +0.0052, ΔP +0.0101, Δrecall −0.0005, leak
+  3.75% → 3.22% (−14% relative); the relative target is met only against
+  the baseline, as its "4.3% → ≤ 3.2%" wording states. Test (single look):
+  cumulative ΔF1 +0.0155 [+0.0092, +0.0238], Δrecall −0.0002, ΔP +0.0287,
+  leak −0.0080, without −0.0448, glued 34, code/table recall unchanged; for
+  this change alone ΔF1 +0.0059, ΔP +0.0109, Δrecall −0.0011, leak −0.0072
+  (dev −0.0053); gates PASS, both targeted metrics beyond half their dev
+  effect. Accepted.
