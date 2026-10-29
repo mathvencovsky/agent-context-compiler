@@ -17,13 +17,16 @@ Every dependency the integration tests need to override is exposed as a FastAPI
 :class:`RobotsChecker`, the guard ``resolver``, the httpx ``transport`` and the
 ``now`` clock. Tests swap them via ``app.dependency_overrides``.
 
-Conditional requests (adaptation, DECISIONS.md 2026-10-11): the audited M1 client
-does not carry caller-supplied request headers, so resolve does NOT send
-``If-None-Match``/``If-Modified-Since`` (that would mean altering the reviewed
-client). Instead it does a full GET and dedups by ``content_hash``: an unchanged
-body creates no new version. A ``304 Not Modified`` returned by the transport is
-still handled (fetched_at touched, no new version) so a conditional-aware front
-cache or test transport behaves correctly.
+Conditional revalidation (DECISIONS.md 2026-10-29, superseding the 2026-10-11
+adaptation): once the current version is past its TTL, resolve sends its stored
+``ETag`` / ``Last-Modified`` back as ``If-None-Match`` / ``If-Modified-Since``
+(the client accepts exactly these two validators). A ``304 Not Modified``
+touches ``fetched_at`` and serves the stored version, exactly what the full GET
+did for unchanged bytes (same-hash dedup), without downloading or hashing the
+body. A 304 is trusted only for the URL the validators came from: when the
+redirect chain now ends elsewhere, the page is fetched again without them.
+``force_refresh`` always does a full GET. Anything other than a 304 follows the
+full-GET path, including the ``content_hash`` dedup.
 
 Extractor upgrades (DECISIONS.md 2026-10-29): a version is one (raw bytes,
 extractor version). When the stored current version was built by another
@@ -557,15 +560,36 @@ def resolve_document(
         # (4) robots gate before any network fetch.
         robots.is_allowed(normalized_url)
 
-        # (5) full GET through the audited client (no conditional headers — see
-        # module docstring / DECISIONS.md).
-        result = default_fetch(
-            normalized_url,
-            resolver=resolver,
-            transport=transport,
-            settings=settings,
-            accept=_ACCEPT_MARKDOWN_FIRST if settings.fetch_accept_markdown else None,
+        # (5) GET through the audited client, conditional when a stored
+        # version has validators (module docstring / DECISIONS.md).
+        def fetch_page(validators: DocumentVersion | None) -> FetchResult:
+            return default_fetch(
+                normalized_url,
+                resolver=resolver,
+                transport=transport,
+                settings=settings,
+                accept=(
+                    _ACCEPT_MARKDOWN_FIRST if settings.fetch_accept_markdown else None
+                ),
+                if_none_match=validators.etag if validators else None,
+                if_modified_since=validators.last_modified if validators else None,
+            )
+
+        revalidating = (
+            current
+            if current is not None
+            and not req.force_refresh
+            and (current.etag or current.last_modified)
+            else None
         )
+        result = fetch_page(revalidating)
+        stored_doc: Document | None = None
+        if result.status == 304 and revalidating is not None:
+            stored_doc = blobs.get_ir(revalidating.id)
+            if stored_doc.source.final_url != result.final_url:
+                # The validators belong to another URL than the one that
+                # answered 304 (the redirect chain changed): do not trust it.
+                result = fetch_page(None)
 
         # (6) 304 Not Modified: refresh fetched_at only, no new version.
         if result.status == 304 and current is not None:
@@ -577,7 +601,7 @@ def resolve_document(
                 )
                 session.commit()
                 return response
-            doc = blobs.get_ir(current.id)
+            doc = stored_doc if stored_doc is not None else blobs.get_ir(current.id)
             response = _build_response(
                 doc,
                 formats=req.formats,

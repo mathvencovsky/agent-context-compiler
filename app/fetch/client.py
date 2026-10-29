@@ -48,6 +48,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from http.cookiejar import CookieJar, DefaultCookiePolicy
+from typing import TypeGuard
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
@@ -362,6 +363,24 @@ def _read_capped_body(
     return bytes(buffer)
 
 
+#: Longest validator (ETag / Last-Modified value) the client will send back.
+_MAX_VALIDATOR_CHARS = 1024
+
+
+def _is_safe_validator(value: str | None) -> TypeGuard[str]:
+    """True when a stored validator may be sent as a request header value.
+
+    Printable ASCII only (no CR/LF or other control characters, no
+    non-ASCII), non-empty and bounded: the value came from an upstream
+    response, so it is checked again before it goes back out.
+    """
+    return (
+        value is not None
+        and 0 < len(value) <= _MAX_VALIDATOR_CHARS
+        and all(" " <= ch <= "~" for ch in value)
+    )
+
+
 def fetch(
     url: str,
     *,
@@ -370,6 +389,8 @@ def fetch(
     settings: Settings | None = None,
     method: str = "GET",
     accept: str | None = None,
+    if_none_match: str | None = None,
+    if_modified_since: str | None = None,
 ) -> FetchResult:
     """Fetch ``url`` safely and return a :class:`FetchResult`.
 
@@ -378,6 +399,12 @@ def fetch(
     raises ``BlockedDestination``. Body size, connect and total timeouts are
     enforced per SPEC §3.1. ``accept`` (None by default: no ``Accept`` header)
     is sent as the ``Accept`` header on every hop (SPEC §3.5 opt-in).
+
+    ``if_none_match`` / ``if_modified_since`` are the stored validators of a
+    cached version (SPEC §5 conditional revalidation): the only request
+    headers a caller can add besides ``Accept``, sent on every hop, and only
+    when they are plain printable ASCII of bounded length (a stored value that
+    is not is dropped, never sent). A ``304`` comes back as a normal result.
     """
     settings = settings or get_settings()
     resolver = resolver or SocketResolver()
@@ -419,6 +446,10 @@ def fetch(
             }
             if accept is not None:
                 headers["Accept"] = accept
+            if _is_safe_validator(if_none_match):
+                headers["If-None-Match"] = if_none_match
+            if _is_safe_validator(if_modified_since):
+                headers["If-Modified-Since"] = if_modified_since
             with client_for(guard.hostname) as client:
                 request = client.build_request(
                     method,
