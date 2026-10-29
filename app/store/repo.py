@@ -10,6 +10,7 @@ content hash AND extractor version (the version id encodes both).
 
 from __future__ import annotations
 
+import functools
 from datetime import datetime
 from urllib.parse import urlsplit
 
@@ -24,6 +25,23 @@ from app.store.models import DocumentVersion, Source
 def make_engine(settings: Settings) -> Engine:
     """Create a synchronous SQLAlchemy engine from the settings DSN."""
     return create_engine(settings.database_url)
+
+
+@functools.lru_cache(maxsize=4)
+def _shared_engine(database_url: str) -> Engine:
+    return create_engine(database_url, pool_pre_ping=True)
+
+
+def shared_engine(settings: Settings) -> Engine:
+    """The process-wide engine for ``settings.database_url`` (M10b efficiency).
+
+    The API dependency seams used to build a new :class:`Engine` per request,
+    so the connection pool was never reused (a new Postgres connection per
+    request, released only when the engine was garbage-collected). One engine
+    per DSN per process keeps one pool; ``pool_pre_ping`` drops connections a
+    database restart killed instead of failing the next request with them.
+    """
+    return _shared_engine(settings.database_url)
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

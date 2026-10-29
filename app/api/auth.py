@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.errors import Unauthorized
 from app.config import Settings, get_settings
 from app.store.models import ApiKey
-from app.store.repo import make_engine, make_session_factory
+from app.store.repo import make_session_factory, shared_engine
 from app.usage.keys import ApiKeyRepo, hash_api_key
 
 #: Name of the request.state attribute carrying the authenticated key.
@@ -54,7 +54,7 @@ def provide_settings() -> Settings:
 
 def provide_auth_session_factory() -> sessionmaker[Session]:
     """Build a session factory bound to the configured database (overridable)."""
-    return make_session_factory(make_engine(get_settings()))
+    return make_session_factory(shared_engine(get_settings()))
 
 
 AuthSettingsDep = Annotated[Settings, Depends(provide_settings)]

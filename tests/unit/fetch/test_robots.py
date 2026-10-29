@@ -138,3 +138,105 @@ def test_distinct_origins_cached_separately() -> None:
         "http://a.example.com/robots.txt",
         "http://b.example.com/robots.txt",
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Process-wide cache (M10b efficiency): shared across requests, bounded,
+# thread-safe, one fetch per origin under concurrency.
+# --------------------------------------------------------------------------- #
+def test_api_checker_is_one_per_process() -> None:
+    """The API seam returns the same checker every time, so its TTL cache
+    survives across requests (it used to be rebuilt per request)."""
+    from app.api.documents import provide_robots_checker
+
+    assert provide_robots_checker() is provide_robots_checker()
+
+
+def test_cache_survives_across_requests_through_api_seam(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two 'requests' (two seam calls) on one origin fetch robots.txt once."""
+    from app.api import documents
+
+    stub = FetchStub(body=_ROBOTS_ALLOW)
+    documents.provide_robots_checker.cache_clear()
+    monkeypatch.setattr(
+        documents,
+        "RobotsChecker",
+        lambda: RobotsChecker(fetch_fn=stub, time_fn=FakeClock(), settings=SETTINGS),
+    )
+    try:
+        documents.provide_robots_checker().is_allowed("https://docs.example.com/a")
+        documents.provide_robots_checker().is_allowed("https://docs.example.com/b")
+    finally:
+        documents.provide_robots_checker.cache_clear()
+    assert stub.calls == ["https://docs.example.com/robots.txt"]
+
+
+def test_cache_is_bounded_lru() -> None:
+    """Past ``max_entries`` origins the least recently used one is evicted."""
+    stub = FetchStub(body=_ROBOTS_ALLOW)
+    checker = RobotsChecker(
+        fetch_fn=stub, time_fn=FakeClock(), settings=SETTINGS, max_entries=2
+    )
+    checker.is_allowed("https://a.example/x")
+    checker.is_allowed("https://b.example/x")
+    checker.is_allowed("https://a.example/y")  # a is now most recent
+    checker.is_allowed("https://c.example/x")  # evicts b
+    assert len(stub.calls) == 3
+    checker.is_allowed("https://a.example/z")  # still cached
+    assert len(stub.calls) == 3
+    checker.is_allowed("https://b.example/z")  # was evicted: refetched
+    assert stub.calls[-1] == "https://b.example/robots.txt"
+    assert len(stub.calls) == 4
+
+
+def test_max_entries_must_be_positive() -> None:
+    with pytest.raises(ValueError):
+        RobotsChecker(fetch_fn=FetchStub(), settings=SETTINGS, max_entries=0)
+
+
+def test_failure_is_not_cached_and_is_retried() -> None:
+    """Fail closed stays: an unavailable robots.txt is never cached as allow."""
+    stub = FetchStub(status=503)
+    checker = _checker(stub)
+    for _ in range(2):
+        with pytest.raises(RobotsUnavailable):
+            checker.is_allowed("https://docs.example.com/a")
+    assert len(stub.calls) == 2
+
+
+def test_concurrent_misses_fetch_once() -> None:
+    """Threads that miss the same origin together share one robots fetch."""
+    import threading
+    import time
+
+    calls: list[str] = []
+    calls_lock = threading.Lock()
+
+    def slow_fetch(url: str) -> FetchResult:
+        with calls_lock:
+            calls.append(url)
+        time.sleep(0.05)
+        return FetchStub(body=_ROBOTS_DISALLOW_ALL)(url)
+
+    checker = RobotsChecker(fetch_fn=slow_fetch, time_fn=FakeClock(), settings=SETTINGS)
+    outcomes: list[str] = []
+    out_lock = threading.Lock()
+
+    def worker(i: int) -> None:
+        try:
+            checker.is_allowed(f"https://docs.example.com/p{i}")
+            result = "allowed"
+        except RobotsDisallowed:
+            result = "disallowed"
+        with out_lock:
+            outcomes.append(result)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert calls == ["https://docs.example.com/robots.txt"]
+    assert outcomes == ["disallowed"] * 8

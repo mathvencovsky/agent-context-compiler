@@ -47,7 +47,7 @@ from app.api.schemas import UsageByDay, UsageByEndpoint, UsageResponse
 from app.config import Settings, get_settings
 from app.logging import logger
 from app.store.models import ApiKey
-from app.store.repo import make_engine, make_session_factory
+from app.store.repo import make_session_factory, shared_engine
 from app.usage.events import UsageBucket, UsageEventRepo
 from app.usage.limits import RateLimited as LimitRateLimited
 from app.usage.limits import TokenBucketLimiter
@@ -90,7 +90,7 @@ def provide_usage_settings() -> Settings:
 
 def provide_usage_session_factory() -> sessionmaker[Session]:
     """Build a session factory bound to the configured database (overridable)."""
-    return make_session_factory(make_engine(get_settings()))
+    return make_session_factory(shared_engine(get_settings()))
 
 
 LimiterDep = Annotated[TokenBucketLimiter, Depends(provide_limiter)]
@@ -328,7 +328,7 @@ class UsageMiddleware:
     def _resolve_factory(self) -> Callable[[], Session]:
         if self._session_factory is not None:
             return self._session_factory()
-        return make_session_factory(make_engine(get_settings()))
+        return make_session_factory(shared_engine(get_settings()))
 
 
 __all__ = [

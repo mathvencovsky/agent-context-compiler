@@ -8,6 +8,7 @@ timeouts used by the ``/health`` blob probe (``app/main.py::_check_blobs``).
 
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING
 
 import boto3
@@ -76,3 +77,13 @@ class BlobStore:
             Bucket=self._bucket, Key=self.ir_key(version_id)
         )
         return Document.model_validate_json(response["Body"].read())
+
+
+@functools.cache
+def shared_blob_store() -> BlobStore:
+    """The process-wide :class:`BlobStore` for the process settings (M10b).
+
+    A boto3 client costs ~6-9 ms to build and is thread-safe once built, so the
+    API builds one per process instead of one per request.
+    """
+    return BlobStore()

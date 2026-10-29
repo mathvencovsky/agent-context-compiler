@@ -40,6 +40,7 @@ quota like any render.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -94,13 +95,13 @@ from app.fetch.render import RENDERED_WITH_BROWSER_WARNING_CODE, render_url
 from app.fetch.robots import RobotsChecker
 from app.fetch.url_secrets import reject_secret_url
 from app.index.tokens import count_tokens
-from app.store.blobs import BlobStore
+from app.store.blobs import BlobStore, shared_blob_store
 from app.store.models import DocumentVersion, Source
 from app.store.repo import (
     DocumentRepo,
     domain_from_url,
-    make_engine,
     make_session_factory,
+    shared_engine,
 )
 
 # Bearer auth gates every /v1 route (no-op in dev; enforced otherwise — SPEC §8).
@@ -130,17 +131,23 @@ def provide_settings() -> Settings:
 
 
 def provide_session_factory() -> sessionmaker[Session]:
-    """Build a session factory bound to the configured database."""
-    return make_session_factory(make_engine(get_settings()))
+    """A session factory on the process-wide engine (one connection pool)."""
+    return make_session_factory(shared_engine(get_settings()))
 
 
 def provide_blob_store() -> BlobStore:
-    """Build the S3 blob store (overridable in tests)."""
-    return BlobStore()
+    """The process-wide S3 blob store (overridable in tests)."""
+    return shared_blob_store()
 
 
+@functools.cache
 def provide_robots_checker() -> RobotsChecker:
-    """Build the robots.txt gate (overridable in tests)."""
+    """The process-wide robots.txt gate (overridable in tests).
+
+    One instance per process, so its per-origin TTL cache (SPEC §3.2, 24 h)
+    survives across requests; a checker per request threw it away and
+    refetched robots.txt on every cache miss (research round 4, K L2).
+    """
     return RobotsChecker()
 
 
