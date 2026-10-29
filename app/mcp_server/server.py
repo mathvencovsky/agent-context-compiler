@@ -18,6 +18,7 @@ client.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
@@ -27,6 +28,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from app.logging import REQUEST_ID_HEADER
 from app.mcp_server.client import NinaApiClient
 
 __all__ = ["build_server", "INSTRUCTIONS", "READ_ONLY", "UNTRUSTED_NOTICE"]
@@ -40,6 +42,9 @@ __all__ = ["build_server", "INSTRUCTIONS", "READ_ONLY", "UNTRUSTED_NOTICE"]
 #: ``destructiveHint`` and ``idempotentHint`` are left out: the MCP schema says
 #: both are meaningful only when ``readOnlyHint`` is false, and every token here
 #: is sent on every agent turn (the 800-token tool-schema cap; research D6).
+#: The request id the API mints (uuid4 hex); anything else is not echoed.
+_REQUEST_ID_RE = re.compile(r"[0-9a-f]{32}")
+
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=True)
 
 #: Each tool's ``_meta["anthropic/searchHint"]`` is a short phrase Claude Code's
@@ -82,6 +87,9 @@ def _api_call[T](call: Callable[[], T]) -> T:
             reason += f": {error['code']}: {error['message']}"
         except (ValueError, KeyError, TypeError):
             pass
+        request_id = exc.response.headers.get(REQUEST_ID_HEADER, "")
+        if _REQUEST_ID_RE.fullmatch(request_id):
+            reason += f" (request_id: {request_id})"
         raise ToolError(reason) from exc
     except httpx.RequestError as exc:
         raise ToolError(f"NINA API unreachable: {type(exc).__name__}") from exc

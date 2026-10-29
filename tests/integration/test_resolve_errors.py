@@ -3,10 +3,13 @@
 Each case drives the resolve path to a specific typed error through the
 injected transport / resolver / robots stub (HTTP is never real) and asserts
 BOTH the exact HTTP status AND the SPEC §8 envelope shape
-``{"error": {"code", "message", "details"}}``.
+``{"error": {"code", "message", "details", "request_id"}}``, the request id
+being the same as the ``X-Request-ID`` response header.
 """
 
 from __future__ import annotations
+
+import re
 
 import httpx
 import pytest
@@ -29,7 +32,9 @@ def _assert_error_envelope(response: httpx.Response, code: str, status: int) -> 
     payload = response.json()
     assert set(payload) == {"error"}
     error = payload["error"]
-    assert set(error) == {"code", "message", "details"}
+    assert set(error) == {"code", "message", "details", "request_id"}
+    assert error["request_id"] == response.headers["X-Request-ID"]
+    assert re.fullmatch(r"[0-9a-f]{32}", error["request_id"])
     assert error["code"] == code
     assert isinstance(error["message"], str) and error["message"]
     assert isinstance(error["details"], dict)

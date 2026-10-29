@@ -21,6 +21,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.fetch.errors import FetchError
+from app.logging import REQUEST_ID_HEADER, request_id_of
 
 
 class NotFound(FetchError):
@@ -100,6 +101,33 @@ class AblationNotAllowed(FetchError):
     http_status = 400
 
 
+def _error_response(
+    request: Request,
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+    details: dict[str, object],
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    """The SPEC §8 envelope, plus the request id when the middleware set one.
+
+    ``error.request_id`` sits next to ``code``/``message``/``details`` (it
+    describes the request, not the failure, so it stays out of ``details``),
+    and the same id goes in the ``X-Request-ID`` header. The generic 500 handler
+    runs outside the request-id middleware, so the header is set here too.
+    """
+    error: dict[str, object] = {"code": code, "message": message, "details": details}
+    merged = dict(headers or {})
+    request_id = request_id_of(request.state)
+    if request_id is not None:
+        error["request_id"] = request_id
+        merged[REQUEST_ID_HEADER] = request_id
+    return JSONResponse(
+        status_code=status_code, content={"error": error}, headers=merged or None
+    )
+
+
 def fetch_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """Serialize a :class:`FetchError` into the SPEC §8 envelope.
 
@@ -114,15 +142,12 @@ def fetch_error_handler(request: Request, exc: Exception) -> JSONResponse:
     if isinstance(retry_after, (int, float)):
         # SPEC §8 / RFC 9110: Retry-After is a non-negative integer of seconds.
         headers = {"Retry-After": str(max(0, ceil(retry_after)))}
-    return JSONResponse(
+    return _error_response(
+        request,
         status_code=exc.http_status,
-        content={
-            "error": {
-                "code": exc.code,
-                "message": exc.message,
-                "details": exc.details,
-            }
-        },
+        code=exc.code,
+        message=exc.message,
+        details=exc.details,
         headers=headers,
     )
 
@@ -133,28 +158,21 @@ def missing_key_handler(request: Request, exc: Exception) -> JSONResponse:
     The message names the environment variable, never a key value; before this a
     first ``assemble`` without keys was an opaque ``500`` (C1, 2026-10-17).
     """
-    return JSONResponse(
+    return _error_response(
+        request,
         status_code=503,
-        content={
-            "error": {
-                "code": "provider_not_configured",
-                "message": f"{exc} For a demo without keys, set PROVIDERS=fake "
-                "(dev only).",
-                "details": {},
-            }
-        },
+        code="provider_not_configured",
+        message=f"{exc} For a demo without keys, set PROVIDERS=fake (dev only).",
+        details={},
     )
 
 
 def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Serialize any uncaught exception into a generic ``500`` (no leak)."""
-    return JSONResponse(
+    return _error_response(
+        request,
         status_code=500,
-        content={
-            "error": {
-                "code": "internal_error",
-                "message": "internal server error",
-                "details": {},
-            }
-        },
+        code="internal_error",
+        message="internal server error",
+        details={},
     )
