@@ -983,6 +983,57 @@ CANDIDATE:
 - **Data seen:** none from any arm. No agent session, screen, pilot or
   main-run session had run.
 
+### Amendment 20 — 2026-10-29: research round 4 — efficiency, default-off retrieval experiments, agent features, and a declared limitation
+
+- **What changed in `app/` and `migrations/`** (freeze still open):
+  1. **Efficiency, same output.** `assemble` resolves URLs concurrently (6
+     workers, 2 per host, indexing kept in request order so chunk ids, order and
+     text are byte-identical to the sequential run, which a test checks); the
+     robots.txt cache is shared per process; HTTP clients (one per hostname,
+     never shared across hostnames), the S3 client and the database engine are
+     reused; a cache hit no longer re-counts the raw HTML (migration `0007`
+     stores the count); conditional revalidation sends `If-None-Match` /
+     `If-Modified-Since`. The browser waits for stable text (500 ms without
+     change, cap 5 s) instead of `networkidle`, blocks pings, event streams and
+     a short list of analytics hosts, and runs at most 2 renders per process.
+     A rendered page's DOM may therefore be captured at a different moment than
+     before; no extraction gate changed (`make extract-eval`).
+  2. **Retrieval experiments, all off by default:** BM25F lexical scoring with
+     identifier tokens, a page prior, and local model providers (llama.cpp or
+     TEI servers on loopback) with `embed_query()`. The defaults reproduce the
+     previous lexical order exactly (tested). Their acceptance rules were
+     written before any measurement (DECISIONS 2026-10-29,
+     `bench/m10b_retrieval.py`) and follow the half A/B rule of Amendment 6.
+  3. **Agent features, opt-in:** `python -m app.cli init` (a short AGENTS.md
+     block between markers), a site index from `llms.txt`
+     (`POST /v1/sites/index`, and `resolve_url(format="index")` in MCP), an
+     optional `version` on `assemble` that only adds a `version_mismatch` hint,
+     and an optional `compact` mode (deterministic sentence pruning; kept text
+     stays a literal substring). Calls without the new fields are byte-identical
+     to before (tested). The `compact` acceptance rule and its metric
+     (`answer_hit`, `recall_per_1k`) were written before measuring
+     (`bench/compact_eval.py`).
+  4. **Tool schemas:** NINA's MCP server lists tools without the parameter
+     titles Pydantic derives from names (schema 782 cl100k tokens, cap 800).
+- **What changed in `bench/`:** the `full_page` and `strong_rag` servers use the
+  same title-free listing (`lean_server`), so every arm's schema has the same
+  shape (tested); the new render and retrieval settings are frozen settings, so
+  a run refuses a `.env` that changes them; `bench/provider_cache.py` is
+  thread-safe for the concurrent `assemble`.
+- **Declared limitation (research front J2):** in Vercel's public agent evals
+  (`vercel/next-evals-oss`), whether the agent consults the documentation at
+  all matters more than how the documentation is delivered: a two-paragraph
+  AGENTS.md pointer took the pass rate from 44.9% to 65.4% in the lead
+  session's own count. M10 has no `local_docs` arm (documentation as files the
+  agent reads itself), and Appendix B tells every documentation arm to read
+  the documentation before answering. M10 therefore measures the quality and
+  cost of documentation context once the agent consults it, not whether a tool
+  gets the agent to consult it. The report states this. A `local_docs` arm
+  would be paid and is decided, if at all, by an amendment before the pilot.
+- **Why:** research round 4 (`docs/PESQUISA_RODADA4.md`).
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
