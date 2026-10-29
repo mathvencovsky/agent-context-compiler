@@ -61,6 +61,10 @@ class OpenAIEmbeddingProvider:
             )
         return key
 
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a query exactly like a document (symmetric model)."""
+        return self.embed([text])[0]
+
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed ``texts`` in one batched API call with retry/backoff."""
         api_key = self._api_key()

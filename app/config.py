@@ -132,6 +132,48 @@ class Settings(BaseSettings):
     # picks and freezes a value here, exactly like selection_lambda/min_value.
     lexical_weight: float = 1.0
 
+    # M10b retrieval experiments (research round 4, fronts H and I). ALL OFF by
+    # default: the defaults reproduce today's ranking byte for byte (DECISIONS
+    # 2026-10-29). They are switched on only after a dev-slice rule accepts
+    # them (bench/m10b_retrieval.py); the M10 harness freezes them.
+    # lexical_scorer: "overlap" (today) or "bm25f" (heading/prose/code fields,
+    # per-request IDF, k1=1.2, b=0.75). lexical_title_weight is the BM25F weight
+    # of the chunk's own heading (ancestors get half); uncalibrated, grid
+    # {1, 3, 5}. lexical_identifiers indexes os.path.join / useState whole and
+    # by parts; lexical_symbol_bonus (0 = off, 5 in the research) multiplies the
+    # term frequency of a query symbol found whole; lexical_coverage multiplies
+    # by 1 + (IDF share of distinct query terms held)².
+    lexical_scorer: Literal["overlap", "bm25f"] = "overlap"
+    lexical_title_weight: float = 3.0
+    lexical_identifiers: bool = False
+    lexical_symbol_bonus: float = 0.0
+    lexical_coverage: bool = False
+    # page_prior scores each page (URL path + headings) against the first
+    # page_prior_query_words words of the query: "rrf" adds a third fused list
+    # (weight page_prior_weight), "multiply" scales the lexical score by
+    # 1 + page_prior_alpha · page_norm. Off by default.
+    page_prior: Literal["off", "rrf", "multiply"] = "off"
+    page_prior_weight: float = 0.5
+    page_prior_alpha: float = 0.5
+    page_prior_query_words: int = 32
+
+    # Local model servers (research I; DECISIONS 2026-10-29). When a base URL is
+    # set, the product uses an OpenAI-compatible /v1/embeddings or a
+    # Jina-compatible /v1/rerank server (llama.cpp server, TEI) at that URL
+    # instead of OpenAI/Jina. Only loopback IP literals are accepted
+    # (http://127.0.0.1:PORT, http://[::1]:PORT): the URL comes from this
+    # configuration, never from a request, and the provider's own client never
+    # follows redirects or proxies. embedding_model / reranker_model name the
+    # local model (put name@revision/backend/quant there so caches never mix
+    # variants). embeddings_query_prefix is prepended to the QUERY only (Qwen3
+    # style "Instruct: ...\nQuery:"); documents are embedded as they are.
+    # reranker_score_transform "sigmoid" maps raw logits to [0, 1] for servers
+    # that return them.
+    embeddings_base_url: str | None = None
+    embeddings_query_prefix: str = ""
+    reranker_base_url: str | None = None
+    reranker_score_transform: Literal["none", "sigmoid"] = "none"
+
     # Rate limit + render quota (M9, SPEC §8 'rate_limited'/'GET /v1/usage').
     # Process-local token bucket per API key: rate_limit_capacity is the burst
     # size (tokens), rate_limit_refill_per_sec the steady refill rate. Each /v1
@@ -163,6 +205,16 @@ class Settings(BaseSettings):
             parts = [p.strip() for p in value.split(",") if p.strip()]
             return tuple(int(p) for p in parts)
         return value
+
+    @field_validator("embeddings_base_url", "reranker_base_url", mode="after")
+    @classmethod
+    def _local_endpoint(cls, value: str | None) -> str | None:
+        """Refuse a local-provider URL that is not a loopback IP literal."""
+        if value is None or not value.strip():
+            return None
+        from app.providers.local_endpoint import validate_local_base_url
+
+        return validate_local_base_url(value)
 
     def user_agent(self) -> str:
         """Effective User-Agent string, SPEC §3.1 form.

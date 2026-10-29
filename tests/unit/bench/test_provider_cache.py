@@ -146,3 +146,35 @@ def test_sqlite_store_serves_both_wrappers_without_loading_json(tmp_path: Path) 
     assert rerank.rerank("q", ["alpha"]) == [5.0] and reranker.calls == 1
     assert len(SqliteStore(tmp_path / "embeddings.sqlite")) == 2
     assert not list(tmp_path.glob("*.json*"))  # nothing written to the JSON cache
+
+
+def test_embed_query_reuses_the_document_key_for_symmetric_models(
+    tmp_path: Path,
+) -> None:
+    """A symmetric delegate's query hits the vector cached by ``embed``.
+
+    The OpenAI cache built before ``embed_query`` existed keeps serving queries,
+    so the M10b scripts stay at zero paid calls.
+    """
+    fake = _FakeEmbedder()
+    cache = CachingEmbeddingProvider(fake, cache_dir=tmp_path)
+    vector = cache.embed(["the question"])[0]
+    assert cache.query_prefix == ""
+    assert cache.embed_query("the question") == vector
+    assert fake.calls == 1
+
+
+def test_embed_query_caches_the_prefixed_text(tmp_path: Path) -> None:
+    """An asymmetric delegate's query is embedded and cached WITH its prefix."""
+
+    class _Prefixed(_FakeEmbedder):
+        query_prefix = "Instruct: x\nQuery:"
+
+    fake = _Prefixed()
+    cache = CachingEmbeddingProvider(fake, store=SqliteStore(tmp_path / "e.sqlite"))
+    cache.embed_query("q")
+    cache.embed_query("q")
+    assert fake.embedded == ["Instruct: x\nQuery:q"]
+    assert fake.calls == 1
+    cache.embed(["q"])  # the bare document text is a different key
+    assert fake.embedded == ["Instruct: x\nQuery:q", "q"]
