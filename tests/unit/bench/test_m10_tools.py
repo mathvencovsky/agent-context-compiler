@@ -321,3 +321,18 @@ def test_the_configured_database_can_never_be_the_benchmark_one() -> None:
     settings = Settings(_env_file=None, postgres_db=NINA_DB)  # type: ignore[call-arg]
     with pytest.raises(SystemExit, match="separate"):
         PostgresNinaDatabase(settings)
+
+
+def test_every_arm_lists_tools_without_parameter_titles(store: CorpusStore) -> None:
+    # NINA's server omits the parameter titles Pydantic derives from names; the
+    # other arms must list their tools the same way so no arm's schema differs
+    # in shape (PREREG Amendment 20).
+    for server in (
+        full_page_server(store),
+        strong_rag_server(store, StrongRagRunner()),
+    ):
+        for tool in asyncio.run(server.list_tools()):
+            schema = tool.input_schema
+            assert "title" not in schema
+            for prop in schema.get("properties", {}).values():
+                assert "title" not in prop

@@ -126,6 +126,16 @@ class _NinaServer(MCPServer[None]):
         ]
 
 
+def lean_server(name: str) -> MCPServer[None]:
+    """An :class:`MCPServer` named ``name`` whose ``tools/list`` omits the
+    auto-generated parameter titles, as NINA's own server does.
+
+    The M10 harness builds the other arms' servers with it, so every arm's tool
+    schema is shaped the same way (``bench/m10_tools.py``).
+    """
+    return _NinaServer(name=name)
+
+
 def build_server(client: NinaApiClient | None = None) -> MCPServer:
     """Build the NINA MCP server with the three SPEC §9 tools registered.
 
