@@ -158,6 +158,10 @@ switch ($Action) {
 
         # Environment of the API process (overrides .env; nothing is written to disk).
         $env:POSTGRES_DB = "nina_dev"
+        # IPv4 loopback: on Windows a refused ::1 attempt ("localhost") costs ~2 s per
+        # connection, which made /health take 7 s.
+        $env:POSTGRES_HOST = "127.0.0.1"
+        $env:S3_ENDPOINT_URL = "http://127.0.0.1:8333"
         $env:PROVIDERS = "real"
         $env:EMBEDDINGS_BASE_URL = $EmbedUrl
         $env:EMBEDDING_MODEL = "Qwen3-Embedding-0.6B-Q8_0@Qwen-GGUF"
