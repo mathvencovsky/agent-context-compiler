@@ -251,6 +251,38 @@ def _block_text(el: HtmlElement) -> str:
     return normalize_text(el.text_content() or "")
 
 
+def _raw_text_without(el: HtmlElement, skip: frozenset[str]) -> str:
+    """Text of ``el`` (not normalized) with ``skip`` subtrees left out.
+
+    A container (list item, admonition, blockquote, definition list) emits its
+    nested code/tables/lists as blocks of their own; copying their text into
+    the container too duplicated every snippet, whitespace-collapsed (M10b
+    Phase P, research front C L3). A skipped subtree leaves a space so its
+    neighbours do not glue; its tail text is kept.
+    """
+    parts: list[str] = []
+
+    def walk(node: HtmlElement) -> None:
+        if node.text:
+            parts.append(node.text)
+        for child in node:
+            if isinstance(child.tag, str):
+                if child.tag in skip:
+                    parts.append(" ")
+                else:
+                    walk(child)
+            if child.tail:
+                parts.append(child.tail)
+
+    walk(el)
+    return "".join(parts)
+
+
+def _container_text(el: HtmlElement, skip: frozenset[str]) -> str:
+    """Normalized text of a container, nested ``skip`` blocks excluded."""
+    return normalize_text(_raw_text_without(el, skip))
+
+
 # --------------------------------------------------------------------------- #
 # per-type data builders
 # --------------------------------------------------------------------------- #
@@ -533,7 +565,12 @@ def _direct_text(li: HtmlElement) -> list[str]:
             if child.tail:
                 parts.append(child.tail)
             continue
-        parts.append(child.text_content() or "")
+        if not isinstance(child.tag, str):
+            pass
+        elif child.tag in _LI_STRUCTURAL:
+            parts.append(" ")  # emitted as its own block by _visit_list
+        else:
+            parts.append(_raw_text_without(child, _LI_STRUCTURAL))
         if child.tail:
             parts.append(child.tail)
     return parts
@@ -715,9 +752,10 @@ def _build_definition_list(el: HtmlElement) -> dict[str, object]:
     current_term: str | None = None
     for child in el.iterchildren("dt", "dd"):
         if child.tag == "dt":
-            current_term = _block_text(child)
+            current_term = _container_text(child, _DD_STRUCTURAL)
         else:
-            items.append({"term": current_term or "", "definition": _block_text(child)})
+            definition = _container_text(child, _DD_STRUCTURAL)
+            items.append({"term": current_term or "", "definition": definition})
     return {"items": items}
 
 
@@ -889,8 +927,9 @@ class _Walker:
 
     def _visit_blockquote(self, el: HtmlElement) -> None:
         """Emit the blockquote block plus any structural blocks nested in it."""
-        text = _block_text(el)
-        self._emit("blockquote", el, text=text, data={"text": text})
+        text = _container_text(el, _DD_STRUCTURAL)
+        if text:  # a quote holding only a list/code is just that block
+            self._emit("blockquote", el, text=text, data={"text": text})
         for struct in _structural_descendants(el):
             self._visit(struct)
 
@@ -904,7 +943,8 @@ class _Walker:
         blocks are emitted as their own blocks in document order (DECISIONS
         2026-10-11).
         """
-        self._emit("admonition", el, text=_block_text(el), data={"kind": kind})
+        text = _container_text(el, _DD_STRUCTURAL)
+        self._emit("admonition", el, text=text, data={"kind": kind})
         for struct in _structural_descendants(el):
             self._visit(struct)
 
@@ -922,9 +962,11 @@ class _Walker:
         <dl>/<dd> para preservar blocos estruturais aninhados").
         """
         data = _build_definition_list(el)
-        self._emit("definition_list", el, text=_block_text(el), data=data)
-        for dd in el.iterchildren("dd"):
-            self._emit_nested_structural(dd)
+        text = _container_text(el, _DD_STRUCTURAL)
+        self._emit("definition_list", el, text=text, data=data)
+        # Every structural block left out of the text above is emitted here,
+        # including ones in a <dt> or a <div>-wrapped <dd>.
+        self._emit_nested_structural(el)
 
     def _emit_nested_structural(self, dd: HtmlElement) -> None:
         """Emit structural blocks (code/table/list/dl) nested inside a ``<dd>``.
@@ -978,7 +1020,6 @@ _DD_STRUCTURAL = frozenset({"pre", "table", "ul", "ol", "dl"})
 # already flattened into the list's items text, so they are barriers (not
 # re-emitted) rather than new blocks.
 _LI_STRUCTURAL = frozenset({"pre", "table", "dl"})
-_LI_BARRIER = frozenset({"ul", "ol"})
 
 
 def _structural_descendants(root: HtmlElement) -> list[HtmlElement]:
@@ -987,8 +1028,12 @@ def _structural_descendants(root: HtmlElement) -> list[HtmlElement]:
 
 
 def _structural_descendants_in_item(li: HtmlElement) -> list[HtmlElement]:
-    """Outermost code/table/dl blocks nested inside a ``<li>`` (sub-lists excluded)."""
-    return _outermost_structural(li, _LI_STRUCTURAL, barrier=_LI_BARRIER)
+    """Outermost code/table/dl blocks inside a ``<li>``, sub-list items included.
+
+    Sub-lists are flattened into the items text, but their code/tables/dl are
+    left out of that text (``_direct_text``), so they are emitted here.
+    """
+    return _outermost_structural(li, _LI_STRUCTURAL, barrier=frozenset())
 
 
 # --------------------------------------------------------------------------- #

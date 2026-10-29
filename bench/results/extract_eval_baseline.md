@@ -188,3 +188,18 @@ by humans; `main_content` is plain text, so code and table checks rely on
   target met. Test (single look): ΔF1 +0.0000, Δrecall −0.0001, glued
   119 → 119, code/table recall unchanged, language rate 21.6% → 54.1%,
   line-number leak 1 → 0, PDF facts 15/64 unchanged; gates PASS. Accepted.
+- 2026-10-29: Phase P change "container text" (code/tables/lists copied into
+  list-item, admonition, blockquote and definition-list text). Targets:
+  boundaries (duplication part of H4). Containers now leave out the nested
+  blocks they emit on their own (`pre`, `table`, `ul`/`ol`/`dl` in dd,
+  admonitions and quotes; `pre`/`table`/`dl` in list items, now also from
+  sub-list items, which were not emitted before); a quote holding only such
+  blocks emits no empty quote. Dev, cumulative vs baseline: ΔF1 +0.0103
+  [+0.0036, +0.0189], Δrecall −0.0016 (pages whose ground truth repeats the
+  text, e.g. kernel DCO, Twilio gutter digits), ΔP +0.0187, leak −0.0010,
+  glued 251 → 247, code/table recall unchanged, code blocks 987 → 992,
+  code duplicated in text 154 → 4 (baseline 180); gates PASS, H4
+  duplication target met. Test (single look, HTML only; PDF untouched by an
+  HTML-only change): ΔF1 +0.0083 [+0.0042, +0.0131], Δrecall −0.0015, ΔP
+  +0.0172, glued 119 → 94, code duplicated 85 → 1, code/table recall
+  unchanged; gates PASS. Accepted.
