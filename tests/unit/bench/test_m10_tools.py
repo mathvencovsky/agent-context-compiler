@@ -188,15 +188,18 @@ def test_full_page_server_speaks_mcp_over_stdio(
         cwd=str(tmp_path),
     )
 
-    async def session() -> tuple[list[str], str, list[object]]:
+    async def session() -> tuple[list[str], str, list[object], list[object]]:
         async with Client(params) as client:
             tools = await client.list_tools()
             result = await client.call_tool("fetch_page", {"url": _URL})
             metas = [t.model_dump(by_alias=True).get("_meta") for t in tools.tools]
-            return [t.name for t in tools.tools], result.content[0].text, metas  # type: ignore[union-attr]
+            hints = [t.annotations for t in tools.tools]
+            return [t.name for t in tools.tools], result.content[0].text, metas, hints  # type: ignore[union-attr]
 
-    names, text, metas = asyncio.run(session())
+    names, text, metas, hints = asyncio.run(session())
     assert names == ["fetch_page"]
     assert "absolute value" in text
     # the size annotation crosses the wire as `_meta`, where Claude Code reads it
     assert metas == [{"anthropic/maxResultSizeChars": 500_000}]
+    # same read-only hints as NINA's tools, so Claude Code treats the arms alike
+    assert [h.read_only_hint if h else None for h in hints] == [True]
