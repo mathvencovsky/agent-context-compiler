@@ -945,6 +945,44 @@ CANDIDATE:
 - **Data seen:** none from any arm. No agent session, screen, pilot or
   main-run session had run.
 
+### Amendment 19 — 2026-10-29: extractor version in the document identity, and an empty NINA database enforced
+
+- **What changed in `app/` and `migrations/`** (freeze still open, Amendment 18):
+  1. **Extractor version in the version identity.** `version_id` was the hash
+     of the raw bytes only, so after an extractor change a page whose bytes had
+     not changed kept serving the old extraction and its old chunks. Now
+     `EXTRACTOR_VERSION` (`app/extract/ir.py`, set to `"2"` for the M10b
+     extraction) is stored with each version (migration `0006`), and
+     `version_id = "ver_" + sha256(document_id + "\n" + content_hash + "\n" +
+     EXTRACTOR_VERSION)[:16]`. A stored version from another extractor version
+     is re-extracted from its stored bytes (re-rendered if it was rendered), as
+     a new version; the old one is kept. This also fixes two collisions of the
+     old id (the same bytes at two URLs, and a page returning to bytes seen
+     before, which gave a 500).
+  2. **Explicit failures:** an empty HTML body gives an empty document with
+     `empty_content` instead of a 500, and `assemble` adds an `empty_content`
+     warning for a source without text.
+  3. **Request id:** every response carries `X-Request-ID`; the error envelope
+     carries `error.request_id`; MCP tool errors end with the request id.
+- **What changed in `bench/`:** a new run (no `results.csv`) refuses a NINA
+  database that is not empty unless `--reset-nina-db` is given, which drops and
+  recreates it; a resumed run keeps it. `run_meta.jsonl` records the commit,
+  the `app/` and `migrations/` trees and `EXTRACTOR_VERSION`. Amendment 17
+  already required the database to start empty; this enforces it. Pilot and
+  main run share the output directory, so before the main run the pilot's
+  `results.csv` is moved aside and the database reset.
+- **Effect on M10:** every `version_id` changes; MCP tool error texts end with
+  the request id; `assemble` may add an `empty_content` warning. Extraction
+  output is unchanged: the extraction gates still pass (`make extract-eval`)
+  and the extraction snapshots differ only in `version_id`.
+- **Why:** an external review (`docs/pesquisa/ANALISE_GUIA_V2.md`) asked that
+  every fragment belong to one snapshot and one parser version; checking the
+  code showed the stale-extraction bug and that the empty-database rule of
+  Amendment 17 was not enforced, which could have measured `nina` with the old
+  extraction.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
