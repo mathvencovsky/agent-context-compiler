@@ -89,6 +89,15 @@ class Settings(BaseSettings):
     # goto (30 s) + networkidle (15 s) + serialization fit inside it, so it only
     # cuts a render that would otherwise hang (a JS busy loop); Timeout (504).
     render_total_timeout_s: int = 60
+    # Browser renders running at once in this process (M10b efficiency): each
+    # is a Chromium; a render waiting for a slot spends its own deadline.
+    render_concurrency: int = 2
+
+    # assemble resolves its URLs concurrently (M10b efficiency): at most this
+    # many at once, and at most assemble_per_host_concurrency on one host. The
+    # output is the same as resolving them one by one, in request order.
+    assemble_fetch_concurrency: int = 6
+    assemble_per_host_concurrency: int = 2
 
     # Embeddings (M6, SPEC §5). text-embedding-3-small produces 1536-dim vectors
     # (human decision, DECISIONS.md 2026-10-12). embeddings_api_key is the

@@ -23,6 +23,9 @@ level, where no browser feature can route around it:
   ``context.route_web_socket`` does the same for WebSockets.
 * **No service workers, no popups.** ``service_workers="block"`` and every page
   other than the one being rendered is closed as soon as it opens.
+* **Concurrency (M10b).** At most ``settings.render_concurrency`` renders run
+  at once in the process (each is a Chromium); a render waiting for a slot
+  spends its own deadline and fails with :class:`Timeout` if none frees up.
 * **Resource limits (audit M2).** A wall-clock deadline
   (``settings.render_total_timeout_s``) covers the whole render; when it
   expires a watchdog kills the Chromium process (a JS busy loop otherwise
@@ -47,7 +50,8 @@ import os
 import signal
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from playwright.sync_api import (
@@ -297,6 +301,34 @@ class _MainFrameMonitor:
             self.refused = True
 
 
+_SLOTS_LOCK = threading.Lock()
+_SLOTS: dict[int, threading.BoundedSemaphore] = {}
+
+
+def _render_slots(size: int) -> threading.BoundedSemaphore:
+    """The process-wide semaphore bounding concurrent renders to ``size``."""
+    with _SLOTS_LOCK:
+        if size not in _SLOTS:
+            _SLOTS[size] = threading.BoundedSemaphore(size)
+        return _SLOTS[size]
+
+
+@contextmanager
+def _render_slot(settings: Settings, deadline: float, url: str) -> Iterator[None]:
+    """Hold one render slot; waiting for it spends the render's own deadline."""
+    slots = _render_slots(max(1, settings.render_concurrency))
+    if not slots.acquire(timeout=max(0.0, deadline - time.monotonic())):
+        raise Timeout(
+            "no browser render slot became free within the render deadline of "
+            f"{settings.render_total_timeout_s}s",
+            details={"url": url, "limit_s": settings.render_total_timeout_s},
+        )
+    try:
+        yield
+    finally:
+        slots.release()
+
+
 def _blocked(url: str) -> BlockedDestination:
     return BlockedDestination(
         "the page navigated to a destination the guard refuses",
@@ -357,6 +389,7 @@ def render_url(
 
     watchdog: _Watchdog | None = None
     with (
+        _render_slot(settings, deadline, url),
         EgressProxy(resolver=resolver, settings=settings, connector=connector) as proxy,
         sync_playwright() as playwright,
     ):
