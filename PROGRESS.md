@@ -5,6 +5,27 @@ M10)**. O humano não financia rodada paga até lá (2026-10-28).
 **`app/` mudou depois da Emenda 15 (correções de segurança, Emenda 17): o
 harness recusa rodar até o recongelamento no fim do M10b.**
 
+### M10b — Fase P, produto (2026-10-29, Emenda 18)
+
+- Régua sem custo: `make extract-eval` (WCXB-docs com dev/test fixos e 64
+  fatos em 7 PDFs), regras de aceite escritas antes da primeira mudança em
+  `bench/results/extract_eval_baseline.md`.
+- PDF reescrito: fatos 15/64 → 64/64, palavras coladas 22,8% → 0,1%, tabelas
+  vazias 15 → 0; conferido num PDF fora da régua (WebArena: 187 → 0 palavras
+  coladas).
+- HTML e código: F1 dev +0,022, precisão +0,033, palavras coladas 251 → 2,
+  linguagem do código 15% → 44%, números de linha 20 → 0.
+- Markdown e texto puro viram documento; alternativo Markdown e
+  `Accept: text/markdown` existem, desligados.
+- Interface: anotações MCP, aviso de trecho e data em cada `<document>`.
+- Pendente (máquina do humano, sem custo de API): `make m10a-pending` de novo
+  (os números do dev mudaram com a extração), e o passo de recuperação
+  (reranker e embedding abertos, modelos baixados do Hugging Face). Depois,
+  emenda de recongelamento e benchmarks externos.
+- Propostas abertas: código inline e links no Markdown (muda o contrato da
+  IR), OpenAPI no lugar de Swagger UI/Redoc, calibrar o alternativo Markdown,
+  `max_age_seconds` e `allow_stale` (frescor).
+
 ### M10b — pesquisa, segurança e protocolo (2026-10-28)
 
 - Pesquisa em sete frentes e plano: `docs/PESQUISA_RODADA3.md` (relatórios em

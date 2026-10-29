@@ -883,6 +883,68 @@ CANDIDATE:
 - **Data seen:** none from any arm. No agent session, screen, pilot or
   main-run session had run.
 
+### Amendment 18 — 2026-10-29: product changes of M10b, measured before any agent session
+
+- **What changed in `app/`** (branch `claude/m10b-product`; the freeze stays
+  open, see the last point):
+  1. **PDF extraction rewritten** on pdfplumber/pdfminer geometry: words with a
+     font-relative tolerance, real paragraphs with end-of-line hyphenation,
+     two-column reading order, no empty tables, document title and outline
+     headings, `%PDF-` detection when the content type is wrong
+     (`content_type_mismatch`), and `pages_without_text` for pages with no
+     extractable text.
+  2. **HTML and code extraction:** code language read from ancestors (never
+     from highlight.js token classes), line-number gutters stripped, nested
+     code/tables/lists emitted once, separators at block boundaries, page
+     widgets ("On this page", "Copy page", feedback, breadcrumbs, pagination)
+     removed inside the chosen content.
+  3. **Markdown and plain text** (`text/markdown`, `text/x-markdown`,
+     `text/plain`) become documents through a deterministic parser
+     (markdown-it-py, MIT) instead of `unsupported_content_type`. The
+     same-origin Markdown alternate and `Accept: text/markdown` exist but are
+     off, and both settings are in the harness's frozen settings.
+  4. **Interface:** MCP tool titles and `readOnlyHint`/`openWorldHint`; each
+     concise `<document>` states that it is an excerpt
+     (`excerpt="N fragments of a ~T-token page"`) and, when the page declares
+     one, its `date`; `sources[]` gains `page_tokens` and `date`; one "do not
+     use for" line in the server instructions; the shared untrusted-content
+     notice is shorter (all arms use the same one).
+- **What changed in `bench/`:** the `full_page` and `strong_rag` tools carry the
+  same title and read-only annotations as NINA's, so Claude Code treats the
+  arms alike (it runs read-only tools in parallel and without approval).
+- **How it was measured:** a zero-cost extraction benchmark
+  (`bench/extract_eval/`, `make extract-eval`): the documentation subset of
+  WCXB (131 pages, CC-BY-4.0) with a dev/test split fixed by hash before any
+  measurement, and 64 facts on 7 permissively licensed PDFs. The acceptance
+  rules were written before the first product change
+  (`bench/results/extract_eval_baseline.md`): automatic gates for every change,
+  a target per change, iteration on dev only, one look at test per change.
+  Results on the merged tree: HTML dev F1 +0.022 [+0.012, +0.036], precision
+  +0.033, glued words 251 → 2, code language 14.9% → 44.0%, line-number leaks
+  20 → 0, code and table-cell recall unchanged; PDF facts 15/64 → 64/64,
+  long-token rate 22.8% → 0.1%, empty tables 15 → 0. The PDF facts have no
+  holdout, so the lead session checked an unseen LaTeX PDF (WebArena, 3 pages):
+  glued words 187 → 0, words recovered 529 → 1,756. Each change is logged with
+  its test look in the same file.
+- **Effect on M10:**
+  - pages in the frozen corpus served as `text/plain` (RFC `.txt` files cited
+    by tasks, e.g. `so-77442865`) now become documents for `nina`; before, the
+    `nina` arm got `unsupported_content_type` on them while `full_page` read
+    the raw text, a bias against `nina` that this removes;
+  - NINA's chunks change wherever extraction changed, so the M10a
+    development-slice numbers measured before this amendment are stale and
+    are measured again on this tree (`make m10a-pending`) before any rule
+    accepts or rejects a selection change.
+- **The freeze:** still open. The retrieval upgrade of `docs/PESQUISA_RODADA3.md`
+  §7 (reranker and embedding) needs models and the corpus on the human's
+  machine. `app/` is re-frozen by the amendment that closes M10b, and the
+  harness keeps refusing to run until then.
+- **Why:** the research round showed NINA behind on PDF, code and boilerplate
+  and unable to read Markdown or text; the human decided not to fund any paid
+  run until NINA is at or above the best tools.
+- **Data seen:** none from any arm. No agent session, screen, pilot or
+  main-run session had run.
+
 ---
 
 ## Appendix A. Evidence behind the parameters
