@@ -151,7 +151,7 @@ def test_index_version_is_idempotent(
     blob_store: BlobStore,
 ) -> None:
     """Reindexing the same version twice yields the same chunk count."""
-    version_id = make_version_id("0" * 64)
+    version_id = make_version_id(make_document_id(_URL), "0" * 64)
     doc = _synthetic_document(version_id)
     blob_store.put_ir(version_id, doc)
     embeddings = FakeEmbeddingProvider()
@@ -239,7 +239,7 @@ def test_reindexing_reuses_rows_and_embeds_only_what_changed(
     blob_store: BlobStore,
 ) -> None:
     """Same version again: no provider call, same chunk ids (DECISIONS 2026-10-16)."""
-    version_id = make_version_id("0" * 64)
+    version_id = make_version_id(make_document_id(_URL), "0" * 64)
     doc = _synthetic_document(version_id)
     blob_store.put_ir(version_id, doc)
     with session_factory() as session:

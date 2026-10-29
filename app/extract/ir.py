@@ -10,7 +10,10 @@ Identifier and normalization helpers also live here because they define the
 stable-id contract the whole pipeline depends on:
 
 - ``make_document_id`` / ``make_version_id`` build the ``doc_`` / ``ver_``
-  prefixed ids (SPEC §4).
+  prefixed ids (SPEC §4). A version is one (document, raw bytes, extractor
+  version) triple: :data:`EXTRACTOR_VERSION` is part of its identity, so an
+  extractor upgrade yields a new version of unchanged bytes instead of serving
+  the old extraction forever (DECISIONS.md 2026-10-29).
 - ``normalize_text`` produces the markup-free, whitespace-collapsed text that
   every block carries EXCEPT ``code`` (whose bytes are preserved verbatim per
   SPEC §4).
@@ -121,7 +124,7 @@ class Document(BaseModel):
     """The complete IR for one version of one source (SPEC §4)."""
 
     document_id: str  # "doc_" + sha1(normalized url)[:16]
-    version_id: str  # "ver_" + content_hash[:16]
+    version_id: str  # make_version_id(document_id, content_hash, EXTRACTOR_VERSION)
     source: SourceInfo
     metadata: Metadata
     blocks: list[Block]
@@ -137,13 +140,46 @@ def make_document_id(normalized_url: str) -> str:
     return "doc_" + digest[:16]
 
 
-def make_version_id(content_hash: str) -> str:
-    """Return the version id for a raw-body content hash (SPEC §4).
+#: Version of the deterministic extraction pipeline (HTML, PDF, Markdown,
+#: plain text, and the chunks derived from their IR). Bump it in the same commit
+#: as ANY change that alters extraction output for unchanged bytes: the stored
+#: versions built by an older extractor are then re-extracted from their stored
+#: raw bytes on the next resolve, under a new ``version_id`` (SPEC §4, §5;
+#: DECISIONS.md 2026-10-29). History:
+#:
+#: * (none) — rows written before migration 0006; treated as outdated.
+#: * ``"2"`` — M10b Phase P: PDF extraction rewritten, HTML/code cleanup,
+#:   Markdown and plain-text sources.
+EXTRACTOR_VERSION = "2"
 
-    ``content_hash`` is the sha256 hex digest of the raw body. The version id is
-    ``"ver_" + content_hash[:16]``.
+
+def current_extractor_version() -> str:
+    """Return :data:`EXTRACTOR_VERSION`, read at call time (tests patch it)."""
+    return EXTRACTOR_VERSION
+
+
+def make_version_id(
+    document_id: str, content_hash: str, extractor_version: str | None = None
+) -> str:
+    """Return the version id of one extraction of one snapshot (SPEC §4).
+
+    ``"ver_" + sha256(document_id + "\n" + content_hash + "\n" +
+    extractor_version)[:16]`` where ``content_hash`` is the sha256 hex digest of
+    the raw body and ``extractor_version`` defaults to
+    :data:`EXTRACTOR_VERSION`. Deterministic: the same page bytes extracted by
+    the same extractor always get the same id. The ``document_id`` keeps two
+    URLs that serve identical bytes from sharing (and overwriting) one version
+    row and its blobs; the extractor version gives an upgraded extraction of
+    unchanged bytes its own id, so every chunk and fragment belongs to exactly
+    one (snapshot, extractor version).
     """
-    return "ver_" + content_hash[:16]
+    version = (
+        extractor_version
+        if extractor_version is not None
+        else current_extractor_version()
+    )
+    key = f"{document_id}\n{content_hash}\n{version}"
+    return "ver_" + hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
 _WHITESPACE_RE = re.compile(r"\s+")

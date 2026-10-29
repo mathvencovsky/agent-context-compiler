@@ -5,7 +5,10 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 
+import pytest
+
 from app.extract.ir import (
+    EXTRACTOR_VERSION,
     Block,
     Document,
     Link,
@@ -79,7 +82,7 @@ def test_models_round_trip() -> None:
     warning = Warning(code="low_text_content", message="short", block_id=None)
     doc = Document(
         document_id=make_document_id("https://docs.example.com/auth"),
-        version_id=make_version_id("a" * 64),
+        version_id=make_version_id("doc_0123456789abcdef", "a" * 64),
         source=_source(),
         metadata=_metadata(),
         blocks=[block],
@@ -118,11 +121,52 @@ def test_make_document_id_shape() -> None:
 
 
 def test_make_version_id_shape() -> None:
+    """SPEC §4: ver_ + sha256(document_id \\n content_hash \\n extractor)[:16]."""
+    doc_id = make_document_id("https://docs.example.com/auth")
     content_hash = hashlib.sha256(b"raw body").hexdigest()
-    ver_id = make_version_id(content_hash)
+    ver_id = make_version_id(doc_id, content_hash)
     assert ver_id.startswith("ver_")
     assert len(ver_id) == len("ver_") + 16
-    assert ver_id == "ver_" + content_hash[:16]
+    key = f"{doc_id}\n{content_hash}\n{EXTRACTOR_VERSION}".encode()
+    assert ver_id == "ver_" + hashlib.sha256(key).hexdigest()[:16]
+    # Deterministic.
+    assert make_version_id(doc_id, content_hash) == ver_id
+
+
+def test_make_version_id_depends_on_extractor_version() -> None:
+    """Same bytes, new extractor -> a new version id (stale-extraction fix)."""
+    doc_id = make_document_id("https://docs.example.com/auth")
+    content_hash = hashlib.sha256(b"raw body").hexdigest()
+    old = make_version_id(doc_id, content_hash, "1")
+    new = make_version_id(doc_id, content_hash, "2")
+    assert old != new
+    assert make_version_id(doc_id, content_hash, EXTRACTOR_VERSION) == (
+        make_version_id(doc_id, content_hash)
+    )
+
+
+def test_make_version_id_depends_on_document() -> None:
+    """Two URLs serving identical bytes never share a version (row or blobs)."""
+    content_hash = hashlib.sha256(b"same bytes").hexdigest()
+    a = make_version_id(make_document_id("https://a.example.com/x"), content_hash)
+    b = make_version_id(make_document_id("https://b.example.com/x"), content_hash)
+    assert a != b
+
+
+def test_make_version_id_default_reads_current_extractor_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default is read at call time, so a bump takes effect everywhere."""
+    from app.extract import ir
+
+    doc_id = make_document_id("https://docs.example.com/auth")
+    content_hash = "c" * 64
+    before = make_version_id(doc_id, content_hash)
+    monkeypatch.setattr(ir, "EXTRACTOR_VERSION", "999-test")
+    assert make_version_id(doc_id, content_hash) == make_version_id(
+        doc_id, content_hash, "999-test"
+    )
+    assert make_version_id(doc_id, content_hash) != before
 
 
 def test_normalize_text_collapses_whitespace() -> None:

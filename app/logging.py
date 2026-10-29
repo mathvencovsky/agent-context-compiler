@@ -7,6 +7,7 @@ import time
 import uuid
 
 import structlog
+from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = structlog.get_logger()
@@ -54,12 +55,28 @@ def configure_logging() -> None:
     root.setLevel(logging.INFO)
 
 
+#: Response header carrying the request id (guide §11: debuggability).
+REQUEST_ID_HEADER = "X-Request-ID"
+#: Key of the request id in ``scope["state"]`` (``request.state.request_id``).
+REQUEST_ID_STATE_KEY = "request_id"
+
+
+def request_id_of(scope_state: object) -> str | None:
+    """Return the request id stored on ``request.state``, if any."""
+    value = getattr(scope_state, REQUEST_ID_STATE_KEY, None)
+    return value if isinstance(value, str) else None
+
+
 class RequestIdMiddleware:
     """ASGI middleware that mints a request_id per request and logs start/end.
 
     The request_id (uuid4 hex) is bound to structlog contextvars so every log
-    line emitted while handling the request carries it. Contextvars are cleared
-    after the response completes so ids never leak across requests.
+    line emitted while handling the request carries it, stored on
+    ``request.state.request_id`` so the error handlers can put it in the error
+    envelope, and returned as the ``X-Request-ID`` response header. It is always
+    minted by the server: a client-sent ``X-Request-ID`` is ignored, so a caller
+    cannot forge ids into the logs. Contextvars are cleared after the response
+    completes so ids never leak across requests.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -71,6 +88,7 @@ class RequestIdMiddleware:
             return
 
         request_id = uuid.uuid4().hex
+        scope.setdefault("state", {})[REQUEST_ID_STATE_KEY] = request_id
         method = scope.get("method", "")
         path = scope.get("path", "")
 
@@ -84,6 +102,9 @@ class RequestIdMiddleware:
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = int(message["status"])
+                headers = MutableHeaders(scope=message)
+                if REQUEST_ID_HEADER not in headers:
+                    headers.append(REQUEST_ID_HEADER, request_id)
             await send(message)
 
         logger.info("request.start", method=method, path=path)
@@ -101,4 +122,10 @@ class RequestIdMiddleware:
             structlog.contextvars.clear_contextvars()
 
 
-__all__ = ["RequestIdMiddleware", "configure_logging", "logger"]
+__all__ = [
+    "REQUEST_ID_HEADER",
+    "RequestIdMiddleware",
+    "configure_logging",
+    "logger",
+    "request_id_of",
+]

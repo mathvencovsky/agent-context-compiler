@@ -7,10 +7,12 @@ Two tables back the resolve/get-document endpoints:
   created with ``use_alter=True`` because ``sources`` and ``document_versions``
   reference each other (a cycle Alembic/DDL must break with a deferred
   ``ALTER TABLE``).
-- ``document_versions`` — one row per distinct content hash of a source. A
-  ``(source_id, content_hash)`` unique constraint enforces dedup at the schema
-  level; the resolve handler never creates a second version for an unchanged
-  body.
+- ``document_versions`` — one row per (content hash, extractor version) of a
+  source. A ``(source_id, content_hash, extractor_version)`` unique constraint
+  enforces dedup at the schema level; the resolve handler never creates a
+  second version for an unchanged body extracted by the same extractor, and
+  creates one when the extractor version changed (migration 0006, DECISIONS.md
+  2026-10-29).
 
 ``warnings`` is stored as JSONB (Postgres). ``status`` is a textual enum that is
 ``'ready'`` for the MVP (DECISIONS.md 2026-10-11); a version is only persisted
@@ -63,9 +65,17 @@ class DocumentVersion(Base):
     """One version of one source, keyed by its ver_... id (SPEC §7)."""
 
     __tablename__ = "document_versions"
-    __table_args__ = (UniqueConstraint("source_id", "content_hash"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "source_id",
+            "content_hash",
+            "extractor_version",
+            name="uq_document_versions_source_hash_extractor",
+        ),
+    )
 
-    # Holds the ver_... version_id (make_version_id of the content hash).
+    # Holds the ver_... version_id (make_version_id of document id, content
+    # hash and extractor version).
     id: Mapped[str] = mapped_column(primary_key=True)
     source_id: Mapped[str] = mapped_column(ForeignKey("sources.id"), index=True)
     content_hash: Mapped[str] = mapped_column(index=True)
@@ -77,6 +87,14 @@ class DocumentVersion(Base):
     ir_blob_key: Mapped[str] = mapped_column()
     status: Mapped[str] = mapped_column(default="ready")
     warnings: Mapped[list[dict[str, object]]] = mapped_column(postgresql.JSONB)
+    # EXTRACTOR_VERSION that built ir_blob_key; NULL (rows before migration
+    # 0006) never matches, so those versions are re-extracted once.
+    extractor_version: Mapped[str | None] = mapped_column(nullable=True)
+    # The response headers extraction reads, kept so the stored raw bytes can be
+    # re-extracted exactly (charset from Content-Type, Markdown alternate from
+    # Link) without a refetch. NULL on rows before migration 0006.
+    content_type_header: Mapped[str | None] = mapped_column(nullable=True)
+    link_header: Mapped[str | None] = mapped_column(nullable=True)
 
 
 #: Embedding dimensionality for the pgvector column (EMBEDDING_DIM; SPEC §5).

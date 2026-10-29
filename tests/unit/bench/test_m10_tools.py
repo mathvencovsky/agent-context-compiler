@@ -21,11 +21,14 @@ from app.config import Settings
 from app.providers.rerank.fake import FakeRerankProvider
 from bench.corpus_store import CorpusStore
 from bench.m10_tools import (
+    NINA_DB,
+    PostgresNinaDatabase,
     _CandidateLog,
     check_frozen_settings,
     corpus_transport,
     frozen_render,
     full_page_server,
+    prepare_nina_database,
     strong_rag_server,
     usage_logged,
 )
@@ -218,3 +221,81 @@ def test_full_page_server_speaks_mcp_over_stdio(
     assert metas == [{"anthropic/maxResultSizeChars": 500_000}]
     # same read-only hints as NINA's tools, so Claude Code treats the arms alike
     assert [h.read_only_hint if h else None for h in hints] == [True]
+
+
+# --------------------------------------------------------------------------- #
+# NINA database lifecycle (PREREG Amendment 17: a run starts empty)
+# --------------------------------------------------------------------------- #
+class _FakeNinaDb:
+    def __init__(self, *, exists: bool, has_data: bool) -> None:
+        self._exists = exists
+        self._has_data = has_data
+        self.calls: list[str] = []
+
+    def exists(self) -> bool:
+        return self._exists
+
+    def has_data(self) -> bool:
+        return self._has_data
+
+    def create(self) -> None:
+        self.calls.append("create")
+        self._exists, self._has_data = True, False
+
+    def drop(self) -> None:
+        self.calls.append("drop")
+        self._exists = self._has_data = False
+
+    def migrate(self) -> None:
+        self.calls.append("migrate")
+
+
+@pytest.mark.parametrize(
+    ("exists", "has_data", "reset", "action", "calls"),
+    [
+        (False, False, False, "created", ["create", "migrate"]),
+        (True, False, False, "empty", ["migrate"]),
+        (True, True, True, "reset", ["drop", "create", "migrate"]),
+        (False, False, True, "created", ["create", "migrate"]),
+    ],
+)
+def test_new_run_starts_with_an_empty_nina_database(
+    exists: bool, has_data: bool, reset: bool, action: str, calls: list[str]
+) -> None:
+    db = _FakeNinaDb(exists=exists, has_data=has_data)
+    assert prepare_nina_database(resuming=False, reset=reset, db=db) == action
+    assert db.calls == calls
+    assert db.has_data() is False
+
+
+def test_new_run_refuses_a_nina_database_with_data_without_the_flag() -> None:
+    db = _FakeNinaDb(exists=True, has_data=True)
+    with pytest.raises(SystemExit, match="--reset-nina-db"):
+        prepare_nina_database(resuming=False, reset=False, db=db)
+    assert db.calls == []  # nothing dropped, nothing migrated
+
+
+def test_resumed_run_keeps_the_nina_database() -> None:
+    db = _FakeNinaDb(exists=True, has_data=True)
+    assert prepare_nina_database(resuming=True, reset=False, db=db) == "kept"
+    assert db.calls == ["migrate"]
+    assert db.has_data() is True
+
+
+def test_resumed_run_creates_the_database_an_earlier_invocation_never_used() -> None:
+    db = _FakeNinaDb(exists=False, has_data=False)
+    assert prepare_nina_database(resuming=True, reset=False, db=db) == "created"
+    assert db.calls == ["create", "migrate"]
+
+
+def test_resumed_run_refuses_a_reset() -> None:
+    db = _FakeNinaDb(exists=True, has_data=True)
+    with pytest.raises(SystemExit, match="resumed run keeps"):
+        prepare_nina_database(resuming=True, reset=True, db=db)
+    assert db.calls == []
+
+
+def test_the_configured_database_can_never_be_the_benchmark_one() -> None:
+    settings = Settings(_env_file=None, postgres_db=NINA_DB)  # type: ignore[call-arg]
+    with pytest.raises(SystemExit, match="separate"):
+        PostgresNinaDatabase(settings)

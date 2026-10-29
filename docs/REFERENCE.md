@@ -45,7 +45,9 @@ make dev                 # API at http://localhost:8000
 ```
 
 On Windows (no `make`): `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`,
-then `uv run uvicorn app.main:app --reload`.
+then `uv run uvicorn app.main:app --reload`. Every other Makefile target has a
+PowerShell equivalent: `.\scripts\make.ps1 check` (also `up`, `down`,
+`migrate`, `test`, `dev`, `m10a-pending`, `extract-eval`).
 
 ```bash
 curl http://localhost:8000/health   # {"status":"ok","db":"ok","blobs":"ok"}, or 503 naming the broken dependency

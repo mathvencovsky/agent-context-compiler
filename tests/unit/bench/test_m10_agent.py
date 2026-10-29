@@ -842,3 +842,24 @@ def test_drop_unhealthy_excludes_tasks_with_an_unusable_cited_snapshot(
     assert [t.id for t in kept] == ["so-1", "so-2"]
     record = json.loads((tmp_path / "excluded_unhealthy.json").read_text())
     assert record == {"so-3": {missing: "empty"}}
+
+
+def test_run_metadata_records_the_trees_and_the_extractor_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import bench.m10_agent as agent
+    from app.extract.ir import EXTRACTOR_VERSION
+
+    trees = {"app": "apptree1", "migrations": "migtree1"}
+    monkeypatch.setattr(agent, "_git", _fake_git(trees))
+    meta = agent.run_metadata(
+        commit="head123", split="holdout", arms=["nina", "full_page"], nina_db="reset"
+    )
+    assert meta["git_commit"] == "head123"
+    assert meta["app_tree"] == "apptree1"
+    assert meta["migrations_tree"] == "migtree1"
+    assert meta["extractor_version"] == EXTRACTOR_VERSION
+    assert meta["nina_db"] == "reset"
+    assert meta["split"] == "holdout"
+    assert meta["arms"] == ["nina", "full_page"]
+    assert json.loads(json.dumps(meta)) == meta  # one JSON line in run_meta.jsonl

@@ -3,9 +3,9 @@
 Synchronous SQLAlchemy (the resolve path reuses the audited synchronous
 fetcher; FastAPI runs ``def`` handlers in a threadpool — DECISIONS.md
 2026-10-11). ``DocumentRepo`` wraps one ``Session`` and exposes the exact
-operations the resolve handler needs. Dedup is enforced by the caller via
-``get_version_by_hash``: no new version is created when the content hash matches
-an existing one for the same source.
+operations the resolve handler needs. Dedup is enforced by the caller: no new
+version is created when the source already holds a version with the same
+content hash AND extractor version (the version id encodes both).
 """
 
 from __future__ import annotations
@@ -95,6 +95,9 @@ class DocumentRepo:
         raw_blob_key: str,
         ir_blob_key: str,
         warnings: list[dict[str, object]],
+        extractor_version: str,
+        content_type_header: str | None,
+        link_header: str | None,
     ) -> DocumentVersion:
         """Insert a version and set it as the source's current version."""
         version = DocumentVersion(
@@ -109,6 +112,9 @@ class DocumentRepo:
             ir_blob_key=ir_blob_key,
             status="ready",
             warnings=warnings,
+            extractor_version=extractor_version,
+            content_type_header=content_type_header,
+            link_header=link_header,
         )
         self._session.add(version)
         self._session.flush()

@@ -131,7 +131,7 @@ def _index(
     content_hash: str,
     blocks: list[Block],
 ) -> str:
-    version_id = make_version_id(content_hash)
+    version_id = make_version_id(make_document_id(url), content_hash)
     doc = _document(
         url=url, version_id=version_id, content_hash=content_hash, blocks=blocks
     )

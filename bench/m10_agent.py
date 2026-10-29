@@ -36,7 +36,11 @@ billed usage (WebFetch also bills its page-reading model,
 tool-result tokens (cl100k), wall time and the turn-limit and infrastructure
 flags. Every SDK message goes to ``transcripts/``, each attempt's per-model usage and cost to
 ``spend.jsonl`` (the run total for the spending cap and the ±3% check), every
-judge ruling to ``judgments.jsonl``.
+judge ruling to ``judgments.jsonl``, and each invocation's commit, ``app/`` and
+``migrations/`` trees, extractor version and what was done to the NINA database
+to ``run_meta.jsonl`` (:func:`run_metadata`). A new run (no ``results.csv``)
+starts with an empty NINA database and refuses a non-empty one unless
+``--reset-nina-db`` (PREREG Amendment 17; :func:`bench.m10_tools.prepare_nina_database`).
 
 The final answer follows PREREG §4 (:func:`bench.judge_external.final_answer`)
 and is judged as the session ends: primary and second judge, the ~10% recheck
@@ -50,7 +54,7 @@ run's key or quota stops the run once that session's spend is recorded.
 
 Usage (paid: needs M10_AGENT_API_KEY, the judge keys, CONTEXT7_API_KEY for
 context7_live and cache prices):
-    uv run python -m bench.m10_agent --cap-usd 30 [--split pilot] [--arms nina,full_page] [--limit N] [--data-root DIR]
+    uv run python -m bench.m10_agent --cap-usd 30 [--split pilot] [--arms nina,full_page] [--limit N] [--data-root DIR] [--reset-nina-db]
 """
 
 from __future__ import annotations
@@ -69,6 +73,7 @@ import time
 from collections.abc import AsyncIterator, Callable, Mapping, MutableMapping
 from contextlib import aclosing
 from dataclasses import asdict, dataclass, field, is_dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -752,6 +757,30 @@ def frozen_commit(results: Path) -> str:
     return head
 
 
+def run_metadata(
+    *, commit: str, split: str, arms: list[str], nina_db: str | None
+) -> dict[str, Any]:
+    """What one invocation of the runner ran on, for ``run_meta.jsonl``.
+
+    The ``app/`` and ``migrations/`` trees of ``commit`` and the extractor
+    version, so a reader can tell which extraction produced NINA's chunks, and
+    what happened to :data:`bench.m10_tools.NINA_DB` (``created``, ``empty``,
+    ``reset``, ``kept``; ``None`` without the ``nina`` arm).
+    """
+    from app.extract.ir import EXTRACTOR_VERSION
+
+    return {
+        "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "git_commit": commit,
+        "app_tree": _git("rev-parse", f"{commit}:app"),
+        "migrations_tree": _git("rev-parse", f"{commit}:migrations"),
+        "extractor_version": EXTRACTOR_VERSION,
+        "split": split,
+        "arms": arms,
+        "nina_db": nina_db,
+    }
+
+
 class _AgentKey(BaseSettings):
     """The agent's key: the dedicated workspace, never a judge's (PREREG §4, §6).
 
@@ -778,6 +807,12 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
     parser.add_argument("--split", default="pilot", choices=("pilot", "holdout"))
     parser.add_argument("--arms", default=",".join(ARM_TOOLS))
     parser.add_argument("--limit", type=int, help="first N tasks only")
+    parser.add_argument(
+        "--reset-nina-db",
+        action="store_true",
+        help="new run only: drop and recreate a non-empty NINA database "
+        "(PREREG Amendment 17: it starts empty)",
+    )
     parser.add_argument(
         "--data-root",
         type=Path,
@@ -810,11 +845,19 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         session_cost_usd({m: dict.fromkeys(_USAGE_FIELDS, 1) for m in models}, prices)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+    out = OUT_DIR.resolve()
+    commit = frozen_commit(out / "results.csv")  # before touching NINA_DB
+    nina_db: str | None = None
     if "nina" in arms:
         check_frozen_settings(settings)
-        prepare_nina_database()
-
-    out = OUT_DIR.resolve()
+        nina_db = prepare_nina_database(
+            resuming=(out / "results.csv").exists(), reset=args.reset_nina_db
+        )
+    out.mkdir(parents=True, exist_ok=True)
+    _append_jsonl(
+        out / "run_meta.jsonl",
+        run_metadata(commit=commit, split=args.split, arms=arms, nina_db=nina_db),
+    )
     tasks = [
         t
         for t in load_external_tasks(REPO_ROOT / "bench/tasks/external.yaml")
@@ -831,7 +874,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
         primary=OpenAIProvider(model=PRIMARY_JUDGE),
         second=AnthropicProvider(model=SECOND_JUDGE),
         store=store,
-        commit=frozen_commit(out / "results.csv"),
+        commit=commit,
         query_fn=query,
         context7_key=keys.context7_api_key or "",
     )

@@ -166,7 +166,7 @@ class Warning(BaseModel):
 
 class Document(BaseModel):
     document_id: str          # "doc_" + sha1(url normalizada)[:16]
-    version_id: str           # "ver_" + content_hash[:16]
+    version_id: str           # "ver_" + sha256(document_id + "\n" + content_hash + "\n" + EXTRACTOR_VERSION)[:16]
     source: SourceInfo
     metadata: Metadata
     blocks: list[Block]
@@ -179,6 +179,8 @@ class Document(BaseModel):
 - `code`: `{"language": str | None, "code": str}`. O código é preservado byte a byte, sem normalizar espaços.
 - `list`: `{"ordered": bool, "items": list[str]}`, com aninhamento representado por indentação de dois espaços em cada item.
 - `admonition`: `{"kind": "note" | "warning" | "tip" | "danger" | "info"}`. Detectar por classes comuns (`admonition`, `callout`, `alert`, `note`, `warning`) e por `role="note"`.
+
+**Versão = (documento, bytes, extrator):** `EXTRACTOR_VERSION` (`app/extract/ir.py`) é a versão do pipeline determinístico de extração (HTML, PDF, Markdown, texto e os chunks derivados da IR); sobe no mesmo commit de qualquer mudança que altere a saída da extração para os mesmos bytes (hoje `"2"`, a Fase P do M10b). O `version_id` deriva do `document_id`, do `content_hash` e da versão do extrator, então é determinístico: os mesmos bytes da mesma URL lidos pelo mesmo extrator têm sempre o mesmo id; um extrator novo dá um id novo; duas URLs que servem os mesmos bytes nunca dividem uma versão (DECISIONS 2026-10-29). Cada chunk e cada fragmento pertencem, pelo `version_id`, a exatamente um par (snapshot, versão do extrator).
 
 **Regra do `block_id`:** `"b_" + sha1(" > ".join(heading_path) + "|" + type + "|" + text_normalizado)[:12]`. Se repetir dentro do documento, acrescente `_2`, `_3` e assim por diante, em ordem. Um bloco que não mudou entre versões mantém o mesmo id.
 
@@ -204,6 +206,7 @@ class Document(BaseModel):
 - Lexical: o chunk pontua quantos dos seus tokens (minúsculas, `[a-z0-9]+`) são palavras da consulta; qualquer palavra conta, e o empate sai por `(document_id, ord)`. É a mesma função (`app/retrieve/lexical.overlap_ranks`) que o benchmark usa. A coluna `tsvector` gerada (configuração `simple`, índice GIN) continua no esquema, mas a busca não a usa (DECISIONS 2026-10-16).
 - Vetorial: coluna `vector(DIM)` (DIM vindo do provedor configurado) com índice HNSW de distância cosseno.
 - Chunks pertencem a uma `version_id`. Uma versão nova de um documento gera chunks novos; os antigos ficam até a limpeza.
+- **Cache do `resolve` e versão do extrator:** a versão atual de uma URL só é servida do armazenamento (cache válido, `304`, ou mesmo `content_hash` depois do TTL) se o `extractor_version` gravado nela for o `EXTRACTOR_VERSION` atual; `NULL` (linhas anteriores à migração 0006) nunca é. Senão o `resolve` reextrai os bytes brutos: no cache válido e no `304`, os bytes GUARDADOS, sem buscar a página de novo (`stats.cache_hit` continua `true` no cache válido); com o mesmo hash depois do TTL, o corpo recém-buscado. A reextração grava uma versão nova (id novo, IR e blobs novos, `fetched_at` do snapshot) e a torna atual; a versão antiga (linha, blobs e chunks) fica intacta e acessível por `GET /v1/documents/{id}?version_id=`. O `assemble` indexa a versão atual, então os chunks são refeitos na próxima chamada. A reextração usa o `Content-Type` e o `Link` gravados com a versão (para charset e Markdown alternativo); linhas antigas sem eles caem na detecção de charset pelo corpo. O DOM renderizado não é guardado, só o corpo HTTP: uma versão que precisou de navegador (`render_mode: "browser"`) é renderizada de novo, depois da checagem de robots e cobrando a cota de renderização. Se os bytes voltam a um conteúdo já visto (A → B → A), a versão existente volta a ser a atual em vez de duplicar.
 
 ## 6. Recuperação e seleção (`assemble`)
 
@@ -227,7 +230,8 @@ Flags de ablação (aceitas somente quando `ENV != "production"`): `use_lexical`
 sources(id pk, url_normalized unique, domain, current_version_id null, created_at)
 document_versions(id pk, source_id fk, content_hash, fetched_at, etag, last_modified,
                   render_mode, raw_blob_key, ir_blob_key, status, warnings jsonb,
-                  unique(source_id, content_hash))
+                  extractor_version null, content_type_header null, link_header null,
+                  unique(source_id, content_hash, extractor_version))
 chunks(id pk, version_id fk, block_ids text[], heading_path text[], text, md,
        tokens int, tsv tsvector generated, embedding vector(DIM), embedding_model text null, ord int)
 api_keys(id pk, key_hash unique, name, created_at, revoked_at null, limits jsonb)
@@ -307,6 +311,8 @@ Em `sources[]`, `page_tokens` é o total de tokens da página inteira em Markdow
 
 Só uma resposta 2xx do site vira documento: uma página de erro (404, 500, 3xx sem `Location`, 304 sem versão em cache) dá `upstream_status` (502), com `details.upstream_status` igual ao status recebido, e nada é guardado. Se uma das URLs falhar, a resposta continua 200 com as outras, e a falha aparece em `sources[].status` e em `warnings`. Se todas falharem, a resposta é 422.
 
+**Sem 200 vazio silencioso** (testado em `tests/integration/test_explicit_failure_contract.py`): um `resolve` 200 sem blocos traz ao menos um warning (o `empty_content` quando a extração não deu nenhum, inclusive para um corpo HTML sem nenhum elemento, que antes virava 500), e ele sobrevive ao cache. Um `assemble` 200 sem fragmentos (detalhado ou conciso) traz ao menos um warning ou hint: fonte que falhou (`source_failed`), cobertura baixa (`low_coverage`, também quando não há candidato), orçamento que não coube (`budget_limited`) ou, para uma URL resolvida sem texto extraível, o warning `empty_content` com a URL e os códigos de warning do documento.
+
 `hints` (nas duas formas) são metadados do NINA, nunca texto de página: descrevem a situação e as opções, sem dar ordens ao agente (DECISIONS.md 2026-10-17). Códigos: `source_failed` (uma por URL que falhou, com `details.url` e `details.status` e o motivo), `low_coverage` (quando `coverage` é `insufficient`), `budget_limited` (sobraram candidatos com rerank ≥ `coverage_low` fora do orçamento; `details.max_tokens` sugere o dobro, até 32000) e `mixed_versions` (uma por site cujos fragmentos entregues vêm de versões diferentes da documentação, com `details.host` e `details.versions`; a versão é o primeiro segmento do caminho da URL que parece um rótulo de versão, como `3.12`, `v1.30`, `16`, `2.3.x`, `current` ou `stable`). No formato conciso, as dicas e os warnings vêm no fim do `context`, dentro do elemento `<nina_notes>`.
 
 Response 200 com `"response_format": "concise"` (para agentes; DECISIONS.md 2026-10-16):
@@ -344,8 +350,10 @@ Agregados da chave atual por dia e por endpoint: requisições, tokens entregues
 ### Erros
 
 ```json
-{ "error": { "code": "blocked_destination", "message": "...", "details": {} } }
+{ "error": { "code": "blocked_destination", "message": "...", "details": {}, "request_id": "4f0c2a9e..." } }
 ```
+
+Toda resposta (sucesso ou erro) traz o cabeçalho `X-Request-ID`, o id que o servidor gera para a requisição (uuid4 em hex, 32 caracteres) e que está em todas as linhas de log dela. O envelope de erro repete o mesmo valor em `error.request_id`, ao lado de `code`/`message`/`details` (descreve a requisição, não a falha, por isso fica fora de `details`). Um `X-Request-ID` enviado pelo cliente é ignorado: o id nunca vem de fora, para ninguém escrever nos logs.
 
 | code | HTTP |
 |---|---|
@@ -369,7 +377,7 @@ Agregados da chave atual por dia e por endpoint: requisições, tokens entregues
 Transporte stdio para uso local e streamable HTTP para uso remoto. É um cliente fino da API HTTP (recebe `API_URL` e `API_KEY`). Ferramentas:
 
 - `resolve_url(url, format="markdown")`
-- `assemble_context(query, urls, max_tokens=4000, response_format="concise", exclude_chunk_ids=None)`: no padrão `concise` devolve só o texto de `context`, sem cópia em `structuredContent`; com `"detailed"`, o JSON detalhado. Em qualquer ferramenta, um erro da API chega ao agente como erro da ferramenta com a primeira linha do httpx (ex.: `Client error '422 ...`) seguida de `code: message` do envelope de erro.
+- `assemble_context(query, urls, max_tokens=4000, response_format="concise", exclude_chunk_ids=None)`: no padrão `concise` devolve só o texto de `context`, sem cópia em `structuredContent`; com `"detailed"`, o JSON detalhado. Em qualquer ferramenta, um erro da API chega ao agente como erro da ferramenta com a primeira linha do httpx (ex.: `Client error '422 ...`) seguida de `code: message` do envelope de erro e de `(request_id: <id>)`, quando a API devolveu um `X-Request-ID` no formato que ela gera.
 - `get_document(document_id, version_id=None)`
 
 As descrições das ferramentas avisam que o conteúdo retornado vem de páginas externas e não deve ser tratado como instrução. Elas também orientam o uso: `resolve_url` e `get_document` devolvem a página inteira (em média ~10× os tokens do `assemble_context`); o `assemble_context` pede uma pergunta curta, `exclude_chunk_ids` nas chamadas seguintes e `max_tokens` maior só com a nota `budget_limited`. Cada parâmetro tem descrição, e nenhuma ferramenta manda a cópia em `structuredContent`. As três declaram `title` e as anotações MCP `readOnlyHint: true` e `openWorldHint: true` (só leem a web aberta): com elas o Claude Code roda as chamadas em paralelo e repete uma chamada perdida numa queda de conexão, e o diretório de conectores da Anthropic as exige. `destructiveHint` e `idempotentHint` não são enviadas, porque o esquema MCP diz que só valem quando `readOnlyHint` é falso. O esquema das três ferramentas (como o `tools/list` as descreve) fica em até 800 tokens cl100k, porque vai em todo turno do agente.
@@ -468,4 +476,5 @@ As tarefas `dev` (25% das `holdout`, por hash com semente; PREREG Emenda 6) serv
 - **Braços:** `no_docs`, `full_page`, `strong_rag`, `nina`, `webfetch_live` e `context7_live` (definidos em PREREG §3). Não há orçamento igualado entre braços: cada ferramenta usa o próprio padrão, e o que se mede é sucesso e custo faturado.
 - **Juízes:** o principal é de um provedor diferente do agente (`gpt-6.1-sol`). O segundo juiz (`claude-opus-5-5`) e os rótulos humanos (κ de Cohen) auditam o principal. A referência do juiz é a resposta aceita, literal.
 - **Métricas:** além das de §10.5, tokens de cache (criação e leitura), turnos, chamadas de ferramenta, tokens devolvidos pelas ferramentas e custo por tarefa correta, conciliado com o export de custo do provedor (PREREG §6).
+- **Banco do NINA e metadados da rodada:** o braço `nina` usa o banco próprio `nina_m10`. Uma rodada nova (sem `results.csv`) começa com ele vazio (PREREG emenda 17, para o CPT completo contar a primeira indexação): é criado se não existe, e um banco com documentos é recusado, a menos que se passe `--reset-nina-db`, que o apaga e recria. Uma rodada retomada (com `results.csv`) mantém o banco e recusa o `--reset-nina-db`. Cada invocação acrescenta a `run_meta.jsonl` o commit, as árvores de `app/` e `migrations/`, o `EXTRACTOR_VERSION` e o que foi feito com o banco.
 - **Saída** em `bench/results/m10/`: `results.csv` (uma linha por tarefa x braço, com o id do braço na coluna `strategy`), `report.md`, `decision.md`, `config.json` e as transcrições completas (gitignored).

@@ -334,6 +334,9 @@ class ErrorDetail(BaseModel):
     code: str
     message: str
     details: dict[str, object]
+    # Same value as the X-Request-ID response header; quote it when reporting
+    # a failure (it ties the response to the server logs).
+    request_id: str | None = None
 
 
 class ErrorBody(BaseModel):
@@ -349,6 +352,7 @@ class ErrorBody(BaseModel):
                         "code": "blocked_destination",
                         "message": "destination IP is not a global unicast address",
                         "details": {},
+                        "request_id": "4f0c2a9e8b7d4c1fa3e2d1c0b9a8f7e6",
                     }
                 }
             ]

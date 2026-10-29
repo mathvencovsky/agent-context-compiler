@@ -242,6 +242,20 @@ def _resolve_and_index(
             )
             session.commit()
 
+        if response.stats.blocks == 0:
+            # Explicit failure (CLAUDE.md): the page resolved but holds no text,
+            # so it can contribute no fragment. Say so, with the document's own
+            # warning codes (NINA's codes, never page text).
+            codes = sorted({w.code for w in response.warnings})
+            reason = f" ({', '.join(codes)})" if codes else ""
+            warnings.append(
+                {
+                    "code": "empty_content",
+                    "message": f"{url} resolved but has no extractable text{reason}",
+                    "url": url,
+                }
+            )
+
         fetched_at = response.source.fetched_at.isoformat()
         resolved.append(
             _ResolvedUrl(
