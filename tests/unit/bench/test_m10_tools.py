@@ -161,6 +161,7 @@ def test_markdown_source_settings_are_frozen_off(change: dict[str, object]) -> N
         {"reranker_base_url": "http://127.0.0.1:8081"},
         {"embeddings_base_url": "http://127.0.0.1:8080"},
         {"embeddings_query_prefix": "Instruct:"},
+        {"embeddings_pad_to_column": True},
         {"reranker_score_transform": "sigmoid"},
     ],
 )

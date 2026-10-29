@@ -63,3 +63,4 @@ graphify-out/
 
 # Agent worktrees (Claude Code)
 .claude/worktrees/
+.nina-local/

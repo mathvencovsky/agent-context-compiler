@@ -7,6 +7,9 @@ be a loopback IP literal (:mod:`app.providers.local_endpoint`); the call uses
 its own ``httpx`` client, never the fetch guard (DECISIONS 2026-10-13 and
 2026-10-29). Inputs go in batches of :data:`_BATCH` to keep a CPU server
 responsive. Every vector must have ``dim`` components, or the call fails loudly.
+With ``pad_to``, each vector is then zero-padded to that many components, so a
+1024-d model fills the ``vector(1536)`` column: zeros change neither the dot
+product nor the norm, so cosine distances are exactly the model's.
 
 Asymmetric models (Qwen3-Embedding and its fine-tunes) want an instruction on
 the query only: :meth:`embed_query` prepends ``query_prefix``; :meth:`embed`
@@ -41,12 +44,16 @@ class OpenAICompatibleEmbeddingProvider:
         model: str,
         dim: int,
         query_prefix: str = "",
+        pad_to: int | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.base_url = validate_local_base_url(base_url)
         self.model = model
         self.dim = dim
         self.query_prefix = query_prefix
+        if pad_to is not None and pad_to < dim:
+            raise ValueError(f"pad_to={pad_to} is smaller than dim={dim}")
+        self.pad_to = pad_to
         self._transport = transport
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -84,6 +91,8 @@ class OpenAICompatibleEmbeddingProvider:
                     f"embedding has {len(vector)} dimensions, expected {self.dim} "
                     "(set EMBEDDING_DIM to the model's dimension)"
                 )
+            if self.pad_to is not None:
+                vector.extend([0.0] * (self.pad_to - self.dim))
             vectors[index] = vector
         if any(v is None for v in vectors):
             raise LocalProviderError("embeddings server skipped an input index")

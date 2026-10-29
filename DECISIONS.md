@@ -803,3 +803,9 @@ Contexto: a pesquisa da rodada 5 ("Do Not Crawl in the DUST", WWW 2007) e os res
 Decisão: `app/fetch/guard.py::strip_tracking_params` remove da URL normalizada uma lista fechada de parâmetros que só rastreiam o visitante (`utm_*`, `gclid`, `dclid`, `fbclid`, `msclkid`, `yclid`, `mc_cid`, `mc_eid`, `_ga`, `_gl`, `authuser`), sem diferenciar maiúsculas; o resto da query fica byte a byte e na ordem. A requisição sai para a URL normalizada.
 Alternativas: (a) ordenar a query — descartado: a ordem pode mudar a resposta de servidores antigos; (b) remover `hl`/`lang` — descartado: mudam o idioma da página; (c) seguir `rel=canonical` para a identidade — fica para depois: muda o id depois do fetch, exige regra de mesma origem e conflita com o cache por URL pedida; (d) aprender regras por site (DUST) — fora do MVP.
 Consequências: SPEC §guard atualizada; URLs sem esses parâmetros não mudam (mesmo `document_id`). Emenda 21 do PREREG.
+
+## 2026-10-29: uso diário com modelos locais (padding de embedding)
+Contexto: o humano quer usar o NINA nas próprias pesquisas sem custo de API. O Qwen3-Embedding-0.6B tem 1024 dimensões e a coluna `chunks.embedding` é `vector(1536)`; a migração de dimensão está só planejada.
+Decisão: `EMBEDDINGS_PAD_TO_COLUMN` (padrão `false`): com ela, `EMBEDDING_DIM` é a dimensão do modelo local e cada vetor recebe zeros até 1536. Zeros não mudam produto interno nem norma, então as distâncias de cosseno são exatamente as do modelo. `scripts/nina-local.ps1` sobe os modelos (llama.cpp), cria o banco `nina_dev` separado do benchmark, sobe a API e registra o MCP no Claude Code.
+Alternativas: (a) esperar a migração para 1024 — atrasa o uso diário; (b) modo `fake` — sem qualidade real de busca.
+Consequências: congelada em `FROZEN_SETTINGS` (o M10 roda com o padrão). Guia em `docs/USO_DIARIO.md`.

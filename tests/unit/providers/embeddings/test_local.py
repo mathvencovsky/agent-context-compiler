@@ -124,3 +124,24 @@ def test_symmetric_providers_embed_queries_like_documents() -> None:
     fake = FakeEmbeddingProvider(dim=8)
     assert fake.embed_query("hello") == fake.embed(["hello"])[0]
     assert embed_query(fake, "hello") == fake.embed(["hello"])[0]
+
+
+def test_pad_to_appends_zeros_and_keeps_cosine() -> None:
+    calls: list[dict[str, object]] = []
+    provider = _provider(_server(calls), pad_to=5)
+    (vector,) = provider.embed(["abcd"])
+    assert vector == [4.0, 0.5, 0.5, 0.0, 0.0]
+    a, b = provider.embed(["ab", "abcdef"])
+    plain = _provider(_server(calls))
+    pa, pb = plain.embed(["ab", "abcdef"])
+
+    def cos(x: list[float], y: list[float]) -> float:
+        dot = sum(i * j for i, j in zip(x, y, strict=True))
+        return dot / (sum(i * i for i in x) ** 0.5 * sum(j * j for j in y) ** 0.5)
+
+    assert cos(a, b) == pytest.approx(cos(pa, pb))
+
+
+def test_pad_to_smaller_than_dim_is_refused() -> None:
+    with pytest.raises(ValueError, match="pad_to"):
+        _provider(_server([]), pad_to=2)

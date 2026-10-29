@@ -117,9 +117,15 @@ def local_embeddings(settings: Settings) -> EmbeddingProvider:
     """The local embeddings provider; refuses a dimension the column cannot hold.
 
     ``chunks.embedding`` is ``vector(1536)``; a 1024-d local model needs the
-    migration planned in DECISIONS 2026-10-29 first.
+    migration planned in DECISIONS 2026-10-29 first, or
+    ``EMBEDDINGS_PAD_TO_COLUMN`` (zero padding, same cosine distances).
     """
-    if settings.embedding_dim != EMBEDDING_DIM:
+    pad = settings.embeddings_pad_to_column
+    if (
+        (settings.embedding_dim > EMBEDDING_DIM)
+        if pad
+        else (settings.embedding_dim != EMBEDDING_DIM)
+    ):
         raise RuntimeError(
             f"EMBEDDING_DIM={settings.embedding_dim} but chunks.embedding is "
             f"vector({EMBEDDING_DIM}); see DECISIONS 2026-10-29 (vector dimension)"
@@ -130,6 +136,7 @@ def local_embeddings(settings: Settings) -> EmbeddingProvider:
         model=settings.embedding_model,
         dim=settings.embedding_dim,
         query_prefix=settings.embeddings_query_prefix,
+        pad_to=EMBEDDING_DIM if pad else None,
     )
 
 
