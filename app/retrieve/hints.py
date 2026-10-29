@@ -60,6 +60,84 @@ def version_label(url: str) -> tuple[str, str] | None:
     return None
 
 
+_MOVING = frozenset(
+    {"current", "stable", "latest", "dev", "devel", "main", "master", "nightly"}
+)
+_NUMBERED = re.compile(r"\d+(\.\d+)*")
+
+
+def normalize_release(value: str) -> str:
+    """``value`` as a bare release: ``react@v18.x`` -> ``18``, ``V3.12`` -> ``3.12``."""
+    release = value.rsplit("@", 1)[-1].strip().lower()
+    return release.removeprefix("v").removesuffix(".x")
+
+
+def release_match(label: str | None, requested: str) -> str:
+    """``exact``, ``other`` or ``neutral`` for a page's release label.
+
+    Only two numbered releases can differ: ``3.11`` is ``other`` for ``3.12``,
+    while ``3`` is ``neutral`` for ``3.12`` (one page may cover every minor),
+    and moving labels (``stable``, ``latest``) or pages without a label are
+    ``neutral``. Same rule as ``bench/m10a_version.py``.
+    """
+    want = normalize_release(requested)
+    if label is None or label in _MOVING or not _NUMBERED.fullmatch(want):
+        return "neutral"
+    have = normalize_release(label)
+    if not _NUMBERED.fullmatch(have):
+        return "neutral"
+    if have == want:
+        return "exact"
+    if want.startswith(have + ".") or have.startswith(want + "."):
+        return "neutral"
+    return "other"
+
+
+def _version_mismatch(result: AssembleResult) -> list[dict[str, object]]:
+    """One hint when delivered fragments document another release than asked.
+
+    The release of a fragment is its URL's :func:`version_label`, the only
+    place NINA reads a version from; pages without one never trigger it.
+    """
+    if not result.requested_version:
+        return []
+    found: dict[str, set[str]] = {}
+    for frag in result.fragments:
+        label = version_label(frag.source_url)
+        if label and release_match(label[1], result.requested_version) == "other":
+            found.setdefault(label[0], set()).add(label[1])
+    if not found:
+        return []
+    requested = result.requested_version
+    listed = "; ".join(f"{h}: {', '.join(sorted(v))}" for h, v in sorted(found.items()))
+    return [
+        {
+            "code": "version_mismatch",
+            "message": f"Some fragments document another release than {requested} "
+            f"({listed}). Option: the URLs of release {requested}.",
+            "details": {
+                "requested": requested,
+                "found": {h: sorted(v) for h, v in sorted(found.items())},
+            },
+        }
+    ]
+
+
+def _compacted(result: AssembleResult) -> list[dict[str, object]]:
+    """The note that the low-budget mode changed the fragments (SPEC §8)."""
+    if result.compact == "pruned":
+        return [
+            {
+                "code": "compacted",
+                "message": "Sentences with little overlap with the query were left "
+                "out of the fragments and replaced by [\u2026]; kept text is "
+                "verbatim. Option: compact=false for whole fragments.",
+                "details": {},
+            }
+        ]
+    return []
+
+
 def _mixed_versions(result: AssembleResult) -> list[dict[str, object]]:
     """One hint per site whose delivered fragments span several releases.
 
@@ -89,7 +167,8 @@ def _mixed_versions(result: AssembleResult) -> list[dict[str, object]]:
 
 
 def build_hints(result: AssembleResult) -> list[dict[str, object]]:
-    """The hints for ``result``: failed sources, low coverage, budget, versions."""
+    """The hints for ``result``: failed sources, low coverage, budget, versions,
+    the requested release and the low-budget mode."""
     hints: list[dict[str, object]] = []
     for src in result.sources:
         if src.status == "ok":
@@ -122,4 +201,6 @@ def build_hints(result: AssembleResult) -> list[dict[str, object]]:
             }
         )
     hints += _mixed_versions(result)
+    hints += _version_mismatch(result)
+    hints += _compacted(result)
     return hints

@@ -139,6 +139,12 @@ class AssembleResult:
     #: Relevant candidates (rerank >= ``coverage_low``) were left out for lack of
     #: budget; feeds the ``budget_limited`` hint (SPEC §8).
     budget_limited: bool = False
+    #: The release the caller asked for (``version``); feeds the
+    #: ``version_mismatch`` hint. Set by the API layer, never by selection.
+    requested_version: str | None = None
+    #: Low-budget mode outcome (:mod:`app.retrieve.compact`): ``None`` when
+    #: ``compact`` was not asked, else ``"pruned"`` or ``"whole"``.
+    compact: str | None = None
 
 
 @dataclass

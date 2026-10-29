@@ -23,6 +23,7 @@ from app.api.errors import (
     generic_exception_handler,
     missing_key_handler,
 )
+from app.api.sites import router as sites_router
 from app.api.usage import UsageMiddleware
 from app.api.usage import router as usage_router
 from app.config import Settings, get_settings
@@ -112,6 +113,8 @@ def create_app() -> FastAPI:
     app.router.routes.extend(assemble_router.routes)
     # The M9 usage router (GET /v1/usage) mounts the same way.
     app.router.routes.extend(usage_router.routes)
+    # The llms.txt site index (POST /v1/sites/index) mounts the same way.
+    app.router.routes.extend(sites_router.routes)
     # Extending the routes directly (above) keeps them enumerable in
     # ``app.routes``, but — unlike ``include_router`` — it leaves each route's
     # ``dependency_overrides_provider`` unset. The provider is captured when the
@@ -125,6 +128,7 @@ def create_app() -> FastAPI:
         *documents_router.routes,
         *assemble_router.routes,
         *usage_router.routes,
+        *sites_router.routes,
     ):
         if isinstance(route, APIRoute):
             route.dependency_overrides_provider = app

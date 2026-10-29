@@ -59,6 +59,31 @@ A resposta (200) traz `fragments[]` (cada um com `chunk_id`, `document_id`,
 `evidence[]`), `sources[]` (status por URL), `token_usage`, `coverage`,
 `warnings[]` e `trust: "untrusted_source"`.
 
+Campos opcionais (SPEC §8):
+
+- `"version": "3.12"`: a versão da documentação de que você precisa. Não muda a
+  seleção; se algum fragmento vier de outra versão (pela URL), a resposta traz a
+  dica `version_mismatch`.
+- `"compact": true`: modo de orçamento baixo. Seleciona com 4× o orçamento e
+  mantém só as frases que tocam a pergunta, literais, com `[…]` no lugar do
+  texto omitido (código e tabelas inteiros). Desligado por padrão; a regra que
+  decide se ele vira recomendação está em `bench/compact_eval.py`.
+
+### Índice do site — `POST /v1/sites/index`
+
+Quando você sabe o site mas não a página: lê o `llms.txt` do site (só esse
+arquivo; não é crawler) e devolve os links.
+
+```bash
+curl -s -X POST "$API_URL/v1/sites/index" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://docs.example.com/guide", "max_tokens": 2000}'
+```
+
+Sem `llms.txt` (404, HTML no lugar do arquivo, arquivo vazio) a resposta é 200
+com `entries: []` e um warning dizendo o motivo.
+
 Sem a chave (ou com uma inválida/revogada) a resposta é **401**
 `{"error":{"code":"unauthorized", ...}}`; acima do limite de requisições é
 **429** com o header `Retry-After`.
@@ -101,6 +126,14 @@ except UnauthorizedError:
 except RateLimitedError as exc:
     print(f"limite excedido; tente de novo em {exc.retry_after}s")
 
+# índice do site (llms.txt) e assemble com versão e modo compacto
+index = client.site_index("https://docs.example.com/guide")
+urls = [entry.url for entry in index.entries[:3]]
+small = client.assemble_concise(
+    "Qual header autentica?", urls, max_tokens=800, version="2", compact=True
+)
+print(small.context)
+
 client.close()
 ```
 
@@ -140,6 +173,26 @@ Desktop, `claude_desktop_config.json`):
 
 O conteúdo devolvido pelas ferramentas vem de páginas externas
 (`trust: untrusted_source`): trate-o como **dado**, nunca como instrução.
+
+Ferramentas além do básico: `resolve_url(url, format="index")` lista as
+páginas do site pelo `llms.txt`; `assemble_context` aceita `version` e
+`compact` (os mesmos campos da API).
+
+### Bloco no AGENTS.md — `nina init` (recomendado)
+
+Agentes leem o `AGENTS.md` em todo turno; uma skill só entra quando o agente
+decide. Para o agente lembrar de consultar o NINA, rode na raiz do seu projeto:
+
+```bash
+uv run python -m app.cli init --path /caminho/do/projeto --dry-run   # mostra
+uv run python -m app.cli init --path /caminho/do/projeto             # escreve
+```
+
+O comando escreve um bloco de poucas linhas entre `<!-- nina:start -->` e
+`<!-- nina:end -->`, sem tocar no resto do arquivo; rodar de novo não muda nada.
+Se o projeto tem `CLAUDE.md`, ele ganha um bloco com `@AGENTS.md` (o Claude Code
+lê o `CLAUDE.md`). Com `--api-url http://localhost:8000` ele também imprime o
+comando `claude mcp add` (a chave fica no seu ambiente, nunca no arquivo).
 
 ### Skill para agentes (opcional)
 
