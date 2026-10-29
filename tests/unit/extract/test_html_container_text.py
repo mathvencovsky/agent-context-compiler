@@ -71,3 +71,46 @@ def test_table_in_dd_is_left_out_of_the_definition() -> None:
     )
     assert [b.type for b in blocks] == ["definition_list", "table"]
     assert "verbose" not in blocks[0].text
+
+
+# Block boundaries (M10b Phase P, rule H4): no words glued where blocks meet.
+
+
+def test_admonition_title_and_body_are_separated() -> None:
+    blocks = _blocks(
+        '<div class="admonition note"><p class="admonition-title">Note</p>'
+        "<p>Since 3.9 this works.</p></div>"
+    )
+    assert blocks[0].text == "Note Since 3.9 this works."
+
+
+def test_definition_term_and_paragraphs_are_separated() -> None:
+    blocks = _blocks(
+        "<dl><dt>loads(s)</dt><dd><p>Parse s.</p><p>Return obj.</p></dd></dl>"
+    )
+    assert blocks[0].text == "loads(s) Parse s. Return obj."
+    assert blocks[0].data["items"] == [
+        {"term": "loads(s)", "definition": "Parse s. Return obj."}
+    ]
+
+
+def test_table_text_separates_cells() -> None:
+    blocks = _blocks(
+        "<table><tr><th>Attribute</th><th>Notes</th></tr>"
+        "<tr><td>id</td><td>Data</td></tr></table>"
+    )
+    table = blocks[0]
+    assert table.text == "Attribute Notes id Data"
+    # Cell values are unchanged (rule H7 note of 2026-10-29).
+    assert table.data["headers"] == ["Attribute", "Notes"]
+    assert table.data["rows"] == [["id", "Data"]]
+
+
+def test_list_item_block_children_are_separated() -> None:
+    blocks = _blocks("<ul><li><div>Docker Desktop</div><div>This is it</div></li></ul>")
+    assert blocks[0].data["items"] == ["Docker Desktop This is it"]
+
+
+def test_inline_elements_do_not_get_a_separator() -> None:
+    blocks = _blocks("<p>pre<b>fix</b>ed and <code>max</code>_tokens</p>")
+    assert blocks[0].text == "prefixed and max_tokens"

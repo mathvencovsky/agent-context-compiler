@@ -203,3 +203,25 @@ by humans; `main_content` is plain text, so code and table checks rely on
   HTML-only change): ΔF1 +0.0083 [+0.0042, +0.0131], Δrecall −0.0015, ΔP
   +0.0172, glued 119 → 94, code duplicated 85 → 1, code/table recall
   unchanged; gates PASS. Accepted.
+- 2026-10-29: Phase P change "block boundaries" (H4 glued words), first
+  design: a space where any block-level element starts or ends, in container
+  text, `_block_text` (paragraph, heading, table text) and table cells. Dev,
+  cumulative vs baseline: ΔF1 +0.0176 [+0.0075, +0.0302], Δrecall +0.0081,
+  ΔP +0.0232, leak −0.0057, glued 251 → 2, code and table-cell recall
+  unchanged; gates PASS. Test (first look): ΔF1 +0.0096, Δrecall +0.0009,
+  glued 119 → 34, but table-cell recall 79.5% → 77.0%: **H7 FAIL**. Not
+  accepted. The test pages were not opened to diagnose it.
+- 2026-10-29 (written before the second test look of this change, rule C1):
+  redesign on dev. Table-cell recall depends only on the cell strings
+  (`_cell_text`), so the redesign keeps cell strings exactly as in the
+  baseline (raw `text_content`) and keeps the separators everywhere else
+  (container text, paragraph/heading text, the table block's `text`). No
+  rule is derived from test pages; by construction table-cell recall must
+  equal the baseline. Dev after redesign: identical to the first design
+  (ΔF1 +0.0176, glued 251 → 2, table cells 76.9% → 76.9%). The second test
+  look is run once, next, and accepted only under the same C1 criteria.
+- 2026-10-29: "block boundaries" second (and last) test look, after the
+  note above: ΔF1 +0.0096 [+0.0053, +0.0145], Δrecall +0.0009, ΔP +0.0178,
+  leak −0.0008, glued 119 → 34 (94 → 34 for this change, −64%; dev −99%),
+  code recall unchanged, table-cell recall 79.5% → 79.5%; gates PASS.
+  Accepted. Separators inside table cells stay deferred.

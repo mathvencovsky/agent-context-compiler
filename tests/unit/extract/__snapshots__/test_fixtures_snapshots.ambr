@@ -76197,7 +76197,7 @@
         'type': 'definition_list',
       }),
       dict({
-        'block_id': 'b_ee72d818491e',
+        'block_id': 'b_3f71bfb97ce1',
         'data': dict({
           'items': list([
             dict({
@@ -76267,7 +76267,7 @@
         ]),
         'order': 66,
         'page': None,
-        'text': 'strA response object is created with the string encoded to UTF-8 as the body. bytesA response object is created with the bytes as the body. dictConverted to a JSON response. listConverted to a JSON response. generator or iteratorA generator that returns str or bytes to be streamed as the response. tupleEither (body, status, headers), (body, status), or (body, headers), where body is any of the other types allowed here, status is a string or an integer, and headers is a dictionary or a list of (key, value) tuples. If body is a response_class instance, status overwrites the exiting value and headers are extended. response_classThe object is returned unchanged. other Response classThe object is coerced to response_class. callable()The function is called as a WSGI application. The result is used to create a response object.',
+        'text': 'str A response object is created with the string encoded to UTF-8 as the body. bytes A response object is created with the bytes as the body. dict Converted to a JSON response. list Converted to a JSON response. generator or iterator A generator that returns str or bytes to be streamed as the response. tuple Either (body, status, headers), (body, status), or (body, headers), where body is any of the other types allowed here, status is a string or an integer, and headers is a dictionary or a list of (key, value) tuples. If body is a response_class instance, status overwrites the exiting value and headers are extended. response_class The object is returned unchanged. other Response class The object is coerced to response_class. callable() The function is called as a WSGI application. The result is used to create a response object.',
         'type': 'definition_list',
       }),
       dict({
@@ -166913,7 +166913,7 @@
         'type': 'heading',
       }),
       dict({
-        'block_id': 'b_211362b59277',
+        'block_id': 'b_d71cb221f9b0',
         'data': dict({
           'kind': 'warning',
         }),
@@ -166930,7 +166930,7 @@
         ]),
         'order': 751,
         'page': None,
-        'text': 'CautionA security vulnerability, level “moderate” is fixed in v1.8.2. Please upgrade ASAP. See security advisory CVE-2021-29510',
+        'text': 'Caution A security vulnerability, level “moderate” is fixed in v1.8.2. Please upgrade ASAP. See security advisory CVE-2021-29510',
         'type': 'admonition',
       }),
       dict({
@@ -174539,7 +174539,7 @@
         'type': 'code',
       }),
       dict({
-        'block_id': 'b_f0de2f253171',
+        'block_id': 'b_405e9ebd4f1e',
         'data': dict({
           'kind': 'note',
         }),
@@ -174555,7 +174555,7 @@
         ]),
         'order': 6,
         'page': None,
-        'text': 'NoteEven though name is assigned a value, it is still required and has no default value. If you want to emphasize on the fact that a value must be provided, you can use the ellipsis: However, its usage is discouraged as it doesn’t play well with static type checkers.',
+        'text': 'Note Even though name is assigned a value, it is still required and has no default value. If you want to emphasize on the fact that a value must be provided, you can use the ellipsis: However, its usage is discouraged as it doesn’t play well with static type checkers.',
         'type': 'admonition',
       }),
       dict({
@@ -174745,7 +174745,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_94648d159448',
+        'block_id': 'b_5b2ea72e093f',
         'data': dict({
           'kind': 'tip',
         }),
@@ -174778,7 +174778,7 @@
         ]),
         'order': 15,
         'page': None,
-        'text': 'TipThe annotated pattern can also be used to add metadata to specific parts of the type. For instance, validation constraints can be added this way: Be careful not mixing field and type metadata: The Field() function is applied to int type, hence the deprecated flag won\'t have any effect. While this may be confusing given that the name of the Field() function would imply it should apply to the field, the API was designed when this function was the only way to provide metadata. You can alternatively make use of the annotated_types library which is now supported by Pydantic. The Field() function is applied to the "top-level" union type, hence the deprecated flag will be applied to the field.',
+        'text': 'Tip The annotated pattern can also be used to add metadata to specific parts of the type. For instance, validation constraints can be added this way: Be careful not mixing field and type metadata: The Field() function is applied to int type, hence the deprecated flag won\'t have any effect. While this may be confusing given that the name of the Field() function would imply it should apply to the field, the API was designed when this function was the only way to provide metadata. You can alternatively make use of the annotated_types library which is now supported by Pydantic. The Field() function is applied to the "top-level" union type, hence the deprecated flag will be applied to the field.',
         'type': 'admonition',
       }),
       dict({
@@ -175592,7 +175592,7 @@
         'type': 'heading',
       }),
       dict({
-        'block_id': 'b_80ea856270ed',
+        'block_id': 'b_89be8f54c113',
         'data': dict({
           'kind': 'tip',
         }),
@@ -175609,7 +175609,7 @@
         ]),
         'order': 50,
         'page': None,
-        'text': 'TipRead more about aliases in the dedicated section.',
+        'text': 'Tip Read more about aliases in the dedicated section.',
         'type': 'admonition',
       }),
       dict({
@@ -176015,7 +176015,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_6856c3866652',
+        'block_id': 'b_f40b4395f40b',
         'data': dict({
           'kind': 'note',
         }),
@@ -176036,7 +176036,7 @@
         ]),
         'order': 70,
         'page': None,
-        'text': 'Alias precedence and priorityIn case you use alias together with validation_alias or serialization_alias at the same time, the validation_alias will have priority over alias for validation, and serialization_alias will have priority over alias for serialization.If you provide a value for the alias_generator model setting, you can control the order of precedence for field alias and generated aliases via the alias_priority field parameter. You can read more about alias precedence here.',
+        'text': 'Alias precedence and priority In case you use alias together with validation_alias or serialization_alias at the same time, the validation_alias will have priority over alias for validation, and serialization_alias will have priority over alias for serialization. If you provide a value for the alias_generator model setting, you can control the order of precedence for field alias and generated aliases via the alias_priority field parameter. You can read more about alias precedence here.',
         'type': 'admonition',
       }),
       dict({
@@ -176525,7 +176525,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_a5b8ba2c0874',
+        'block_id': 'b_777404126ed7',
         'data': dict({
           'kind': 'note',
         }),
@@ -176542,7 +176542,7 @@
         ]),
         'order': 91,
         'page': None,
-        'text': 'NoteWhen adding constraints to a union type, if a member of the union is None or the MISSING sentinel, the constraints will be automatically applied to the remaining type(s) of the union:',
+        'text': 'Note When adding constraints to a union type, if a member of the union is None or the MISSING sentinel, the constraints will be automatically applied to the remaining type(s) of the union:',
         'type': 'admonition',
       }),
       dict({
@@ -177859,7 +177859,7 @@
         'type': 'code',
       }),
       dict({
-        'block_id': 'b_230089ee4fec',
+        'block_id': 'b_e3a9e2f49bd9',
         'data': dict({
           'kind': 'note',
         }),
@@ -177873,7 +177873,7 @@
         ]),
         'order': 145,
         'page': None,
-        'text': 'Support for category and stacklevelThe current implementation of this feature does not take into account the category and stacklevel arguments to the deprecated decorator. This might land in a future version of Pydantic.',
+        'text': 'Support for category and stacklevel The current implementation of this feature does not take into account the category and stacklevel arguments to the deprecated decorator. This might land in a future version of Pydantic.',
         'type': 'admonition',
       }),
       dict({
@@ -177938,7 +177938,7 @@
         'type': 'code',
       }),
       dict({
-        'block_id': 'b_171f243a988c',
+        'block_id': 'b_b7e57702e701',
         'data': dict({
           'kind': 'warning',
         }),
@@ -177956,7 +177956,7 @@
         ]),
         'order': 148,
         'page': None,
-        'text': 'Accessing a deprecated field in validatorsWhen accessing a deprecated field inside a validator, the deprecation warning will be emitted. You can use catch_warnings to explicitly ignore it:',
+        'text': 'Accessing a deprecated field in validators When accessing a deprecated field inside a validator, the deprecation warning will be emitted. You can use catch_warnings to explicitly ignore it:',
         'type': 'admonition',
       }),
       dict({
@@ -178214,7 +178214,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_eef9bbd6b899',
+        'block_id': 'b_a144e18bf3aa',
         'data': dict({
           'kind': 'note',
         }),
@@ -178231,7 +178231,7 @@
         ]),
         'order': 161,
         'page': None,
-        'text': 'NoteProperties can be useful for fields that are computed from other fields, or for fields that are expensive to be computed (and thus, are cached if using @cached_property).However, note that Pydantic will not perform any additional logic on the wrapped property (validation, cache invalidation, etc.).',
+        'text': 'Note Properties can be useful for fields that are computed from other fields, or for fields that are expensive to be computed (and thus, are cached if using @cached_property). However, note that Pydantic will not perform any additional logic on the wrapped property (validation, cache invalidation, etc.).',
         'type': 'admonition',
       }),
       dict({
@@ -178668,7 +178668,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_351a6a76f407',
+        'block_id': 'b_1c8e8aa42f71',
         'data': dict({
           'kind': 'note',
         }),
@@ -178692,7 +178692,7 @@
         ]),
         'order': 7,
         'page': None,
-        'text': 'Validation — a deliberate misnomerTL;DRWe use the term “validation” to refer to the process of instantiating a model (or other type) that adheres to specified types and constraints. This task, which Pydantic is well known for, is most widely recognized as “validation” in colloquial terms, even though in other contexts the term “validation” may be more restrictive.The long versionThe potential confusion around the term “validation” arises from the fact that, strictly speaking, Pydantic’s primary focus doesn’t align precisely with the dictionary definition of “validation”: validation noun the action of checking or proving the validity or accuracy of something. In Pydantic, the term “validation” refers to the process of instantiating a model (or other type) that adheres to specified types and constraints. Pydantic guarantees the types and constraints of the output, not the input data. This distinction becomes apparent when considering that Pydantic’s ValidationError is raised when data cannot be successfully parsed into a model instance.While this distinction may initially seem subtle, it holds practical significance. In some cases, “validation” goes beyond just model creation, and can include the copying and coercion of data. This can involve copying arguments passed to the constructor in order to perform coercion to a new type without mutating the original input data. For a more in-depth understanding of the implications for your usage, refer to the Data Conversion and Attribute Copies sections below.In essence, Pydantic’s primary goal is to assure that the resulting structure post-processing (termed “validation”) precisely conforms to the applied type hints. Given the widespread adoption of “validation” as the colloquial term for this process, we will consistently use it in our documentation.While the terms “parse” and “validation” were previously used interchangeably, moving forward, we aim to exclusively employ “validate”, with “parse” reserved specifically for discussions related to JSON parsing.',
+        'text': 'Validation — a deliberate misnomer TL;DR We use the term “validation” to refer to the process of instantiating a model (or other type) that adheres to specified types and constraints. This task, which Pydantic is well known for, is most widely recognized as “validation” in colloquial terms, even though in other contexts the term “validation” may be more restrictive. The long version The potential confusion around the term “validation” arises from the fact that, strictly speaking, Pydantic’s primary focus doesn’t align precisely with the dictionary definition of “validation”: validation noun the action of checking or proving the validity or accuracy of something. In Pydantic, the term “validation” refers to the process of instantiating a model (or other type) that adheres to specified types and constraints. Pydantic guarantees the types and constraints of the output, not the input data. This distinction becomes apparent when considering that Pydantic’s ValidationError is raised when data cannot be successfully parsed into a model instance. While this distinction may initially seem subtle, it holds practical significance. In some cases, “validation” goes beyond just model creation, and can include the copying and coercion of data. This can involve copying arguments passed to the constructor in order to perform coercion to a new type without mutating the original input data. For a more in-depth understanding of the implications for your usage, refer to the Data Conversion and Attribute Copies sections below. In essence, Pydantic’s primary goal is to assure that the resulting structure post-processing (termed “validation”) precisely conforms to the applied type hints. Given the widespread adoption of “validation” as the colloquial term for this process, we will consistently use it in our documentation. While the terms “parse” and “validation” were previously used interchangeably, moving forward, we aim to exclusively employ “validate”, with “parse” reserved specifically for discussions related to JSON parsing.',
         'type': 'admonition',
       }),
       dict({
@@ -178711,7 +178711,7 @@
         'type': 'heading',
       }),
       dict({
-        'block_id': 'b_7075c1412dab',
+        'block_id': 'b_092ccc0774d1',
         'data': dict({
           'kind': 'note',
         }),
@@ -178732,7 +178732,7 @@
         ]),
         'order': 9,
         'page': None,
-        'text': 'NotePydantic relies heavily on the existing Python typing constructs to define models. If you are not familiar with those, the following resources can be useful:',
+        'text': 'Note Pydantic relies heavily on the existing Python typing constructs to define models. If you are not familiar with those, the following resources can be useful:',
         'type': 'admonition',
       }),
       dict({
@@ -179166,7 +179166,7 @@
         'type': 'code',
       }),
       dict({
-        'block_id': 'b_3170c5f92c2b',
+        'block_id': 'b_c953a17cfb30',
         'data': dict({
           'kind': 'warning',
         }),
@@ -179183,7 +179183,7 @@
         ]),
         'order': 29,
         'page': None,
-        'text': 'CautionWhen defining your models, watch out for naming collisions between your field name and its type annotation.For example, the following will not behave as expected and would yield a validation error: Because of how Python evaluates annotated assignment statements, the statement is equivalent to int: None = None, thus leading to a validation error.',
+        'text': 'Caution When defining your models, watch out for naming collisions between your field name and its type annotation. For example, the following will not behave as expected and would yield a validation error: Because of how Python evaluates annotated assignment statements, the statement is equivalent to int: None = None, thus leading to a validation error.',
         'type': 'admonition',
       }),
       dict({
@@ -179429,7 +179429,7 @@
         'type': 'list',
       }),
       dict({
-        'block_id': 'b_1812e9f11367',
+        'block_id': 'b_ed60f14c9af6',
         'data': dict({
           'kind': 'note',
         }),
@@ -179447,11 +179447,11 @@
         ]),
         'order': 36,
         'page': None,
-        'text': 'NoteSee the API documentation of BaseModel for the class definition including a full list of methods and attributes.',
+        'text': 'Note See the API documentation of BaseModel for the class definition including a full list of methods and attributes.',
         'type': 'admonition',
       }),
       dict({
-        'block_id': 'b_02c74110a156',
+        'block_id': 'b_00e4c43bf313',
         'data': dict({
           'kind': 'tip',
         }),
@@ -179473,7 +179473,7 @@
         ]),
         'order': 37,
         'page': None,
-        'text': 'TipSee Changes to pydantic.BaseModel in the Migration Guide for details on changes from Pydantic V1.',
+        'text': 'Tip See Changes to pydantic.BaseModel in the Migration Guide for details on changes from Pydantic V1.',
         'type': 'admonition',
       }),
       dict({
@@ -180684,7 +180684,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_4d037c492aa4',
+        'block_id': 'b_6cfa81b5c19f',
         'data': dict({
           'kind': 'note',
         }),
@@ -180713,7 +180713,7 @@
         ]),
         'order': 82,
         'page': None,
-        'text': 'NoteDepending on the types and model configuration involved, the Python and JSON modes may have different validation behavior (e.g. with strictness). If you have data coming from a non-JSON source, but want the same validation behavior and errors you’d get from the JSON mode, our recommendation for now is to either dump your data to JSON (e.g. using json.dumps()), or use model_validate_strings() if the data takes the form of a (potentially nested) dictionary with string keys and values. Progress for this feature can be tracked in this issue.',
+        'text': 'Note Depending on the types and model configuration involved, the Python and JSON modes may have different validation behavior (e.g. with strictness). If you have data coming from a non-JSON source, but want the same validation behavior and errors you’d get from the JSON mode, our recommendation for now is to either dump your data to JSON (e.g. using json.dumps()), or use model_validate_strings() if the data takes the form of a (potentially nested) dictionary with string keys and values. Progress for this feature can be tracked in this issue.',
         'type': 'admonition',
       }),
       dict({
@@ -180891,7 +180891,7 @@
         'type': 'list',
       }),
       dict({
-        'block_id': 'b_f5935bfd9c29',
+        'block_id': 'b_585d25cc50d4',
         'data': dict({
           'kind': 'warning',
         }),
@@ -180913,11 +180913,11 @@
         ]),
         'order': 87,
         'page': None,
-        'text': 'Cautionmodel_construct() does not do any validation, meaning it can create models which are invalid. You should only ever use the model_construct() method with data which has already been validated, or that you definitely trust.',
+        'text': 'Caution model_construct() does not do any validation, meaning it can create models which are invalid. You should only ever use the model_construct() method with data which has already been validated, or that you definitely trust.',
         'type': 'admonition',
       }),
       dict({
-        'block_id': 'b_3c4da35e1820',
+        'block_id': 'b_def40ccb9328',
         'data': dict({
           'kind': 'note',
         }),
@@ -180939,7 +180939,7 @@
         ]),
         'order': 88,
         'page': None,
-        'text': 'NoteIn Pydantic V2, the performance gap between validation (either with direct instantiation or the model_validate* methods) and model_construct() has been narrowed considerably. For simple models, going with validation may even be faster. If you are using model_construct() for performance reasons, you may want to profile your use case before assuming it is actually faster.',
+        'text': 'Note In Pydantic V2, the performance gap between validation (either with direct instantiation or the model_validate* methods) and model_construct() has been narrowed considerably. For simple models, going with validation may even be faster. If you are using model_construct() for performance reasons, you may want to profile your use case before assuming it is actually faster.',
         'type': 'admonition',
       }),
       dict({
@@ -182300,7 +182300,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_0d317bf517c5',
+        'block_id': 'b_4e22804b960e',
         'data': dict({
           'kind': 'warning',
         }),
@@ -182317,7 +182317,7 @@
         ]),
         'order': 135,
         'page': None,
-        'text': 'CautionWhen parametrizing a model with a concrete type, Pydantic does not validate that the provided type is assignable to the type variable if it has an upper bound.',
+        'text': 'Caution When parametrizing a model with a concrete type, Pydantic does not validate that the provided type is assignable to the type variable if it has an upper bound.',
         'type': 'admonition',
       }),
       dict({
@@ -182365,7 +182365,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_4e57d95d0906',
+        'block_id': 'b_2346b8ab1d47',
         'data': dict({
           'kind': 'note',
         }),
@@ -182378,7 +182378,7 @@
         ]),
         'order': 138,
         'page': None,
-        'text': 'NoteInternally, Pydantic creates subclasses of the generic model at runtime when the generic model class is parametrized. These classes are cached, so there should be minimal overhead introduced by the use of generics models.',
+        'text': 'Note Internally, Pydantic creates subclasses of the generic model at runtime when the generic model class is parametrized. These classes are cached, so there should be minimal overhead introduced by the use of generics models.',
         'type': 'admonition',
       }),
       dict({
@@ -182826,7 +182826,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_23da67c3cc71',
+        'block_id': 'b_9f8ae5cb941b',
         'data': dict({
           'kind': 'warning',
         }),
@@ -182847,7 +182847,7 @@
         ]),
         'order': 150,
         'page': None,
-        'text': 'CautionWhile it may not raise an error, we strongly advise against using parametrized generics in isinstance() checks.For example, you should not do isinstance(my_model, MyGenericModel[int]). However, it is fine to do isinstance(my_model, MyGenericModel) (note that, for standard generics, it would raise an error to do a subclass check with a parameterized generic class).If you need to perform isinstance() checks against parametrized generics, you can do this by subclassing the parametrized generic class:',
+        'text': 'Caution While it may not raise an error, we strongly advise against using parametrized generics in isinstance() checks. For example, you should not do isinstance(my_model, MyGenericModel[int]). However, it is fine to do isinstance(my_model, MyGenericModel) (note that, for standard generics, it would raise an error to do a subclass check with a parameterized generic class). If you need to perform isinstance() checks against parametrized generics, you can do this by subclassing the parametrized generic class:',
         'type': 'admonition',
       }),
       dict({
@@ -183252,7 +183252,7 @@
         'type': 'code',
       }),
       dict({
-        'block_id': 'b_7e63123e5ecd',
+        'block_id': 'b_ee08ae3cbe52',
         'data': dict({
           'kind': 'warning',
         }),
@@ -183266,7 +183266,7 @@
         ]),
         'order': 163,
         'page': None,
-        'text': "CautionIn some cases, validation against an unparametrized generic model can lead to data loss. Specifically, if a subtype of the type variable upper bound, constraints, or default is being used and the model isn’t explicitly parametrized, the resulting type will not be the one being provided: When the generic isn't parametrized, the input data is validated against the ItemT upper bound. Given that ItemBase has no fields, the item field information is lost. In this case, the type variable is explicitly parametrized, so the input data is validated against the IntItem class.",
+        'text': "Caution In some cases, validation against an unparametrized generic model can lead to data loss. Specifically, if a subtype of the type variable upper bound, constraints, or default is being used and the model isn’t explicitly parametrized, the resulting type will not be the one being provided: When the generic isn't parametrized, the input data is validated against the ItemT upper bound. Given that ItemBase has no fields, the item field information is lost. In this case, the type variable is explicitly parametrized, so the input data is validated against the IntItem class.",
         'type': 'admonition',
       }),
       dict({
@@ -184316,7 +184316,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_a4c7104ac420',
+        'block_id': 'b_4ef5d9bb2197',
         'data': dict({
           'kind': 'note',
         }),
@@ -184329,7 +184329,7 @@
         ]),
         'order': 193,
         'page': None,
-        'text': 'NoteTo pickle a dynamically created model:',
+        'text': 'Note To pickle a dynamically created model:',
         'type': 'admonition',
       }),
       dict({
@@ -184354,7 +184354,7 @@
         'type': 'list',
       }),
       dict({
-        'block_id': 'b_a4e70ebc1f10',
+        'block_id': 'b_7f232d51a99b',
         'data': dict({
           'kind': 'warning',
         }),
@@ -184371,7 +184371,7 @@
         ]),
         'order': 195,
         'page': None,
-        'text': 'CautionThis function may execute arbitrary code contained in field annotations, if string references need to be evaluated.See Security implications of introspecting annotations for more information.',
+        'text': 'Caution This function may execute arbitrary code contained in field annotations, if string references need to be evaluated. See Security implications of introspecting annotations for more information.',
         'type': 'admonition',
       }),
       dict({
@@ -184667,7 +184667,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_181d596db777',
+        'block_id': 'b_8dd2b5e3f807',
         'data': dict({
           'kind': 'note',
         }),
@@ -184680,11 +184680,11 @@
         ]),
         'order': 208,
         'page': None,
-        'text': 'NoteThis behavior was achieved in Pydantic V1 via the config setting allow_mutation = False. This config flag is deprecated in Pydantic V2, and has been replaced with frozen.',
+        'text': 'Note This behavior was achieved in Pydantic V1 via the config setting allow_mutation = False. This config flag is deprecated in Pydantic V2, and has been replaced with frozen.',
         'type': 'admonition',
       }),
       dict({
-        'block_id': 'b_7708753d2a5d',
+        'block_id': 'b_b79184d73a18',
         'data': dict({
           'kind': 'warning',
         }),
@@ -184697,7 +184697,7 @@
         ]),
         'order': 209,
         'page': None,
-        'text': 'CautionIn Python, immutability is not enforced. Developers have the ability to modify objects that are conventionally considered “immutable” if they choose to do so.',
+        'text': 'Caution In Python, immutability is not enforced. Developers have the ability to modify objects that are conventionally considered “immutable” if they choose to do so.',
         'type': 'admonition',
       }),
       dict({
@@ -185631,7 +185631,7 @@
         'type': 'code',
       }),
       dict({
-        'block_id': 'b_7bbae494b8fa',
+        'block_id': 'b_744742882c34',
         'data': dict({
           'kind': 'note',
         }),
@@ -185644,7 +185644,7 @@
         ]),
         'order': 244,
         'page': None,
-        'text': 'NoteA match-case statement may seem as if it creates a new model, but don’t be fooled; it is just syntactic sugar for getting an attribute and either comparing it or declaring and initializing it.',
+        'text': 'Note A match-case statement may seem as if it creates a new model, but don’t be fooled; it is just syntactic sugar for getting an attribute and either comparing it or declaring and initializing it.',
         'type': 'admonition',
       }),
       dict({
@@ -185759,7 +185759,7 @@
         'type': 'code',
       }),
       dict({
-        'block_id': 'b_14f15d395150',
+        'block_id': 'b_f3c97d456467',
         'data': dict({
           'kind': 'note',
         }),
@@ -185776,7 +185776,7 @@
         ]),
         'order': 249,
         'page': None,
-        'text': "NoteThere are some situations where Pydantic does not copy attributes, such as when passing models — we use the model as is. You can override this behaviour by setting model_config['revalidate_instances'] = 'always'.",
+        'text': "Note There are some situations where Pydantic does not copy attributes, such as when passing models — we use the model as is. You can override this behaviour by setting model_config['revalidate_instances'] = 'always'.",
         'type': 'admonition',
       }),
       dict({
@@ -206758,7 +206758,7 @@
         'type': 'paragraph',
       }),
       dict({
-        'block_id': 'b_35bb0147b6a7',
+        'block_id': 'b_2626c2c320b6',
         'data': dict({
           'items': list([
             dict({
@@ -206796,7 +206796,7 @@
         ]),
         'order': 208,
         'page': None,
-        'text': '** (entire segment)Matches any number of file or directory segments, including zero. * (entire segment)Matches one file or directory segment. * (part of a segment)Matches any number of non-separator characters, including zero. ?Matches one non-separator character. [seq]Matches one character in seq, where seq is a sequence of characters. Range expressions are supported; for example, [a-z] matches any lowercase ASCII letter. Multiple ranges can be combined: [a-zA-Z0-9_] matches any ASCII letter, digit, or underscore. [!seq]Matches one character not in seq, where seq follows the same rules as above.',
+        'text': '** (entire segment) Matches any number of file or directory segments, including zero. * (entire segment) Matches one file or directory segment. * (part of a segment) Matches any number of non-separator characters, including zero. ? Matches one non-separator character. [seq] Matches one character in seq, where seq is a sequence of characters. Range expressions are supported; for example, [a-z] matches any lowercase ASCII letter. Multiple ranges can be combined: [a-zA-Z0-9_] matches any ASCII letter, digit, or underscore. [!seq] Matches one character not in seq, where seq follows the same rules as above.',
         'type': 'definition_list',
       }),
       dict({
@@ -245265,7 +245265,7 @@
   ## v1.8.2 (2021-05-11)
   
   > [!WARNING]
-  > CautionA security vulnerability, level “moderate” is fixed in v1.8.2. Please upgrade ASAP. See security advisory CVE-2021-29510
+  > Caution A security vulnerability, level “moderate” is fixed in v1.8.2. Please upgrade ASAP. See security advisory CVE-2021-29510
   
   - Security fix: Fix date and datetime parsing so passing either 'infinity' or float('inf') (or their negative values) does not cause an infinite loop, see security advisory CVE-2021-29510
   - fix schema generation with Enum by generating a valid name, #2575 by @PrettyWood
@@ -246067,7 +246067,7 @@
   ```
   
   > [!NOTE]
-  > NoteEven though name is assigned a value, it is still required and has no default value. If you want to emphasize on the fact that a value must be provided, you can use the ellipsis: However, its usage is discouraged as it doesn’t play well with static type checkers.
+  > Note Even though name is assigned a value, it is still required and has no default value. If you want to emphasize on the fact that a value must be provided, you can use the ellipsis: However, its usage is discouraged as it doesn’t play well with static type checkers.
   
   ```python
   class Model(BaseModel):
@@ -246099,7 +246099,7 @@
   However, note that certain arguments to the Field() function (namely, default, default_factory, and alias) are taken into account by static type checkers to synthesize a correct __init__() method. The annotated pattern is not understood by them, so you should use the normal assignment form instead.
   
   > [!TIP]
-  > TipThe annotated pattern can also be used to add metadata to specific parts of the type. For instance, validation constraints can be added this way: Be careful not mixing field and type metadata: The Field() function is applied to int type, hence the deprecated flag won't have any effect. While this may be confusing given that the name of the Field() function would imply it should apply to the field, the API was designed when this function was the only way to provide metadata. You can alternatively make use of the annotated_types library which is now supported by Pydantic. The Field() function is applied to the "top-level" union type, hence the deprecated flag will be applied to the field.
+  > Tip The annotated pattern can also be used to add metadata to specific parts of the type. For instance, validation constraints can be added this way: Be careful not mixing field and type metadata: The Field() function is applied to int type, hence the deprecated flag won't have any effect. While this may be confusing given that the name of the Field() function would imply it should apply to the field, the API was designed when this function was the only way to provide metadata. You can alternatively make use of the annotated_types library which is now supported by Pydantic. The Field() function is applied to the "top-level" union type, hence the deprecated flag will be applied to the field.
   
   ```python
   from typing import Annotated
@@ -246264,7 +246264,7 @@
   ## Field aliases
   
   > [!TIP]
-  > TipRead more about aliases in the dedicated section.
+  > Tip Read more about aliases in the dedicated section.
   
   For validation and serialization, you can define an alias for a field.
   
@@ -246346,7 +246346,7 @@
   The serialization alias 'username' is used for serialization.
   
   > [!NOTE]
-  > Alias precedence and priorityIn case you use alias together with validation_alias or serialization_alias at the same time, the validation_alias will have priority over alias for validation, and serialization_alias will have priority over alias for serialization.If you provide a value for the alias_generator model setting, you can control the order of precedence for field alias and generated aliases via the alias_priority field parameter. You can read more about alias precedence here.
+  > Alias precedence and priority In case you use alias together with validation_alias or serialization_alias at the same time, the validation_alias will have priority over alias for validation, and serialization_alias will have priority over alias for serialization. If you provide a value for the alias_generator model setting, you can control the order of precedence for field alias and generated aliases via the alias_priority field parameter. You can read more about alias precedence here.
   
   Static type checking/IDE support
   
@@ -246453,7 +246453,7 @@
   The available constraints for each type (and the way they affect the JSON Schema) are described in the standard library types documentation.
   
   > [!NOTE]
-  > NoteWhen adding constraints to a union type, if a member of the union is None or the MISSING sentinel, the constraints will be automatically applied to the remaining type(s) of the union:
+  > Note When adding constraints to a union type, if a member of the union is None or the MISSING sentinel, the constraints will be automatically applied to the remaining type(s) of the union:
   
   ```python
   from typing import Annotated
@@ -246743,7 +246743,7 @@
   ```
   
   > [!NOTE]
-  > Support for category and stacklevelThe current implementation of this feature does not take into account the category and stacklevel arguments to the deprecated decorator. This might land in a future version of Pydantic.
+  > Support for category and stacklevel The current implementation of this feature does not take into account the category and stacklevel arguments to the deprecated decorator. This might land in a future version of Pydantic.
   
   ### deprecated as a boolean
   
@@ -246762,7 +246762,7 @@
   ```
   
   > [!WARNING]
-  > Accessing a deprecated field in validatorsWhen accessing a deprecated field inside a validator, the deprecation warning will be emitted. You can use catch_warnings to explicitly ignore it:
+  > Accessing a deprecated field in validators When accessing a deprecated field inside a validator, the deprecation warning will be emitted. You can use catch_warnings to explicitly ignore it:
   
   ```python
   import warnings
@@ -246808,7 +246808,7 @@
   The @computed_field decorator can be used to include properties (or cached properties) when serializing a model or dataclass. The property will also be included in the JSON Schema (in serialization mode).
   
   > [!NOTE]
-  > NoteProperties can be useful for fields that are computed from other fields, or for fields that are expensive to be computed (and thus, are cached if using @cached_property).However, note that Pydantic will not perform any additional logic on the wrapped property (validation, cache invalidation, etc.).
+  > Note Properties can be useful for fields that are computed from other fields, or for fields that are expensive to be computed (and thus, are cached if using @cached_property). However, note that Pydantic will not perform any additional logic on the wrapped property (validation, cache invalidation, etc.).
   
   Here’s an example of the JSON schema (in serialization mode) generated for a model with a computed field:
   
@@ -246907,12 +246907,12 @@
   Untrusted data can be passed to a model and, after parsing and validation, Pydantic guarantees that the fields of the resultant model instance will conform to the field types defined on the model.
   
   > [!NOTE]
-  > Validation — a deliberate misnomerTL;DRWe use the term “validation” to refer to the process of instantiating a model (or other type) that adheres to specified types and constraints. This task, which Pydantic is well known for, is most widely recognized as “validation” in colloquial terms, even though in other contexts the term “validation” may be more restrictive.The long versionThe potential confusion around the term “validation” arises from the fact that, strictly speaking, Pydantic’s primary focus doesn’t align precisely with the dictionary definition of “validation”: validation noun the action of checking or proving the validity or accuracy of something. In Pydantic, the term “validation” refers to the process of instantiating a model (or other type) that adheres to specified types and constraints. Pydantic guarantees the types and constraints of the output, not the input data. This distinction becomes apparent when considering that Pydantic’s ValidationError is raised when data cannot be successfully parsed into a model instance.While this distinction may initially seem subtle, it holds practical significance. In some cases, “validation” goes beyond just model creation, and can include the copying and coercion of data. This can involve copying arguments passed to the constructor in order to perform coercion to a new type without mutating the original input data. For a more in-depth understanding of the implications for your usage, refer to the Data Conversion and Attribute Copies sections below.In essence, Pydantic’s primary goal is to assure that the resulting structure post-processing (termed “validation”) precisely conforms to the applied type hints. Given the widespread adoption of “validation” as the colloquial term for this process, we will consistently use it in our documentation.While the terms “parse” and “validation” were previously used interchangeably, moving forward, we aim to exclusively employ “validate”, with “parse” reserved specifically for discussions related to JSON parsing.
+  > Validation — a deliberate misnomer TL;DR We use the term “validation” to refer to the process of instantiating a model (or other type) that adheres to specified types and constraints. This task, which Pydantic is well known for, is most widely recognized as “validation” in colloquial terms, even though in other contexts the term “validation” may be more restrictive. The long version The potential confusion around the term “validation” arises from the fact that, strictly speaking, Pydantic’s primary focus doesn’t align precisely with the dictionary definition of “validation”: validation noun the action of checking or proving the validity or accuracy of something. In Pydantic, the term “validation” refers to the process of instantiating a model (or other type) that adheres to specified types and constraints. Pydantic guarantees the types and constraints of the output, not the input data. This distinction becomes apparent when considering that Pydantic’s ValidationError is raised when data cannot be successfully parsed into a model instance. While this distinction may initially seem subtle, it holds practical significance. In some cases, “validation” goes beyond just model creation, and can include the copying and coercion of data. This can involve copying arguments passed to the constructor in order to perform coercion to a new type without mutating the original input data. For a more in-depth understanding of the implications for your usage, refer to the Data Conversion and Attribute Copies sections below. In essence, Pydantic’s primary goal is to assure that the resulting structure post-processing (termed “validation”) precisely conforms to the applied type hints. Given the widespread adoption of “validation” as the colloquial term for this process, we will consistently use it in our documentation. While the terms “parse” and “validation” were previously used interchangeably, moving forward, we aim to exclusively employ “validate”, with “parse” reserved specifically for discussions related to JSON parsing.
   
   ## Basic model usage
   
   > [!NOTE]
-  > NotePydantic relies heavily on the existing Python typing constructs to define models. If you are not familiar with those, the following resources can be useful:
+  > Note Pydantic relies heavily on the existing Python typing constructs to define models. If you are not familiar with those, the following resources can be useful:
   
   - The Type System Guides
   - The mypy documentation
@@ -246975,7 +246975,7 @@
   ```
   
   > [!WARNING]
-  > CautionWhen defining your models, watch out for naming collisions between your field name and its type annotation.For example, the following will not behave as expected and would yield a validation error: Because of how Python evaluates annotated assignment statements, the statement is equivalent to int: None = None, thus leading to a validation error.
+  > Caution When defining your models, watch out for naming collisions between your field name and its type annotation. For example, the following will not behave as expected and would yield a validation error: Because of how Python evaluates annotated assignment statements, the statement is equivalent to int: None = None, thus leading to a validation error.
   
   ```python
   from pydantic import BaseModel
@@ -247011,10 +247011,10 @@
   - model_fields_set: The set of fields which were explicitly provided when the model was initialized.
   
   > [!NOTE]
-  > NoteSee the API documentation of BaseModel for the class definition including a full list of methods and attributes.
+  > Note See the API documentation of BaseModel for the class definition including a full list of methods and attributes.
   
   > [!TIP]
-  > TipSee Changes to pydantic.BaseModel in the Migration Guide for details on changes from Pydantic V1.
+  > Tip See Changes to pydantic.BaseModel in the Migration Guide for details on changes from Pydantic V1.
   
   ## Data conversion
   
@@ -247272,7 +247272,7 @@
   Compared to using the model constructor, it is possible to control several validation parameters when using the model_validate_*() methods (strictness, extra data, validation context, etc.).
   
   > [!NOTE]
-  > NoteDepending on the types and model configuration involved, the Python and JSON modes may have different validation behavior (e.g. with strictness). If you have data coming from a non-JSON source, but want the same validation behavior and errors you’d get from the JSON mode, our recommendation for now is to either dump your data to JSON (e.g. using json.dumps()), or use model_validate_strings() if the data takes the form of a (potentially nested) dictionary with string keys and values. Progress for this feature can be tracked in this issue.
+  > Note Depending on the types and model configuration involved, the Python and JSON modes may have different validation behavior (e.g. with strictness). If you have data coming from a non-JSON source, but want the same validation behavior and errors you’d get from the JSON mode, our recommendation for now is to either dump your data to JSON (e.g. using json.dumps()), or use model_validate_strings() if the data takes the form of a (potentially nested) dictionary with string keys and values. Progress for this feature can be tracked in this issue.
   
   ```python
   from datetime import datetime
@@ -247332,10 +247332,10 @@
   - when one or more of the validator functions have side effects that you don’t want to be triggered.
   
   > [!WARNING]
-  > Cautionmodel_construct() does not do any validation, meaning it can create models which are invalid. You should only ever use the model_construct() method with data which has already been validated, or that you definitely trust.
+  > Caution model_construct() does not do any validation, meaning it can create models which are invalid. You should only ever use the model_construct() method with data which has already been validated, or that you definitely trust.
   
   > [!NOTE]
-  > NoteIn Pydantic V2, the performance gap between validation (either with direct instantiation or the model_validate* methods) and model_construct() has been narrowed considerably. For simple models, going with validation may even be faster. If you are using model_construct() for performance reasons, you may want to profile your use case before assuming it is actually faster.
+  > Note In Pydantic V2, the performance gap between validation (either with direct instantiation or the model_validate* methods) and model_construct() has been narrowed considerably. For simple models, going with validation may even be faster. If you are using model_construct() for performance reasons, you may want to profile your use case before assuming it is actually faster.
   
   Note that for root models, the root value can be passed to model_construct() positionally, instead of using a keyword argument.
   
@@ -247640,14 +247640,14 @@
   Full support for the type parameter syntax and type variable defaults.
   
   > [!WARNING]
-  > CautionWhen parametrizing a model with a concrete type, Pydantic does not validate that the provided type is assignable to the type variable if it has an upper bound.
+  > Caution When parametrizing a model with a concrete type, Pydantic does not validate that the provided type is assignable to the type variable if it has an upper bound.
   
   Any configuration, validation or serialization logic set on the generic model will also be applied to the parametrized classes, in the same way as when inheriting from a model class. Any custom methods or attributes will also be inherited.
   
   Generic models also integrate properly with type checkers, so you get all the type checking you would expect if you were to declare a distinct type for each parametrization.
   
   > [!NOTE]
-  > NoteInternally, Pydantic creates subclasses of the generic model at runtime when the generic model class is parametrized. These classes are cached, so there should be minimal overhead introduced by the use of generics models.
+  > Note Internally, Pydantic creates subclasses of the generic model at runtime when the generic model class is parametrized. These classes are cached, so there should be minimal overhead introduced by the use of generics models.
   
   To inherit from a generic model and preserve the fact that it is generic, the subclass must also inherit from Generic:
   
@@ -247793,7 +247793,7 @@
   The OuterT model is parametrized with int, but the data associated with the T annotations during validation is of type str, leading to validation errors.
   
   > [!WARNING]
-  > CautionWhile it may not raise an error, we strongly advise against using parametrized generics in isinstance() checks.For example, you should not do isinstance(my_model, MyGenericModel[int]). However, it is fine to do isinstance(my_model, MyGenericModel) (note that, for standard generics, it would raise an error to do a subclass check with a parameterized generic class).If you need to perform isinstance() checks against parametrized generics, you can do this by subclassing the parametrized generic class:
+  > Caution While it may not raise an error, we strongly advise against using parametrized generics in isinstance() checks. For example, you should not do isinstance(my_model, MyGenericModel[int]). However, it is fine to do isinstance(my_model, MyGenericModel) (note that, for standard generics, it would raise an error to do a subclass check with a parameterized generic class). If you need to perform isinstance() checks against parametrized generics, you can do this by subclassing the parametrized generic class:
   
   ```python
   class MyIntModel(MyGenericModel[int]): ...
@@ -247902,7 +247902,7 @@
   ```
   
   > [!WARNING]
-  > CautionIn some cases, validation against an unparametrized generic model can lead to data loss. Specifically, if a subtype of the type variable upper bound, constraints, or default is being used and the model isn’t explicitly parametrized, the resulting type will not be the one being provided: When the generic isn't parametrized, the input data is validated against the ItemT upper bound. Given that ItemBase has no fields, the item field information is lost. In this case, the type variable is explicitly parametrized, so the input data is validated against the IntItem class.
+  > Caution In some cases, validation against an unparametrized generic model can lead to data loss. Specifically, if a subtype of the type variable upper bound, constraints, or default is being used and the model isn’t explicitly parametrized, the resulting type will not be the one being provided: When the generic isn't parametrized, the input data is validated against the ItemT upper bound. Given that ItemBase has no fields, the item field information is lost. In this case, the type variable is explicitly parametrized, so the input data is validated against the IntItem class.
   
   ```python
   from typing import Generic, TypeVar
@@ -248209,13 +248209,13 @@
   The __namespace__ argument. Unlike __validators__, it isn’t restricted to validators and can be used to provide any attribute to the class namespace (such as computed fields, properties or methods). It is now recommended to use __namespace__ instead of __validators__, which will be deprecated in v3.
   
   > [!NOTE]
-  > NoteTo pickle a dynamically created model:
+  > Note To pickle a dynamically created model:
   
   - the model must be defined globally
   - the __module__ argument must be provided
   
   > [!WARNING]
-  > CautionThis function may execute arbitrary code contained in field annotations, if string references need to be evaluated.See Security implications of introspecting annotations for more information.
+  > Caution This function may execute arbitrary code contained in field annotations, if string references need to be evaluated. See Security implications of introspecting annotations for more information.
   
   See also: the dynamic model example, providing guidelines to derive an optional model from another one.
   
@@ -248279,10 +248279,10 @@
   Models can be configured to be immutable via model_config['frozen'] = True. When this is set, attempting to change the values of instance attributes will raise errors. See the API reference for more details.
   
   > [!NOTE]
-  > NoteThis behavior was achieved in Pydantic V1 via the config setting allow_mutation = False. This config flag is deprecated in Pydantic V2, and has been replaced with frozen.
+  > Note This behavior was achieved in Pydantic V1 via the config setting allow_mutation = False. This config flag is deprecated in Pydantic V2, and has been replaced with frozen.
   
   > [!WARNING]
-  > CautionIn Python, immutability is not enforced. Developers have the ability to modify objects that are conventionally considered “immutable” if they choose to do so.
+  > Caution In Python, immutability is not enforced. Developers have the ability to modify objects that are conventionally considered “immutable” if they choose to do so.
   
   ```python
   from pydantic import BaseModel, ConfigDict, ValidationError
@@ -248512,7 +248512,7 @@
   ```
   
   > [!NOTE]
-  > NoteA match-case statement may seem as if it creates a new model, but don’t be fooled; it is just syntactic sugar for getting an attribute and either comparing it or declaring and initializing it.
+  > Note A match-case statement may seem as if it creates a new model, but don’t be fooled; it is just syntactic sugar for getting an attribute and either comparing it or declaring and initializing it.
   
   ## Attribute copies
   
@@ -248545,7 +248545,7 @@
   ```
   
   > [!NOTE]
-  > NoteThere are some situations where Pydantic does not copy attributes, such as when passing models — we use the model as is. You can override this behaviour by setting model_config['revalidate_instances'] = 'always'.
+  > Note There are some situations where Pydantic does not copy attributes, such as when passing models — we use the model as is. You can override this behaviour by setting model_config['revalidate_instances'] = 'always'.
   
   Thanks for your feedback!
   '''

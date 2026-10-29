@@ -247,8 +247,25 @@ def _collect_links(el: HtmlElement, base_url: str) -> list[Link]:
 
 
 def _block_text(el: HtmlElement) -> str:
-    """Normalized, markup-free text content of ``el``."""
-    return normalize_text(el.text_content() or "")
+    """Normalized, markup-free text content of ``el`` (block boundaries kept)."""
+    return normalize_text(_raw_text_without(el, frozenset()))
+
+
+#: Elements a browser lays out as their own box or line. Where one starts or
+#: ends, text gets a separator: ``<p>Note</p><p>Since 3.9</p>`` is "Note Since
+#: 3.9", not "NoteSince 3.9" (M10b Phase P, research front C L3). Inline
+#: elements (``span``, ``a``, ``code``, ``em``...) never get one, so
+#: ``foo<b>bar</b>`` stays one word.
+_BLOCK_BOUNDARY_TAGS = frozenset(
+    {
+        "address", "article", "aside", "blockquote", "br", "caption", "dd",
+        "details", "dialog", "div", "dl", "dt", "fieldset", "figcaption",
+        "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+        "header", "hr", "legend", "li", "main", "nav", "ol", "p", "pre",
+        "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead",
+        "tr", "ul",
+    }
+)  # fmt: skip
 
 
 def _raw_text_without(el: HtmlElement, skip: frozenset[str]) -> str:
@@ -270,7 +287,12 @@ def _raw_text_without(el: HtmlElement, skip: frozenset[str]) -> str:
                 if child.tag in skip:
                     parts.append(" ")
                 else:
+                    boundary = child.tag in _BLOCK_BOUNDARY_TAGS
+                    if boundary:
+                        parts.append(" ")
                     walk(child)
+                    if boundary:
+                        parts.append(" ")
             if child.tail:
                 parts.append(child.tail)
 
@@ -570,14 +592,21 @@ def _direct_text(li: HtmlElement) -> list[str]:
         elif child.tag in _LI_STRUCTURAL:
             parts.append(" ")  # emitted as its own block by _visit_list
         else:
-            parts.append(_raw_text_without(child, _LI_STRUCTURAL))
+            sep = " " if child.tag in _BLOCK_BOUNDARY_TAGS else ""
+            parts.append(sep + _raw_text_without(child, _LI_STRUCTURAL) + sep)
         if child.tail:
             parts.append(child.tail)
     return parts
 
 
 def _cell_text(cell: HtmlElement) -> str:
-    """Normalized text of a single table cell."""
+    """Normalized text of a single table cell.
+
+    Kept as the raw ``text_content`` on purpose: adding block-boundary
+    separators inside cells (as ``_block_text`` does) lowered table-cell
+    recall on the extraction eval's test split (rule H7, log 2026-10-29), so
+    cell text stays as before until that is understood on fresh data.
+    """
     return normalize_text(cell.text_content() or "")
 
 
