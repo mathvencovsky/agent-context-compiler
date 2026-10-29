@@ -5,6 +5,34 @@ M10)**. O humano não financia rodada paga até lá (2026-10-28).
 **`app/` mudou depois da Emenda 15 (correções de segurança, Emenda 17): o
 harness recusa rodar até o recongelamento no fim do M10b.**
 
+### M10b — recuperação: experimentos sem custo (2026-10-29, rodada 4 H e I)
+
+Branch `claude/m10b-retrieval`. Tudo desligado por padrão: a saída do produto e
+do benchmark não muda (testes de recuperação, snapshots e runner `ours`
+inalterados). Regras de aceite escritas antes de medir: DECISIONS 2026-10-29.
+- **Léxico** (`app/retrieve/lexical.py`): `LEXICAL_SCORER=bm25f` (campos título,
+  títulos acima, prosa, código; IDF do pedido), `LEXICAL_IDENTIFIERS`,
+  `LEXICAL_SYMBOL_BONUS`, `LEXICAL_COVERAGE`. **Prior de página**
+  (`app/retrieve/page_prior.py`): `PAGE_PRIOR=rrf|multiply`. Mesma função no
+  produto e no benchmark (`rank_lexical`).
+- **Modelos locais:** `EMBEDDINGS_BASE_URL` (OpenAI-compatível) e
+  `RERANKER_BASE_URL` (Jina-compatível), só IP de loopback, cliente sem
+  redirecionamento nem proxy; `embed_query()` no contrato de embeddings
+  (`EMBEDDINGS_QUERY_PREFIX` para Qwen3). Dimensão 1024: plano no DECISIONS,
+  não implementado (o produto recusa `EMBEDDING_DIM` ≠ 1536 com local).
+- **Experimento:** `make m10b-retrieval ARGS="..."` (`bench/m10b_retrieval.py`):
+  `lexical`, `pages`, `rerank`, `embed`, `coverage`; metade A para iterar,
+  `--half B --confirm` uma vez. OpenAI/Jina só do cache (falta no cache = para,
+  0 pago); modelos locais pelo servidor llama.cpp.
+- Pendente (humano, Windows): subir os servidores llama.cpp e rodar os passos
+  (comandos no relatório da sessão); o cache OpenAI/Jina provavelmente não cobre
+  os chunks da extração nova, então use `--vector local` e
+  `--comparator none`, ou pague o cache com `make m10a-pending`.
+- Mudanças em `app/` para a emenda de recongelamento: `retrieve/lexical.py`,
+  `retrieve/page_prior.py` (novo), `retrieve/assemble.py`, `config.py`,
+  `providers/local_endpoint.py`, `providers/embeddings/{base,fake,openai,local}.py`,
+  `providers/rerank/local.py`, `api/assemble.py`. Sem migração.
+
 ### M10b — proveniência, harness e contrato de falha (2026-10-29, revisão externa)
 
 Itens dos documentos do revisor externo conferidos contra o código
