@@ -87,6 +87,22 @@ FROZEN_SETTINGS = (
     "markdown_alternate",
     "markdown_alternate_min_overlap",
     "fetch_accept_markdown",
+    # M10b retrieval experiments (DECISIONS 2026-10-29): off by default; a run
+    # measures the frozen defaults, so a .env cannot switch a scorer, the page
+    # prior or a local model server on behind the harness's back.
+    "lexical_scorer",
+    "lexical_title_weight",
+    "lexical_identifiers",
+    "lexical_symbol_bonus",
+    "lexical_coverage",
+    "page_prior",
+    "page_prior_weight",
+    "page_prior_alpha",
+    "page_prior_query_words",
+    "embeddings_base_url",
+    "embeddings_query_prefix",
+    "reranker_base_url",
+    "reranker_score_transform",
 )
 
 

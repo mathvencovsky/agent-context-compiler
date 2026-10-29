@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate check test bench dev m10a-pending extract-eval
+.PHONY: setup up down migrate check test bench dev m10a-pending extract-eval m10b-retrieval
 
 # First run: dependencies, .env (never over an existing one), services, schema.
 setup:
@@ -49,3 +49,12 @@ m10a-pending:
 extract-eval:
 	uv run python -m bench.extract_eval.fetch
 	uv run python -m bench.extract_eval.run $(ARGS)
+
+# Zero-cost M10b retrieval experiments (research round 4, fronts H and I) on
+# the dev slice; rules fixed in DECISIONS 2026-10-29. OpenAI/Jina are read from
+# the cache only (a miss stops the run, never pays); local models go through a
+# llama.cpp server on 127.0.0.1. Examples:
+#   make m10b-retrieval ARGS="lexical --half A --vector none"
+#   make m10b-retrieval ARGS="rerank --half A --comparator none --reranker-url http://127.0.0.1:8081 --reranker-model qwen3-reranker-0.6b-q8_0"
+m10b-retrieval:
+	uv run python -m bench.m10b_retrieval $(ARGS)

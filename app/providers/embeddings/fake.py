@@ -25,6 +25,10 @@ class FakeEmbeddingProvider:
         self.model = model
         self.dim = dim
 
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a query exactly like a document (symmetric model)."""
+        return self.embed([text])[0]
+
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Return one deterministic unit vector per input text."""
         return [self._embed_one(text) for text in texts]

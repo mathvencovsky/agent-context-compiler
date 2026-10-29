@@ -205,6 +205,10 @@ class CachingEmbeddingProvider:
         self._delegate = delegate
         self.model = delegate.model
         self.dim = delegate.dim
+        #: Instruction an asymmetric delegate puts before queries ("" for
+        #: OpenAI), so a query is cached as the exact text the model embeds and
+        #: symmetric delegates keep their old cache keys.
+        self.query_prefix: str = getattr(delegate, "query_prefix", "")
         self._cache = (
             store
             if store is not None
@@ -212,6 +216,10 @@ class CachingEmbeddingProvider:
         )
         self.api_calls = 0
         self.hits = 0
+
+    def embed_query(self, text: str) -> list[float]:
+        """The query's vector: ``embed([query_prefix + text])[0]``, cached."""
+        return self.embed([self.query_prefix + text])[0]
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
