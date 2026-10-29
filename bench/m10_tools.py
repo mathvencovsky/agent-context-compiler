@@ -106,6 +106,7 @@ FROZEN_SETTINGS = (
     "page_prior_query_words",
     "embeddings_base_url",
     "embeddings_query_prefix",
+    "embeddings_pad_to_column",
     "reranker_base_url",
     "reranker_score_transform",
     # M10b efficiency (DECISIONS 2026-10-29): when a render stops waiting and how

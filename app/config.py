@@ -185,6 +185,10 @@ class Settings(BaseSettings):
     # that return them.
     embeddings_base_url: str | None = None
     embeddings_query_prefix: str = ""
+    # embeddings_pad_to_column: EMBEDDING_DIM is then the local model's own
+    # dimension (e.g. 1024) and each vector is zero-padded to the column's 1536;
+    # cosine distances are unchanged (DECISIONS 2026-10-29, daily use).
+    embeddings_pad_to_column: bool = False
     reranker_base_url: str | None = None
     reranker_score_transform: Literal["none", "sigmoid"] = "none"
 

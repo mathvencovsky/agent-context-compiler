@@ -111,6 +111,27 @@ def test_local_embeddings_refuse_a_dimension_the_column_cannot_hold() -> None:
         provide_embeddings(settings)
 
 
+def test_pad_to_column_accepts_a_smaller_local_model() -> None:
+    settings = _settings(
+        embeddings_base_url="http://127.0.0.1:8080",
+        embedding_dim=1024,
+        embeddings_pad_to_column=True,
+    )
+    embeddings = provide_embeddings(settings)
+    assert isinstance(embeddings, OpenAICompatibleEmbeddingProvider)
+    assert (embeddings.dim, embeddings.pad_to) == (1024, 1536)
+
+
+def test_pad_to_column_still_refuses_a_larger_model() -> None:
+    settings = _settings(
+        embeddings_base_url="http://127.0.0.1:8080",
+        embedding_dim=2048,
+        embeddings_pad_to_column=True,
+    )
+    with pytest.raises(RuntimeError, match="vector\\(1536\\)"):
+        provide_embeddings(settings)
+
+
 def test_demo_mode_wins_over_local_urls() -> None:
     from app.providers.embeddings.fake import FakeEmbeddingProvider
     from app.providers.rerank.fake import FakeRerankProvider
