@@ -1307,7 +1307,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/fastapi_body_params.html',
     }),
-    'version_id': 'ver_a2cf2a51bff0023b',
+    'version_id': 'ver_91149dfcac0328a7',
     'warnings': list([
       dict({
         'block_id': None,
@@ -4144,7 +4144,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/fastapi_first_steps.html',
     }),
-    'version_id': 'ver_794c7112882e54dd',
+    'version_id': 'ver_e7866787fcd8cc2b',
     'warnings': list([
       dict({
         'block_id': None,
@@ -5653,7 +5653,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/fastapi_query_params.html',
     }),
-    'version_id': 'ver_7a6fb465f9f3d5ba',
+    'version_id': 'ver_2d2b8affae094125',
     'warnings': list([
       dict({
         'block_id': None,
@@ -72164,7 +72164,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/fastapi_release_notes.html',
     }),
-    'version_id': 'ver_06f924667f2ebd1d',
+    'version_id': 'ver_9f4643fb40eb5c7d',
     'warnings': list([
       dict({
         'block_id': None,
@@ -109765,7 +109765,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/flask_api_reference.html',
     }),
-    'version_id': 'ver_6e6b6f9e01b93f54',
+    'version_id': 'ver_0b119519778f705f',
     'warnings': list([
       dict({
         'block_id': 'b_c092156aca33',
@@ -112546,7 +112546,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/httpx_quickstart.html',
     }),
-    'version_id': 'ver_3387d642a52ab4ef',
+    'version_id': 'ver_ec34b809943b3068',
     'warnings': list([
       dict({
         'block_id': None,
@@ -114857,7 +114857,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/mkdocs_material_admonitions.html',
     }),
-    'version_id': 'ver_6e05cc2a52d53bcb',
+    'version_id': 'ver_a24425877eee5fb5',
     'warnings': list([
       dict({
         'block_id': None,
@@ -133593,7 +133593,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/mkdocs_material_changelog.html',
     }),
-    'version_id': 'ver_49cced01b3a79ce3',
+    'version_id': 'ver_c18105a528069669',
     'warnings': list([
       dict({
         'block_id': None,
@@ -136782,7 +136782,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/mkdocs_material_code_blocks.html',
     }),
-    'version_id': 'ver_80a251c68aafa0a5',
+    'version_id': 'ver_cad464e2628f643e',
     'warnings': list([
       dict({
         'block_id': None,
@@ -174380,7 +174380,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/pydantic_changelog.html',
     }),
-    'version_id': 'ver_a9da15f295d4fd13',
+    'version_id': 'ver_6b887e616a08ce9e',
     'warnings': list([
       dict({
         'block_id': None,
@@ -178502,7 +178502,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/pydantic_fields.html',
     }),
-    'version_id': 'ver_98558b86d1ffccd7',
+    'version_id': 'ver_b36928154cc08292',
     'warnings': list([
       dict({
         'block_id': None,
@@ -185767,7 +185767,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/pydantic_models.html',
     }),
-    'version_id': 'ver_205fc769c04ee3c5',
+    'version_id': 'ver_39ee29282ac14b50',
     'warnings': list([
       dict({
         'block_id': None,
@@ -194834,7 +194834,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/python_stdlib_argparse.html',
     }),
-    'version_id': 'ver_d8d48312f538c894',
+    'version_id': 'ver_4cda8a5920de9e9b',
     'warnings': list([
       dict({
         'block_id': None,
@@ -200647,7 +200647,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/python_stdlib_functions.html',
     }),
-    'version_id': 'ver_ac67d74fa9157371',
+    'version_id': 'ver_2e203e8ece138c58',
     'warnings': list([
       dict({
         'block_id': None,
@@ -207882,7 +207882,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/python_stdlib_pathlib.html',
     }),
-    'version_id': 'ver_b4950675f8276040',
+    'version_id': 'ver_a050050f07dbf35a',
     'warnings': list([
       dict({
         'block_id': None,
@@ -211252,7 +211252,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/python_tutorial_classes.html',
     }),
-    'version_id': 'ver_a75e4cc8dbc6c8c7',
+    'version_id': 'ver_5d4ef19c83cb707b',
     'warnings': list([
       dict({
         'block_id': None,
@@ -214603,7 +214603,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/python_tutorial_datastructures.html',
     }),
-    'version_id': 'ver_9a75766e7a24badd',
+    'version_id': 'ver_7ff5364dedff5b50',
     'warnings': list([
       dict({
         'block_id': None,
@@ -225931,7 +225931,7 @@
       'render_mode': 'http',
       'url': 'https://fixtures.nina.test/html/requests_api_reference.html',
     }),
-    'version_id': 'ver_d3e6b2c8bc067409',
+    'version_id': 'ver_cac04bc1b63c46d4',
     'warnings': list([
       dict({
         'block_id': None,

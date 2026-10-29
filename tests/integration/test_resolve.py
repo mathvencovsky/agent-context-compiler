@@ -176,5 +176,5 @@ def test_resolve_version_id_matches_content_hash(harness: Harness) -> None:
     harness.transport.set(_PATH, lambda: html_response(_HTML_A))
     body = _resolve(harness)
 
-    expected = make_version_id(hashlib.sha256(_HTML_A).hexdigest())
+    expected = make_version_id(body["document_id"], hashlib.sha256(_HTML_A).hexdigest())
     assert body["version_id"] == expected

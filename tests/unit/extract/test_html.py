@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 
 from app.extract.html import extract_html
-from app.extract.ir import Block, Document, SourceInfo
+from app.extract.ir import Block, Document, SourceInfo, make_version_id
 
 
 def _source(final_url: str = "https://docs.example.com/guide/") -> SourceInfo:
@@ -204,7 +204,7 @@ def test_readability_fallback_preserves_dropped_table() -> None:
 def test_document_ids_and_metadata() -> None:
     doc = _extract("<h1>Title</h1><p>content body goes here now</p>")
     assert doc.document_id.startswith("doc_")
-    assert doc.version_id == "ver_" + "a" * 16
+    assert doc.version_id == make_version_id(doc.document_id, "a" * 64)
     assert doc.metadata.title == "T"
     assert doc.metadata.lang == "en"
 

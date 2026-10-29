@@ -24,12 +24,25 @@ client). Instead it does a full GET and dedups by ``content_hash``: an unchanged
 body creates no new version. A ``304 Not Modified`` returned by the transport is
 still handled (fetched_at touched, no new version) so a conditional-aware front
 cache or test transport behaves correctly.
+
+Extractor upgrades (DECISIONS.md 2026-10-29): a version is one (raw bytes,
+extractor version). When the stored current version was built by another
+``EXTRACTOR_VERSION`` (NULL included), every path that would serve it (cache
+hit, 304, same-hash dedup) re-extracts the raw bytes instead, under a new
+``version_id``; the old version row, blobs and chunks stay as they were. On a
+cache hit or a 304 the STORED raw bytes are re-extracted (no refetch of the
+page). The pipeline is re-run exactly as for a fresh fetch, so a page whose
+HTTP body needs a browser render (``render_mode == "browser"``) is rendered
+again: the rendered DOM is never stored, only the HTTP body is. That render is
+network access, so it is preceded by the robots gate and charged to the render
+quota like any render.
 """
 
 from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -53,6 +66,7 @@ from app.extract.ir import (
     Document,
     SourceInfo,
     Warning,
+    current_extractor_version,
     make_document_id,
     make_version_id,
 )
@@ -81,7 +95,7 @@ from app.fetch.robots import RobotsChecker
 from app.fetch.url_secrets import reject_secret_url
 from app.index.tokens import count_tokens
 from app.store.blobs import BlobStore
-from app.store.models import DocumentVersion
+from app.store.models import DocumentVersion, Source
 from app.store.repo import (
     DocumentRepo,
     domain_from_url,
@@ -467,6 +481,20 @@ def resolve_document(
         repo = DocumentRepo(session)
         source = repo.get_or_create_source(normalized_url, domain, document_id)
         current = repo.get_current_version(source)
+        ctx = _ResolveContext(
+            req=req,
+            request=request,
+            repo=repo,
+            source=source,
+            blobs=blobs,
+            robots=robots,
+            resolver=resolver,
+            transport=transport,
+            settings=settings,
+            guard=guard,
+            document_id=document_id,
+        )
+        extractor_version = current_extractor_version()
 
         # (3) CACHE HIT: fresh version, no force_refresh -> serve from storage.
         if (
@@ -474,6 +502,17 @@ def resolve_document(
             and not req.force_refresh
             and _is_fresh(current, now, settings.resolve_cache_ttl_seconds)
         ):
+            if current.extractor_version != extractor_version:
+                # (3b) Fresh bytes, outdated extraction: re-extract the stored
+                # raw body (no page fetch) into a new version.
+                response = _reextract_stored(
+                    current,
+                    fetched_at=_aware(current.fetched_at),
+                    cache_hit=True,
+                    ctx=ctx,
+                )
+                session.commit()
+                return response
             doc = blobs.get_ir(current.id)
             response = _build_response(
                 doc,
@@ -500,6 +539,13 @@ def resolve_document(
         # (6) 304 Not Modified: refresh fetched_at only, no new version.
         if result.status == 304 and current is not None:
             repo.touch_fetched_at(current, now)
+            if current.extractor_version != extractor_version:
+                # Unchanged bytes, outdated extraction: re-extract the stored body.
+                response = _reextract_stored(
+                    current, fetched_at=now, cache_hit=False, ctx=ctx
+                )
+                session.commit()
+                return response
             doc = blobs.get_ir(current.id)
             response = _build_response(
                 doc,
@@ -520,7 +566,11 @@ def resolve_document(
 
         # (7) content hash + dedup.
         content_hash = hashlib.sha256(result.body).hexdigest()
-        if current is not None and current.content_hash == content_hash:
+        if (
+            current is not None
+            and current.content_hash == content_hash
+            and current.extractor_version == extractor_version
+        ):
             repo.touch_fetched_at(current, now)
             doc = blobs.get_ir(current.id)
             response = _build_response(
@@ -556,36 +606,15 @@ def resolve_document(
             ),
         )
 
-        # (M9) record whether a browser render happened for usage accounting.
-        if request is not None:
-            set_usage_units(
-                request,
-                {"renders": 1 if doc.source.render_mode == "browser" else 0},
-            )
-
-        # (9) explicit failure: never a 200 empty with no warning.
-        _ensure_not_empty(doc)
-
-        # (10) persist raw + IR blobs and the new version row.
-        version_id = make_version_id(content_hash)
-        raw_key = blobs.put_raw(version_id, result.body)
-        ir_key = blobs.put_ir(version_id, doc)
-        repo.create_version(
-            source=source,
-            version_id=version_id,
-            content_hash=content_hash,
-            fetched_at=now,
-            etag=etag,
-            last_modified=last_modified,
-            render_mode=doc.source.render_mode,
-            raw_blob_key=raw_key,
-            ir_blob_key=ir_key,
-            warnings=_warnings_as_payload(doc.warnings),
-        )
-
-        # (11) build the response (markdown/blocks per req.formats).
-        response = _build_response(
-            doc, formats=req.formats, cache_hit=False, raw_text=raw_text
+        # (9)-(11) persist and respond.
+        response = _store_version(
+            doc,
+            body=result.body,
+            raw_text=raw_text,
+            content_type_header=result.headers.get("content-type"),
+            link_header=result.headers.get("link"),
+            cache_hit=False,
+            ctx=ctx,
         )
         session.commit()
         return response
@@ -594,6 +623,159 @@ def resolve_document(
         raise
     finally:
         session.close()
+
+
+@dataclass(frozen=True)
+class _ResolveContext:
+    """What the persist / re-extract helpers of one resolve call share."""
+
+    req: ResolveRequest
+    request: Request | None
+    repo: DocumentRepo
+    source: Source
+    blobs: BlobStore
+    robots: RobotsChecker
+    resolver: Resolver | None
+    transport: Transport | None
+    settings: Settings
+    guard: GuardResult
+    document_id: str
+
+
+def _store_version(
+    doc: Document,
+    *,
+    body: bytes,
+    raw_text: str,
+    content_type_header: str | None,
+    link_header: str | None,
+    cache_hit: bool,
+    ctx: _ResolveContext,
+) -> ResolveResponse:
+    """Persist ``doc`` as the source's current version and build the response.
+
+    Steps (9)-(11) of the state machine. The version id is
+    ``make_version_id(document_id, content_hash, EXTRACTOR_VERSION)``; when a
+    row with that id already exists (the page went back to bytes it served
+    before, A -> B -> A, or a concurrent resolve stored it first), that row is
+    made current again and served instead of inserting a duplicate.
+    """
+    # (M9) record whether a browser render happened for usage accounting.
+    if ctx.request is not None:
+        set_usage_units(
+            ctx.request,
+            {"renders": 1 if doc.source.render_mode == "browser" else 0},
+        )
+
+    # (9) explicit failure: never a 200 empty with no warning.
+    _ensure_not_empty(doc)
+
+    # (10) persist raw + IR blobs and the new version row.
+    extractor_version = current_extractor_version()
+    content_hash = doc.source.content_hash
+    version_id = make_version_id(ctx.document_id, content_hash, extractor_version)
+    existing = ctx.repo.get_version(version_id)
+    if existing is not None:
+        ctx.repo.set_current_version(ctx.source, existing)
+        if doc.source.fetched_at > _aware(existing.fetched_at):
+            ctx.repo.touch_fetched_at(existing, doc.source.fetched_at)
+        return _build_response(
+            ctx.blobs.get_ir(existing.id),
+            formats=ctx.req.formats,
+            cache_hit=cache_hit,
+            raw_text=raw_text,
+        )
+    doc.version_id = version_id
+    raw_key = ctx.blobs.put_raw(version_id, body)
+    ir_key = ctx.blobs.put_ir(version_id, doc)
+    ctx.repo.create_version(
+        source=ctx.source,
+        version_id=version_id,
+        content_hash=content_hash,
+        fetched_at=doc.source.fetched_at,
+        etag=doc.source.etag,
+        last_modified=doc.source.last_modified,
+        render_mode=doc.source.render_mode,
+        raw_blob_key=raw_key,
+        ir_blob_key=ir_key,
+        warnings=_warnings_as_payload(doc.warnings),
+        extractor_version=extractor_version,
+        content_type_header=content_type_header,
+        link_header=link_header,
+    )
+
+    # (11) build the response (markdown/blocks per req.formats).
+    return _build_response(
+        doc, formats=ctx.req.formats, cache_hit=cache_hit, raw_text=raw_text
+    )
+
+
+def _reextract_stored(
+    stored: DocumentVersion,
+    *,
+    fetched_at: datetime,
+    cache_hit: bool,
+    ctx: _ResolveContext,
+) -> ResolveResponse:
+    """Re-extract a stored version's raw bytes with the current extractor.
+
+    Used when ``stored.extractor_version`` is not ``EXTRACTOR_VERSION`` and the
+    bytes are known to be current (fresh cache, or a 304). The page is not
+    fetched again: the raw body, its response headers and the fetch metadata
+    come from storage (the old IR's ``source`` for the content type and final
+    URL). Rows written before migration 0006 have no stored Content-Type
+    header, so their charset is sniffed from the body (BOM, ``<meta>``, else
+    UTF-8). A browser render or a Markdown alternate, if the pipeline asks for
+    one, is network access: the render is preceded by the robots gate (and the
+    render quota), the alternate goes through robots and the guarded client
+    like any alternate. The stored version itself is never modified.
+    """
+    body = ctx.blobs.get_raw(stored.id)
+    old_source = ctx.blobs.get_ir(stored.id).source
+    content_type_header = stored.content_type_header or old_source.content_type
+    charge = _render_charger(ctx.request)
+
+    def on_render() -> None:
+        ctx.robots.is_allowed(ctx.guard.normalized_url)
+        if charge is not None:
+            charge()
+
+    doc, raw_text = _extract_document(
+        body=body,
+        content_type=old_source.content_type,
+        content_type_header=content_type_header,
+        guard=ctx.guard,
+        final_url=old_source.final_url,
+        etag=stored.etag,
+        last_modified=stored.last_modified,
+        content_hash=stored.content_hash,
+        fetched_at=fetched_at,
+        render=ctx.req.render,
+        resolver=ctx.resolver,
+        settings=ctx.settings,
+        on_render=on_render,
+        link_header=stored.link_header,
+        fetch_alternate=_alternate_fetcher(
+            robots=ctx.robots,
+            resolver=ctx.resolver,
+            transport=ctx.transport,
+            settings=ctx.settings,
+        ),
+    )
+    return _store_version(
+        doc,
+        body=body,
+        raw_text=raw_text,
+        content_type_header=stored.content_type_header,
+        link_header=stored.link_header,
+        cache_hit=cache_hit,
+        ctx=ctx,
+    )
+
+
+def _aware(value: datetime) -> datetime:
+    """``value`` as an aware UTC datetime (the DB column is naive)."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 @router.get("/v1/documents/{document_id}", response_model=ResolveResponse)

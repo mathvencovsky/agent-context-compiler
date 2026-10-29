@@ -222,7 +222,7 @@
       'render_mode': 'pdf',
       'url': 'https://fixtures.nina.test/pdf/api_reference.pdf',
     }),
-    'version_id': 'ver_c01a8d84da698a3e',
+    'version_id': 'ver_84da922657992a90',
     'warnings': list([
     ]),
   })

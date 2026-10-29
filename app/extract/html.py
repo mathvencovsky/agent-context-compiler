@@ -1397,7 +1397,7 @@ def extract_html(raw: bytes | str, source: SourceInfo) -> Document:
         warnings.append(hidden)
     return Document(
         document_id=make_document_id(source.url),
-        version_id=make_version_id(source.content_hash),
+        version_id=make_version_id(make_document_id(source.url), source.content_hash),
         source=source,
         metadata=metadata,
         blocks=walker.blocks,

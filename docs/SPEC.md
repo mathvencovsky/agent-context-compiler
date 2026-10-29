@@ -166,7 +166,7 @@ class Warning(BaseModel):
 
 class Document(BaseModel):
     document_id: str          # "doc_" + sha1(url normalizada)[:16]
-    version_id: str           # "ver_" + content_hash[:16]
+    version_id: str           # "ver_" + sha256(document_id + "\n" + content_hash + "\n" + EXTRACTOR_VERSION)[:16]
     source: SourceInfo
     metadata: Metadata
     blocks: list[Block]
@@ -179,6 +179,8 @@ class Document(BaseModel):
 - `code`: `{"language": str | None, "code": str}`. O código é preservado byte a byte, sem normalizar espaços.
 - `list`: `{"ordered": bool, "items": list[str]}`, com aninhamento representado por indentação de dois espaços em cada item.
 - `admonition`: `{"kind": "note" | "warning" | "tip" | "danger" | "info"}`. Detectar por classes comuns (`admonition`, `callout`, `alert`, `note`, `warning`) e por `role="note"`.
+
+**Versão = (documento, bytes, extrator):** `EXTRACTOR_VERSION` (`app/extract/ir.py`) é a versão do pipeline determinístico de extração (HTML, PDF, Markdown, texto e os chunks derivados da IR); sobe no mesmo commit de qualquer mudança que altere a saída da extração para os mesmos bytes (hoje `"2"`, a Fase P do M10b). O `version_id` deriva do `document_id`, do `content_hash` e da versão do extrator, então é determinístico: os mesmos bytes da mesma URL lidos pelo mesmo extrator têm sempre o mesmo id; um extrator novo dá um id novo; duas URLs que servem os mesmos bytes nunca dividem uma versão (DECISIONS 2026-10-29). Cada chunk e cada fragmento pertencem, pelo `version_id`, a exatamente um par (snapshot, versão do extrator).
 
 **Regra do `block_id`:** `"b_" + sha1(" > ".join(heading_path) + "|" + type + "|" + text_normalizado)[:12]`. Se repetir dentro do documento, acrescente `_2`, `_3` e assim por diante, em ordem. Um bloco que não mudou entre versões mantém o mesmo id.
 
@@ -204,6 +206,7 @@ class Document(BaseModel):
 - Lexical: o chunk pontua quantos dos seus tokens (minúsculas, `[a-z0-9]+`) são palavras da consulta; qualquer palavra conta, e o empate sai por `(document_id, ord)`. É a mesma função (`app/retrieve/lexical.overlap_ranks`) que o benchmark usa. A coluna `tsvector` gerada (configuração `simple`, índice GIN) continua no esquema, mas a busca não a usa (DECISIONS 2026-10-16).
 - Vetorial: coluna `vector(DIM)` (DIM vindo do provedor configurado) com índice HNSW de distância cosseno.
 - Chunks pertencem a uma `version_id`. Uma versão nova de um documento gera chunks novos; os antigos ficam até a limpeza.
+- **Cache do `resolve` e versão do extrator:** a versão atual de uma URL só é servida do armazenamento (cache válido, `304`, ou mesmo `content_hash` depois do TTL) se o `extractor_version` gravado nela for o `EXTRACTOR_VERSION` atual; `NULL` (linhas anteriores à migração 0006) nunca é. Senão o `resolve` reextrai os bytes brutos: no cache válido e no `304`, os bytes GUARDADOS, sem buscar a página de novo (`stats.cache_hit` continua `true` no cache válido); com o mesmo hash depois do TTL, o corpo recém-buscado. A reextração grava uma versão nova (id novo, IR e blobs novos, `fetched_at` do snapshot) e a torna atual; a versão antiga (linha, blobs e chunks) fica intacta e acessível por `GET /v1/documents/{id}?version_id=`. O `assemble` indexa a versão atual, então os chunks são refeitos na próxima chamada. A reextração usa o `Content-Type` e o `Link` gravados com a versão (para charset e Markdown alternativo); linhas antigas sem eles caem na detecção de charset pelo corpo. O DOM renderizado não é guardado, só o corpo HTTP: uma versão que precisou de navegador (`render_mode: "browser"`) é renderizada de novo, depois da checagem de robots e cobrando a cota de renderização. Se os bytes voltam a um conteúdo já visto (A → B → A), a versão existente volta a ser a atual em vez de duplicar.
 
 ## 6. Recuperação e seleção (`assemble`)
 
@@ -227,7 +230,8 @@ Flags de ablação (aceitas somente quando `ENV != "production"`): `use_lexical`
 sources(id pk, url_normalized unique, domain, current_version_id null, created_at)
 document_versions(id pk, source_id fk, content_hash, fetched_at, etag, last_modified,
                   render_mode, raw_blob_key, ir_blob_key, status, warnings jsonb,
-                  unique(source_id, content_hash))
+                  extractor_version null, content_type_header null, link_header null,
+                  unique(source_id, content_hash, extractor_version))
 chunks(id pk, version_id fk, block_ids text[], heading_path text[], text, md,
        tokens int, tsv tsvector generated, embedding vector(DIM), embedding_model text null, ord int)
 api_keys(id pk, key_hash unique, name, created_at, revoked_at null, limits jsonb)

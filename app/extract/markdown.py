@@ -613,7 +613,7 @@ def _finish(builder: _Builder, source: SourceInfo, title: str | None) -> Documen
         warnings.append(invisible_text_warning(removed))
     return Document(
         document_id=make_document_id(source.url),
-        version_id=make_version_id(source.content_hash),
+        version_id=make_version_id(make_document_id(source.url), source.content_hash),
         source=source,
         metadata=Metadata(
             title=title,

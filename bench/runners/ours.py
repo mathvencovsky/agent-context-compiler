@@ -130,7 +130,7 @@ def _source_for(url: str, content_type: str) -> tuple[SourceInfo, str, str]:
     is stable across runs; no network or DB is involved.
     """
     document_id = make_document_id(url)
-    version_id = make_version_id(document_id)
+    version_id = make_version_id(document_id, document_id)
     render_mode = "pdf" if content_type == _PDF_CONTENT_TYPE else "http"
     source = SourceInfo(
         url=url,
