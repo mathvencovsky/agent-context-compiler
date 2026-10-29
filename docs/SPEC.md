@@ -135,7 +135,7 @@ class Block(BaseModel):
     page: int | None          # só para PDF, começando em 1
 
 class Warning(BaseModel):
-    code: str                 # ex.: "table_unparsed", "low_text_content", "rendered_with_browser"
+    code: str                 # ex.: "table_unparsed", "low_text_content", "rendered_with_browser", "pages_without_text", "content_type_mismatch"
     message: str
     block_id: str | None
 
@@ -159,7 +159,7 @@ class Document(BaseModel):
 
 **Extração HTML:** `readability-lxml` isola o conteúdo principal. Em seguida, um percorredor próprio sobre lxml converte o HTML principal em blocos. Se o readability descartar tabelas ou blocos de código que existiam no `<main>` ou `<article>` original, use o `<main>`/`<article>` diretamente e registre o warning `readability_fallback`. Se a página não tiver `<main>`, `<article>` nem `role="main"`, desça a partir do `<body>` enquanto um filho tiver pelo menos 80% do texto fora de chrome; se o readability guardar menos de 80% do texto desse contêiner, use o contêiner e registre o mesmo warning (DECISIONS.md 2026-10-16). Remova `nav`, `footer`, `aside`, botões de "copiar" e âncoras de permalink (`¶`, `#`).
 
-**Extração PDF:** pdfplumber, página a página. Títulos são inferidos por tamanho de fonte relativo (os 2 maiores tamanhos acima do corpo). Tabelas via `extract_tables`. Cabeçalhos e rodapés repetidos em mais de 50% das páginas são removidos. PDF sem texto extraível gera o erro `extraction_empty` com a observação de que OCR está fora do escopo.
+**Extração PDF:** pdfplumber, página a página, determinística (M10b, DECISIONS 2026-10-29). Palavras pelas lacunas entre glifos relativas ao tamanho da fonte (o pdfTeX não grava espaços); glifos sobrepostos (negrito falso) são removidos. Linhas consecutivas da mesma coluna viram um parágrafo, com hifenização de fim de linha desfeita; quebra por recuo de primeira linha, salto vertical, linha anterior curta, marcador de lista ou mudança de fonte. Linhas monoespaçadas viram um bloco `code`. Duas colunas são detectadas por uma calha vertical central e lidas esquerda e depois direita. Títulos são inferidos por tamanho de fonte relativo acima do corpo; quando o PDF tem sumário (outline), a linha que casa com o próximo título do sumário vira título no nível dele. `metadata.title` é o maior texto da página 1, senão o `/Title` do PDF (nomes de arquivo descartados). Tabelas: grades com linhas (`find_tables`) só com 2+ linhas e 2+ colunas com texto, e tabelas delimitadas só por réguas horizontais (estilo booktabs). Cabeçalhos e rodapés repetidos em mais de 50% das páginas são removidos, números de página soltos incluídos. Página com imagens ou desenhos e sem texto extraível gera o warning `pages_without_text` (sem OCR). PDF sem texto extraível gera o erro `extraction_empty` com a observação de que OCR está fora do escopo. Um corpo que começa com a assinatura `%PDF-` é extraído como PDF mesmo com outro `Content-Type` (ou nenhum), com o warning `content_type_mismatch`.
 
 **Markdown:** gerado sempre a partir da IR (`to_markdown.py`), nunca diretamente do HTML. Tabelas viram tabelas GFM, código vira bloco cercado com a linguagem.
 

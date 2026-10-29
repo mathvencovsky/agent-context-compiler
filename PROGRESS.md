@@ -16,6 +16,26 @@ respostas com LLM) segue parada por custo. Da Fase 3 do M10 estão prontos o
 custo por sessão, o tamanho de página, os arquivos de saída e o harness nos
 seis braços. Nenhuma sessão de agente foi feita no M10.
 
+### M10b — Fase P passo 1: extração de PDF (2026-10-29)
+
+Muda `app/` (recongelar no fim da Fase P, com emenda própria):
+- `app/extract/pdf.py` reescrito: palavras sem colagem (pdfTeX), parágrafos
+  reais com hifenização desfeita, duas colunas na ordem certa, tabelas
+  espúrias descartadas e tabelas booktabs achadas, títulos pelo outline,
+  `metadata.title`, warning `pages_without_text` (sem OCR).
+- `%PDF-` detectado no corpo (`app/fetch/detect.py::looks_like_pdf`): PDF com
+  `Content-Type` errado ou ausente é extraído, com warning
+  `content_type_mismatch`.
+- Medida (`bench/results/extract_eval_baseline.md`, log): fatos 15/64 ->
+  64/64, tokens longos 22,8% -> 0,1%, tabelas vazias 15 -> 0; HTML com delta 0
+  em dev e test; portões P1–P5 e meta >= 52/64 passam.
+- Pendente/dívida: PDFs cujo texto usa CMap embutido (ex.: gerados pelo
+  Prince) perdem essas páginas no pdfminer (sai `pages_without_text`); um
+  reserva com pypdfium2 precisaria de trava global e limites próprios.
+  `metadata.title` pode sair "Contents" quando a página 1 é um sumário.
+- Testar: `make extract-eval`; `uv run pytest tests/unit/extract
+  tests/unit/fetch/test_detect.py tests/integration/test_resolve_errors.py`.
+
 ### M10b — régua de extração sem custo (2026-10-28)
 
 Medida "antes" da Fase P (`docs/PESQUISA_RODADA3.md` §7, passos 1–2), sem
