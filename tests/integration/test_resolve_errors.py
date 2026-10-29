@@ -46,6 +46,7 @@ def test_invalid_url(harness: Harness) -> None:
         "/v1/documents/resolve", json={"url": "ftp://docs.example.com/guide"}
     )
     _assert_error_envelope(response, "invalid_url", 400)
+    assert harness.transport.calls == 0  # nothing sent, not even robots.txt
 
 
 def test_blocked_destination(harness: Harness) -> None:
@@ -54,6 +55,7 @@ def test_blocked_destination(harness: Harness) -> None:
         "/v1/documents/resolve", json={"url": f"http://{BLOCKED_HOST}/guide"}
     )
     _assert_error_envelope(response, "blocked_destination", 400)
+    assert harness.transport.calls == 0  # nothing sent, not even robots.txt
 
 
 def test_robots_disallowed(harness: Harness) -> None:
