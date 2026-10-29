@@ -25,7 +25,9 @@ $EmbedRepo = "Qwen/Qwen3-Embedding-0.6B-GGUF:Q8_0"
 $RerankRepo = "ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF"
 $EmbedUrl = "http://127.0.0.1:8080"
 $RerankUrl = "http://127.0.0.1:8081"
-$ApiUrl = "http://localhost:8000"
+# 127.0.0.1, not localhost: on Windows "localhost" tries ::1 first, and the
+# API listens on IPv4 loopback only.
+$ApiUrl = "http://127.0.0.1:8000"
 
 function Say([string]$m) { Write-Host "== $m" -ForegroundColor Cyan }
 function Has([string]$exe) { [bool](Get-Command $exe -ErrorAction SilentlyContinue) }
@@ -68,7 +70,18 @@ switch ($Action) {
         }
         Check "embeddings server" { Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "$EmbedUrl/health" | Out-Null }
         Check "reranker server" { Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "$RerankUrl/health" | Out-Null }
-        Check "NINA API" { Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "$ApiUrl/health" | Out-Null }
+        Check "NINA API" {
+            # /health checks the database and the S3 store; the first call is slow.
+            try { $h = Invoke-RestMethod -TimeoutSec 60 "$ApiUrl/health" }
+            catch {
+                $alive = Get-Content $PidFile -ErrorAction SilentlyContinue | Where-Object { $_ -like "api *" } |
+                    ForEach-Object { Get-Process -Id ([int]($_ -split " ")[1]) -ErrorAction SilentlyContinue }
+                $state = if ($alive) { "API process running" } else { "API process NOT running" }
+                throw "$($_.Exception.Message) ($state)"
+            }
+            if ($h.status -ne "ok") { throw "db=$($h.db) blobs=$($h.blobs)" }
+            "(db $($h.db), blobs $($h.blobs))"
+        }
         Check "assemble (real search, up to 5 min on CPU)" {
             $body = @{ query = "How do I read a file line by line?";
                 urls = @("https://docs.python.org/3/tutorial/inputoutput.html"); max_tokens = 1500 } | ConvertTo-Json
