@@ -58,13 +58,17 @@ from app.api.usage import require_quota, set_usage_units
 from app.config import Settings
 from app.providers.embeddings.base import EmbeddingProvider
 from app.providers.embeddings.fake import FakeEmbeddingProvider
+from app.providers.embeddings.local import OpenAICompatibleEmbeddingProvider
 from app.providers.embeddings.openai import OpenAIEmbeddingProvider
 from app.providers.rerank.base import RerankProvider
 from app.providers.rerank.fake import FakeRerankProvider
 from app.providers.rerank.jina import JinaRerankProvider
+from app.providers.rerank.local import JinaCompatibleRerankProvider
 from app.retrieve.assemble import AssembleResult, assemble_context
+from app.retrieve.compact import compact_result, pool_budget
 from app.retrieve.hints import build_hints
 from app.retrieve.render import render_concise
+from app.store.models import _EMBEDDING_DIM as EMBEDDING_DIM
 
 # Bearer auth gates /v1/context/assemble too (no-op in dev — SPEC §8); the M9
 # quota dependency spends one token from the per-key bucket before the handler.
@@ -81,13 +85,52 @@ def _demo(settings: Settings) -> bool:
 
 
 def provide_embeddings(settings: SettingsDep) -> EmbeddingProvider:
-    """The real OpenAI embeddings provider, or the fake in demo mode and tests."""
-    return FakeEmbeddingProvider() if _demo(settings) else OpenAIEmbeddingProvider()
+    """The real OpenAI embeddings provider, or the fake in demo mode and tests.
+
+    With ``EMBEDDINGS_BASE_URL`` set, a local OpenAI-compatible server instead
+    (loopback only; DECISIONS 2026-10-29).
+    """
+    if _demo(settings):
+        return FakeEmbeddingProvider()
+    if settings.embeddings_base_url:
+        return local_embeddings(settings)
+    return OpenAIEmbeddingProvider()
 
 
 def provide_reranker(settings: SettingsDep) -> RerankProvider:
-    """The real Jina reranker, or the fake in demo mode and tests."""
-    return FakeRerankProvider() if _demo(settings) else JinaRerankProvider()
+    """The real Jina reranker, or the fake in demo mode and tests.
+
+    With ``RERANKER_BASE_URL`` set, a local Jina-compatible server instead.
+    """
+    if _demo(settings):
+        return FakeRerankProvider()
+    if settings.reranker_base_url:
+        return JinaCompatibleRerankProvider(
+            base_url=settings.reranker_base_url,
+            model=settings.reranker_model,
+            score_transform=settings.reranker_score_transform,
+        )
+    return JinaRerankProvider()
+
+
+def local_embeddings(settings: Settings) -> EmbeddingProvider:
+    """The local embeddings provider; refuses a dimension the column cannot hold.
+
+    ``chunks.embedding`` is ``vector(1536)``; a 1024-d local model needs the
+    migration planned in DECISIONS 2026-10-29 first.
+    """
+    if settings.embedding_dim != EMBEDDING_DIM:
+        raise RuntimeError(
+            f"EMBEDDING_DIM={settings.embedding_dim} but chunks.embedding is "
+            f"vector({EMBEDDING_DIM}); see DECISIONS 2026-10-29 (vector dimension)"
+        )
+    assert settings.embeddings_base_url is not None
+    return OpenAICompatibleEmbeddingProvider(
+        base_url=settings.embeddings_base_url,
+        model=settings.embedding_model,
+        dim=settings.embedding_dim,
+        query_prefix=settings.embeddings_query_prefix,
+    )
 
 
 EmbeddingsDep = Annotated[EmbeddingProvider, Depends(provide_embeddings)]
@@ -211,8 +254,15 @@ def assemble(
     if settings.env == "production":
         _reject_ablations_in_production(req)
 
+    # Low-budget mode selects from a larger pool, then keeps the relevant
+    # sentences within max_tokens (app/retrieve/compact.py; SPEC §8).
+    selection_req = (
+        req.model_copy(update={"max_tokens": pool_budget(req.max_tokens)})
+        if req.compact
+        else req
+    )
     result = assemble_context(
-        req,
+        selection_req,
         session_factory=session_factory,
         blobs=blobs,
         robots=robots,
@@ -223,6 +273,9 @@ def assemble(
         settings=settings,
         now=now,
     )
+    if req.compact:
+        compact_result(result, query=req.query, budget=req.max_tokens)
+    result.requested_version = req.version
 
     # All URLs failed to resolve: there is nothing to assemble (SPEC §8).
     if result.sources and all(src.status != "ok" for src in result.sources):

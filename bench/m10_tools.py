@@ -47,7 +47,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from app.config import Settings, get_settings
 from app.fetch.render import RenderResult
-from app.mcp_server.server import READ_ONLY, UNTRUSTED_NOTICE, build_server
+from app.mcp_server.server import (
+    READ_ONLY,
+    UNTRUSTED_NOTICE,
+    build_server,
+    lean_server,
+)
 from app.providers.embeddings.base import EmbeddingProvider
 from app.providers.rerank.base import RerankProvider
 from bench.corpus_store import CorpusStore
@@ -87,6 +92,30 @@ FROZEN_SETTINGS = (
     "markdown_alternate",
     "markdown_alternate_min_overlap",
     "fetch_accept_markdown",
+    # M10b retrieval experiments (DECISIONS 2026-10-29): off by default; a run
+    # measures the frozen defaults, so a .env cannot switch a scorer, the page
+    # prior or a local model server on behind the harness's back.
+    "lexical_scorer",
+    "lexical_title_weight",
+    "lexical_identifiers",
+    "lexical_symbol_bonus",
+    "lexical_coverage",
+    "page_prior",
+    "page_prior_weight",
+    "page_prior_alpha",
+    "page_prior_query_words",
+    "embeddings_base_url",
+    "embeddings_query_prefix",
+    "reranker_base_url",
+    "reranker_score_transform",
+    # M10b efficiency (DECISIONS 2026-10-29): when a render stops waiting and how
+    # many renders run at once change what the browser captures, so a run uses
+    # the recorded defaults.
+    "render_stable_interval_ms",
+    "render_stable_window_ms",
+    "render_stable_cap_ms",
+    "render_total_timeout_s",
+    "render_concurrency",
 )
 
 
@@ -101,7 +130,7 @@ RESULT_META = {"anthropic/maxResultSizeChars": MAX_RESULT_CHARS}
 
 def full_page_server(store: CorpusStore) -> MCPServer:
     """``fetch_page(url)``: the whole frozen page as Markdown."""
-    server: MCPServer[None] = MCPServer(name="docs")
+    server = lean_server("docs")
 
     @server.tool(
         description="Return the whole documentation page at `url` as Markdown. "
@@ -123,7 +152,7 @@ def full_page_server(store: CorpusStore) -> MCPServer:
 
 def strong_rag_server(store: CorpusStore, runner: StrongRagRunner) -> MCPServer:
     """``search_docs(query, urls, max_tokens=4000)``: the M8 strong_rag context."""
-    server: MCPServer[None] = MCPServer(name="docs")
+    server = lean_server("docs")
 
     @server.tool(
         description="Search the documentation pages at `urls` for `query` and "

@@ -5,6 +5,70 @@ M10)**. O humano não financia rodada paga até lá (2026-10-28).
 **`app/` mudou depois da Emenda 15 (correções de segurança, Emenda 17): o
 harness recusa rodar até o recongelamento no fim do M10b.**
 
+### M10b — recuperação: experimentos sem custo (2026-10-29, rodada 4 H e I)
+
+Branch `claude/m10b-retrieval`. Tudo desligado por padrão: a saída do produto e
+do benchmark não muda (testes de recuperação, snapshots e runner `ours`
+inalterados). Regras de aceite escritas antes de medir: DECISIONS 2026-10-29.
+- **Léxico** (`app/retrieve/lexical.py`): `LEXICAL_SCORER=bm25f` (campos título,
+  títulos acima, prosa, código; IDF do pedido), `LEXICAL_IDENTIFIERS`,
+  `LEXICAL_SYMBOL_BONUS`, `LEXICAL_COVERAGE`. **Prior de página**
+  (`app/retrieve/page_prior.py`): `PAGE_PRIOR=rrf|multiply`. Mesma função no
+  produto e no benchmark (`rank_lexical`).
+- **Modelos locais:** `EMBEDDINGS_BASE_URL` (OpenAI-compatível) e
+  `RERANKER_BASE_URL` (Jina-compatível), só IP de loopback, cliente sem
+  redirecionamento nem proxy; `embed_query()` no contrato de embeddings
+  (`EMBEDDINGS_QUERY_PREFIX` para Qwen3). Dimensão 1024: plano no DECISIONS,
+  não implementado (o produto recusa `EMBEDDING_DIM` ≠ 1536 com local).
+- **Experimento:** `make m10b-retrieval ARGS="..."` (`bench/m10b_retrieval.py`):
+  `lexical`, `pages`, `rerank`, `embed`, `coverage`; metade A para iterar,
+  `--half B --confirm` uma vez. OpenAI/Jina só do cache (falta no cache = para,
+  0 pago); modelos locais pelo servidor llama.cpp.
+- Pendente (humano, Windows): subir os servidores llama.cpp e rodar os passos
+  (comandos no relatório da sessão); o cache OpenAI/Jina provavelmente não cobre
+  os chunks da extração nova, então use `--vector local` e
+  `--comparator none`, ou pague o cache com `make m10a-pending`.
+- Mudanças em `app/` para a emenda de recongelamento: `retrieve/lexical.py`,
+  `retrieve/page_prior.py` (novo), `retrieve/assemble.py`, `config.py`,
+  `providers/local_endpoint.py`, `providers/embeddings/{base,fake,openai,local}.py`,
+  `providers/rerank/local.py`, `api/assemble.py`. Sem migração.
+
+### M10b — eficiência (2026-10-29, rodada 4 frente K)
+
+Branch `claude/m10b-efficiency`. Mesma saída de `resolve`/`assemble` para as
+mesmas entradas; só latência e recursos (DECISIONS 2026-10-29, eficiência).
+Mudam `app/` e `migrations/`: entram na emenda de recongelamento.
+- **Lista para a emenda:** `app/fetch/robots.py` (cache por processo, LRU,
+  thread-safe); `app/api/documents.py` (seams de processo, `tokens_raw_html`
+  guardado, revalidação condicional); `app/api/auth.py`, `app/api/usage.py`
+  (engine compartilhado); `app/store/repo.py` (`shared_engine`,
+  `tokens_raw_html`); `app/store/blobs.py` (`shared_blob_store`);
+  `app/store/models.py`; `migrations/versions/0007_document_versions_tokens_raw_html.py`;
+  `app/fetch/client.py` (SSLContext único, cliente keep-alive por hostname,
+  `If-None-Match`/`If-Modified-Since`); `app/retrieve/assemble.py` (resolve em
+  paralelo, indexação em ordem); `app/fetch/render.py` (texto estável no lugar
+  de `networkidle`, bloqueio de `ping`/`eventsource`/analytics, 2 renders por
+  processo); `app/config.py` (6 configurações novas, `render_networkidle_timeout_ms`
+  removida). Fora de `app/`: `bench/provider_cache.py` (trava nos contadores e
+  nos appends, porque o `assemble` embeda de várias threads).
+- **Medido em loopback/fakes (antes → depois):** `fetch` 32,7 → 1,05 ms
+  (HTTP local, sem TLS; 50 → 0 conexões novas em 50 fetches); robots.txt 10 →
+  1 fetch em 10 requisições; sessão + `select 1` por requisição 34,6 → 2,1 ms;
+  cache hit de página de 1,2 MB 388 → 78 ms; revalidação depois do TTL 458 →
+  78 ms (304); `assemble` frio com 6 URLs a 300 ms: 1 host 2.276 → 1.202 ms,
+  3 hosts 2.232 → 753 ms; render de página com long poll e beacons 15.955 →
+  1.464 ms, SPA com conteúdo tardio 15.912 → 2.482 ms (mesmo HTML), página
+  curta 1.397 → 1.382 ms.
+- **Proposta, não feita:** navegador de vida longa
+  (`docs/PROPOSTA_POOL_NAVEGADOR.md`; o custo fixo medido é ~556 ms de driver
+  + ~94 ms de lançamento por render).
+- **Para o humano decidir na emenda:** pôr as configurações novas de render e
+  de concorrência em `FROZEN_SETTINGS` (`bench/m10_tools.py`); diferenças
+  observáveis listadas no DECISIONS (momento da captura do DOM renderizado,
+  analytics bloqueado, `304` que mantém a versão de páginas com nonce).
+- Como testar: `make check`, `uv run pytest -m browser`, `make extract-eval`
+  (gates PASS; extração não mudou), `uv run alembic upgrade head` (0007).
+
 ### M10b — proveniência, harness e contrato de falha (2026-10-29, revisão externa)
 
 Itens dos documentos do revisor externo conferidos contra o código

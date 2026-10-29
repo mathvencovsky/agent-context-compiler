@@ -28,6 +28,7 @@ from nina_client.models import (
     AssembleResponse,
     ConciseAssembleResponse,
     ResolveResponse,
+    SiteIndexResponse,
 )
 
 __all__ = ["NinaClient"]
@@ -121,8 +122,15 @@ class NinaClient:
         max_tokens: int = 4000,
         include_evidence: bool = True,
         exclude_chunk_ids: list[str] | None = None,
+        version: str | None = None,
+        compact: bool = False,
     ) -> AssembleResponse:
-        """Assemble a token-budgeted context package (``POST /v1/context/assemble``)."""
+        """Assemble a token-budgeted context package (``POST /v1/context/assemble``).
+
+        ``version`` (e.g. ``"3.12"``) adds a ``version_mismatch`` hint when
+        fragments come from another release; ``compact`` keeps only the
+        query-relevant sentences (low budgets). Both are sent only when set.
+        """
         payload: dict[str, Any] = {
             "query": query,
             "urls": urls,
@@ -130,6 +138,7 @@ class NinaClient:
             "include_evidence": include_evidence,
             "exclude_chunk_ids": exclude_chunk_ids or [],
         }
+        _add_options(payload, version=version, compact=compact)
         body = self._request("POST", "/v1/context/assemble", json=payload)
         return AssembleResponse.from_dict(body)
 
@@ -140,6 +149,8 @@ class NinaClient:
         *,
         max_tokens: int = 4000,
         exclude_chunk_ids: list[str] | None = None,
+        version: str | None = None,
+        compact: bool = False,
     ) -> ConciseAssembleResponse:
         """The same context as Markdown for an agent (``response_format="concise"``)."""
         payload: dict[str, Any] = {
@@ -149,8 +160,16 @@ class NinaClient:
             "response_format": "concise",
             "exclude_chunk_ids": exclude_chunk_ids or [],
         }
+        _add_options(payload, version=version, compact=compact)
         body = self._request("POST", "/v1/context/assemble", json=payload)
         return ConciseAssembleResponse.from_dict(body)
+
+    def site_index(self, url: str, *, max_tokens: int = 2000) -> SiteIndexResponse:
+        """The links of a documentation site's llms.txt (``POST /v1/sites/index``)."""
+        body = self._request(
+            "POST", "/v1/sites/index", json={"url": url, "max_tokens": max_tokens}
+        )
+        return SiteIndexResponse.from_dict(body)
 
     def get_document(
         self,
@@ -211,6 +230,16 @@ class NinaClient:
         if header is not None:
             return header
         return _BASE_BACKOFF_SECONDS * float(2**attempt)
+
+
+def _add_options(
+    payload: dict[str, Any], *, version: str | None, compact: bool
+) -> None:
+    """Add the optional assemble fields only when set (old body otherwise)."""
+    if version:
+        payload["version"] = version
+    if compact:
+        payload["compact"] = True
 
 
 def _header_retry_after(response: httpx.Response) -> float | None:

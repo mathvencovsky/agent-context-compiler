@@ -18,11 +18,24 @@ level, where no browser feature can route around it:
   (Chromium never resolves; the proxy connects on the validated IP).
 * **Context-level interception (economy and early refusal).**
   ``context.route("**/*")`` — on the BrowserContext, so popups are covered —
-  aborts image/media/font requests for bandwidth economy (SPEC §3.4) and
-  aborts any request whose URL the guard rejects before it reaches the proxy.
+  aborts image/media/font requests for bandwidth economy (SPEC §3.4), beacons
+  (``ping``) and ``eventsource`` streams, and sub-resources of a short list of
+  analytics hosts (:data:`_ANALYTICS_HOSTS`; never a navigation), and aborts
+  any request whose URL the guard rejects before it reaches the proxy.
   ``context.route_web_socket`` does the same for WebSockets.
 * **No service workers, no popups.** ``service_workers="block"`` and every page
   other than the one being rendered is closed as soon as it opens.
+* **Wait for stable text (M10b).** After ``domcontentloaded`` the render
+  samples the length of the main text (``main``/``article``/``[role=main]``,
+  else ``body``) every ``settings.render_stable_interval_ms`` and stops once it
+  has not changed for ``settings.render_stable_window_ms`` and either it is at
+  least ``settings.render_min_text_chars`` long or no request is in flight;
+  ``settings.render_stable_cap_ms`` (5 s) caps the wait. It replaces
+  ``networkidle``, which analytics, long polling and chat widgets kept from
+  ever settling, so such pages paid the whole 15 s cap.
+* **Concurrency (M10b).** At most ``settings.render_concurrency`` renders run
+  at once in the process (each is a Chromium); a render waiting for a slot
+  spends its own deadline and fails with :class:`Timeout` if none frees up.
 * **Resource limits (audit M2).** A wall-clock deadline
   (``settings.render_total_timeout_s``) covers the whole render; when it
   expires a watchdog kills the Chromium process (a JS busy loop otherwise
@@ -47,8 +60,11 @@ import os
 import signal
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Literal
+from urllib.parse import urlsplit
 
 from playwright.sync_api import (
     Browser,
@@ -60,7 +76,6 @@ from playwright.sync_api import (
     sync_playwright,
 )
 from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from app.config import Settings, get_settings
 from app.fetch.egress_proxy import REFUSAL_HEADER, Connector, EgressProxy
@@ -80,6 +95,42 @@ RENDERED_WITH_BROWSER_WARNING_CODE = "rendered_with_browser"
 #: reach the guard check — they are dropped first — but even if they did they
 #: would be validated like any other request.
 _ECONOMY_RESOURCE_TYPES = frozenset({"image", "media", "font"})
+
+#: Resource types that never carry document content: beacons (``sendBeacon``,
+#: ``<a ping>``) and server-sent event streams, which also keep the network busy.
+_NO_CONTENT_RESOURCE_TYPES = frozenset({"ping", "eventsource"})
+
+#: Analytics, tag-manager, ad and session-replay hosts (and their subdomains)
+#: whose SUB-RESOURCES are aborted (M10b). Versioned with the code; it never
+#: blocks a navigation, so a page on one of these hosts still renders. Scripts,
+#: XHR and fetch from any other host are left alone: they carry SPA content.
+_ANALYTICS_HOSTS = (
+    "google-analytics.com",
+    "analytics.google.com",
+    "googletagmanager.com",
+    "doubleclick.net",
+    "googlesyndication.com",
+    "segment.io",
+    "cdn.segment.com",
+    "hotjar.com",
+    "hotjar.io",
+    "intercom.io",
+    "intercomcdn.com",
+    "clarity.ms",
+    "fullstory.com",
+    "mixpanel.com",
+    "heapanalytics.com",
+    "amplitude.com",
+    "plausible.io",
+)
+
+#: Length of the main text, the signal of the stable-text wait. Runs in the
+#: page: a hostile page can only make its own wait end early or hit the cap.
+_TEXT_LENGTH_JS = """() => {
+  const root = document.querySelector('main, article, [role="main"]')
+    || document.body;
+  return root ? (root.innerText || '').length : 0;
+}"""
 
 #: Navigation timeout of ``page.goto`` (Playwright's default, kept explicit).
 _GOTO_TIMEOUT_MS = 30_000
@@ -132,7 +183,11 @@ def _make_route_handler(
     """
 
     def handle(route: Route, request: Request) -> None:
-        if request.resource_type in _ECONOMY_RESOURCE_TYPES:
+        if (
+            request.resource_type in _ECONOMY_RESOURCE_TYPES
+            or request.resource_type in _NO_CONTENT_RESOURCE_TYPES
+            or (_is_analytics_url(request.url) and not _is_navigation(request))
+        ):
             route.abort()
             return
         try:
@@ -145,6 +200,79 @@ def _make_route_handler(
         route.continue_()
 
     return handle
+
+
+def _is_analytics_url(url: str) -> bool:
+    """True when ``url``'s host is (a subdomain of) an analytics host."""
+    try:
+        host = (urlsplit(url).hostname or "").rstrip(".")
+    except ValueError:
+        return False
+    return any(host == h or host.endswith("." + h) for h in _ANALYTICS_HOSTS)
+
+
+def _is_navigation(request: Request) -> bool:
+    try:
+        return request.is_navigation_request()
+    except PlaywrightError:
+        return False
+
+
+class _InFlight:
+    """Counts the page's requests that have not finished or failed yet."""
+
+    def __init__(self) -> None:
+        self.count = 0
+
+    def attach(self, page: Page) -> None:
+        page.on("request", self._started)
+        page.on("requestfinished", self._ended)
+        page.on("requestfailed", self._ended)
+
+    def _started(self, _request: Request) -> None:
+        self.count += 1
+
+    def _ended(self, _request: Request) -> None:
+        self.count = max(0, self.count - 1)
+
+
+def _wait_for_stable_text(
+    page: Page,
+    in_flight: _InFlight,
+    settings: Settings,
+    deadline: float,
+) -> Literal["stable", "cap"]:
+    """Wait until the main text stops changing (see module docstring).
+
+    Returns ``"stable"`` when the condition held, ``"cap"`` when
+    ``settings.render_stable_cap_ms`` (or the render deadline) ran out first;
+    neither is an error, whatever loaded is captured. A sample that fails (a
+    navigation destroyed the context) counts as a change.
+    """
+    interval_ms = max(1, settings.render_stable_interval_ms)
+    needed = max(1, -(-settings.render_stable_window_ms // interval_ms))
+    stop_at = min(deadline, time.monotonic() + settings.render_stable_cap_ms / 1000)
+    last: int | None = None
+    unchanged = 0
+    while True:
+        try:
+            length = int(page.evaluate(_TEXT_LENGTH_JS))
+        except PlaywrightError:
+            if page.is_closed():
+                return "cap"
+            length = -1
+        if length >= 0 and length == last:
+            unchanged += 1
+        else:
+            unchanged = 0
+        last = length
+        long_enough = length >= settings.render_min_text_chars
+        if unchanged >= needed and (long_enough or in_flight.count == 0):
+            return "stable"
+        left_ms = int((stop_at - time.monotonic()) * 1000)
+        if left_ms <= 0:
+            return "cap"
+        page.wait_for_timeout(min(interval_ms, left_ms))
 
 
 def _ws_probe_url(ws_url: str) -> str:
@@ -297,6 +425,34 @@ class _MainFrameMonitor:
             self.refused = True
 
 
+_SLOTS_LOCK = threading.Lock()
+_SLOTS: dict[int, threading.BoundedSemaphore] = {}
+
+
+def _render_slots(size: int) -> threading.BoundedSemaphore:
+    """The process-wide semaphore bounding concurrent renders to ``size``."""
+    with _SLOTS_LOCK:
+        if size not in _SLOTS:
+            _SLOTS[size] = threading.BoundedSemaphore(size)
+        return _SLOTS[size]
+
+
+@contextmanager
+def _render_slot(settings: Settings, deadline: float, url: str) -> Iterator[None]:
+    """Hold one render slot; waiting for it spends the render's own deadline."""
+    slots = _render_slots(max(1, settings.render_concurrency))
+    if not slots.acquire(timeout=max(0.0, deadline - time.monotonic())):
+        raise Timeout(
+            "no browser render slot became free within the render deadline of "
+            f"{settings.render_total_timeout_s}s",
+            details={"url": url, "limit_s": settings.render_total_timeout_s},
+        )
+    try:
+        yield
+    finally:
+        slots.release()
+
+
 def _blocked(url: str) -> BlockedDestination:
     return BlockedDestination(
         "the page navigated to a destination the guard refuses",
@@ -319,10 +475,10 @@ def render_url(
     connection Chromium then opens goes through the egress proxy (see module
     docstring). Image, media and font requests are aborted for economy.
 
-    After navigation the page waits for ``domcontentloaded`` and then
-    ``networkidle``, each capped at ``settings.render_networkidle_timeout_ms``
-    (SPEC §3.4, default 15 s). A networkidle timeout is NOT fatal: whatever
-    loaded is captured anyway via ``page.content()``. The whole render is bound
+    After navigation the page waits for ``domcontentloaded`` and then for its
+    main text to be stable (:func:`_wait_for_stable_text`, capped at
+    ``settings.render_stable_cap_ms``, SPEC §3.4). Reaching the cap is NOT
+    fatal: whatever loaded is captured via ``page.content()``. The whole render is bound
     by ``settings.render_total_timeout_s`` (:class:`Timeout`) and the DOM by
     ``settings.max_body_bytes`` (:class:`TooLarge`).
 
@@ -357,6 +513,7 @@ def render_url(
 
     watchdog: _Watchdog | None = None
     with (
+        _render_slot(settings, deadline, url),
         EgressProxy(resolver=resolver, settings=settings, connector=connector) as proxy,
         sync_playwright() as playwright,
     ):
@@ -380,6 +537,8 @@ def render_url(
                 page = context.new_page()
                 context.on("page", _close_extra_pages(page))
                 monitor.attach(page)
+                in_flight = _InFlight()
+                in_flight.attach(page)
 
                 try:
                     response = page.goto(
@@ -391,15 +550,7 @@ def render_url(
                     if monitor.refused:
                         raise _blocked(url) from exc
                     raise
-                try:
-                    page.wait_for_load_state(
-                        "networkidle",
-                        timeout=remaining_ms(settings.render_networkidle_timeout_ms),
-                    )
-                except PlaywrightTimeoutError:
-                    # networkidle never settled within the cap: proceed with
-                    # whatever loaded rather than hanging (SPEC §3.4).
-                    pass
+                _wait_for_stable_text(page, in_flight, settings, deadline)
 
                 html = page.content()
                 final_url = page.url

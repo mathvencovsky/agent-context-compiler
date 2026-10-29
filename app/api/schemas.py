@@ -128,6 +128,15 @@ class AssembleRequest(BaseModel):
     #: Chunk ids the caller already has; they are left out before the rerank, so
     #: the budget goes to new fragments. Unknown ids are ignored (SPEC §8).
     exclude_chunk_ids: list[str] = Field(default_factory=list, max_length=1000)
+    #: The documentation release the caller needs ("3.12", "v1.30", "react@18").
+    #: Selection ignores it; a ``version_mismatch`` hint names delivered
+    #: fragments from another release (SPEC §8; DECISIONS 2026-10-29).
+    version: str | None = Field(
+        default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9@._+-]+$"
+    )
+    #: Low-budget mode: keep only the sentences of the selected chunks that
+    #: overlap the query, verbatim, with an elision marker (SPEC §8).
+    compact: bool = False
     # Ablation flags (SPEC §6; non-production only, enforced by the handler).
     use_lexical: bool = True
     use_vector: bool = True
@@ -358,3 +367,39 @@ class ErrorBody(BaseModel):
             ]
         }
     }
+
+
+class SiteIndexRequest(BaseModel):
+    """Body of ``POST /v1/sites/index`` (SPEC §8; research J3)."""
+
+    url: str = Field(examples=["https://docs.example.com/guide/start"])
+    #: Cap on the rendered index (``context``), in cl100k tokens.
+    max_tokens: int = Field(default=2000, ge=256, le=8000)
+
+
+class SiteIndexEntry(BaseModel):
+    """One link of the site's ``llms.txt``: untrusted text from the site."""
+
+    section: str
+    title: str
+    url: str
+    note: str
+
+
+class SiteIndexResponse(BaseModel):
+    """The site's ``llms.txt`` as a link list (SPEC §8, ``/v1/sites/index``).
+
+    ``index_url`` is the ``llms.txt`` that was read (``None`` when none was
+    found). ``entries`` are the links that fit ``max_tokens``, in file order;
+    ``entries_total`` counts them all. ``context`` renders the same entries for
+    an agent inside NINA's tags. Every text field comes from the site.
+    """
+
+    index_url: str | None
+    title: str
+    summary: str
+    entries: list[SiteIndexEntry]
+    entries_total: int
+    context: str
+    warnings: list[dict[str, object]]
+    trust: Literal["untrusted_source"] = "untrusted_source"

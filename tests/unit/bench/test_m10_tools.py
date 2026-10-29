@@ -149,6 +149,28 @@ def test_markdown_source_settings_are_frozen_off(change: dict[str, object]) -> N
         check_frozen_settings(Settings(_env_file=None, **change))  # type: ignore[arg-type, call-arg]
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"lexical_scorer": "bm25f"},
+        {"lexical_title_weight": 5.0},
+        {"lexical_identifiers": True},
+        {"lexical_scorer": "bm25f", "lexical_coverage": True},
+        {"page_prior": "rrf"},
+        {"page_prior_query_words": 16},
+        {"reranker_base_url": "http://127.0.0.1:8081"},
+        {"embeddings_base_url": "http://127.0.0.1:8080"},
+        {"embeddings_query_prefix": "Instruct:"},
+        {"reranker_score_transform": "sigmoid"},
+    ],
+)
+def test_m10b_retrieval_settings_are_frozen_off(change: dict[str, object]) -> None:
+    # DECISIONS 2026-10-29: the M10b scorers, page prior and local model servers
+    # stay at their defaults in every M10 run.
+    with pytest.raises(SystemExit, match="PREREG"):
+        check_frozen_settings(Settings(_env_file=None, **change))  # type: ignore[arg-type, call-arg]
+
+
 def test_candidate_log_appends_what_the_reranker_scored(tmp_path: Path) -> None:
     log = tmp_path / "candidates.jsonl"
     reranker = _CandidateLog(FakeRerankProvider(), log)
@@ -299,3 +321,18 @@ def test_the_configured_database_can_never_be_the_benchmark_one() -> None:
     settings = Settings(_env_file=None, postgres_db=NINA_DB)  # type: ignore[call-arg]
     with pytest.raises(SystemExit, match="separate"):
         PostgresNinaDatabase(settings)
+
+
+def test_every_arm_lists_tools_without_parameter_titles(store: CorpusStore) -> None:
+    # NINA's server omits the parameter titles Pydantic derives from names; the
+    # other arms must list their tools the same way so no arm's schema differs
+    # in shape (PREREG Amendment 20).
+    for server in (
+        full_page_server(store),
+        strong_rag_server(store, StrongRagRunner()),
+    ):
+        for tool in asyncio.run(server.list_tools()):
+            schema = tool.input_schema
+            assert "title" not in schema
+            for prop in schema.get("properties", {}).values():
+                assert "title" not in prop

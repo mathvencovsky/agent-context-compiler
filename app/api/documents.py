@@ -17,13 +17,16 @@ Every dependency the integration tests need to override is exposed as a FastAPI
 :class:`RobotsChecker`, the guard ``resolver``, the httpx ``transport`` and the
 ``now`` clock. Tests swap them via ``app.dependency_overrides``.
 
-Conditional requests (adaptation, DECISIONS.md 2026-10-11): the audited M1 client
-does not carry caller-supplied request headers, so resolve does NOT send
-``If-None-Match``/``If-Modified-Since`` (that would mean altering the reviewed
-client). Instead it does a full GET and dedups by ``content_hash``: an unchanged
-body creates no new version. A ``304 Not Modified`` returned by the transport is
-still handled (fetched_at touched, no new version) so a conditional-aware front
-cache or test transport behaves correctly.
+Conditional revalidation (DECISIONS.md 2026-10-29, superseding the 2026-10-11
+adaptation): once the current version is past its TTL, resolve sends its stored
+``ETag`` / ``Last-Modified`` back as ``If-None-Match`` / ``If-Modified-Since``
+(the client accepts exactly these two validators). A ``304 Not Modified``
+touches ``fetched_at`` and serves the stored version, exactly what the full GET
+did for unchanged bytes (same-hash dedup), without downloading or hashing the
+body. A 304 is trusted only for the URL the validators came from: when the
+redirect chain now ends elsewhere, the page is fetched again without them.
+``force_refresh`` always does a full GET. Anything other than a 304 follows the
+full-GET path, including the ``content_hash`` dedup.
 
 Extractor upgrades (DECISIONS.md 2026-10-29): a version is one (raw bytes,
 extractor version). When the stored current version was built by another
@@ -40,6 +43,7 @@ quota like any render.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -94,13 +98,13 @@ from app.fetch.render import RENDERED_WITH_BROWSER_WARNING_CODE, render_url
 from app.fetch.robots import RobotsChecker
 from app.fetch.url_secrets import reject_secret_url
 from app.index.tokens import count_tokens
-from app.store.blobs import BlobStore
+from app.store.blobs import BlobStore, shared_blob_store
 from app.store.models import DocumentVersion, Source
 from app.store.repo import (
     DocumentRepo,
     domain_from_url,
-    make_engine,
     make_session_factory,
+    shared_engine,
 )
 
 # Bearer auth gates every /v1 route (no-op in dev; enforced otherwise — SPEC §8).
@@ -130,17 +134,23 @@ def provide_settings() -> Settings:
 
 
 def provide_session_factory() -> sessionmaker[Session]:
-    """Build a session factory bound to the configured database."""
-    return make_session_factory(make_engine(get_settings()))
+    """A session factory on the process-wide engine (one connection pool)."""
+    return make_session_factory(shared_engine(get_settings()))
 
 
 def provide_blob_store() -> BlobStore:
-    """Build the S3 blob store (overridable in tests)."""
-    return BlobStore()
+    """The process-wide S3 blob store (overridable in tests)."""
+    return shared_blob_store()
 
 
+@functools.cache
 def provide_robots_checker() -> RobotsChecker:
-    """Build the robots.txt gate (overridable in tests)."""
+    """The process-wide robots.txt gate (overridable in tests).
+
+    One instance per process, so its per-origin TTL cache (SPEC §3.2, 24 h)
+    survives across requests; a checker per request threw it away and
+    refetched robots.txt on every cache miss (research round 4, K L2).
+    """
     return RobotsChecker()
 
 
@@ -183,7 +193,7 @@ def _build_response(
     *,
     formats: list[ResolveFormat],
     cache_hit: bool,
-    raw_text: str,
+    tokens_raw_html: int,
 ) -> ResolveResponse:
     """Assemble the SPEC §8 envelope, including only the requested formats."""
     markdown = to_markdown(doc)
@@ -193,7 +203,7 @@ def _build_response(
     stats = Stats(
         blocks=len(doc.blocks),
         tokens_markdown=count_tokens(markdown),
-        tokens_raw_html=count_tokens(raw_text),
+        tokens_raw_html=tokens_raw_html,
         cache_hit=cache_hit,
     )
     return ResolveResponse(
@@ -372,6 +382,30 @@ def _extract_document(
     return doc, decoded
 
 
+def _raw_bytes_tokens(body: bytes, *, known: tuple[str, int] | None = None) -> int:
+    """cl100k tokens of ``body`` decoded as UTF-8 (errors replaced).
+
+    This is what a response served from a stored version reports as
+    ``stats.tokens_raw_html``. ``known`` is a (text, count) pair the caller
+    already has; when the text is that same string, its count is reused.
+    """
+    text = body.decode("utf-8", errors="replace")
+    if known is not None and known[0] == text:
+        return known[1]
+    return count_tokens(text)
+
+
+def _stored_tokens_raw_html(version: DocumentVersion, blobs: BlobStore) -> int:
+    """``stats.tokens_raw_html`` of a stored version, without the raw blob.
+
+    Stored at creation since migration 0007; older rows (NULL) still download
+    and count the raw body, which gives the same number.
+    """
+    if version.tokens_raw_html is not None:
+        return version.tokens_raw_html
+    return _raw_bytes_tokens(blobs.get_raw(version.id))
+
+
 def _render_charger(request: Request | None) -> Callable[[], None] | None:
     """Return an ``on_render`` callback charging the render quota, or None (M9)."""
     if request is None:
@@ -518,7 +552,7 @@ def resolve_document(
                 doc,
                 formats=req.formats,
                 cache_hit=True,
-                raw_text=blobs.get_raw(current.id).decode("utf-8", errors="replace"),
+                tokens_raw_html=_stored_tokens_raw_html(current, blobs),
             )
             session.commit()
             return response
@@ -526,15 +560,36 @@ def resolve_document(
         # (4) robots gate before any network fetch.
         robots.is_allowed(normalized_url)
 
-        # (5) full GET through the audited client (no conditional headers — see
-        # module docstring / DECISIONS.md).
-        result = default_fetch(
-            normalized_url,
-            resolver=resolver,
-            transport=transport,
-            settings=settings,
-            accept=_ACCEPT_MARKDOWN_FIRST if settings.fetch_accept_markdown else None,
+        # (5) GET through the audited client, conditional when a stored
+        # version has validators (module docstring / DECISIONS.md).
+        def fetch_page(validators: DocumentVersion | None) -> FetchResult:
+            return default_fetch(
+                normalized_url,
+                resolver=resolver,
+                transport=transport,
+                settings=settings,
+                accept=(
+                    _ACCEPT_MARKDOWN_FIRST if settings.fetch_accept_markdown else None
+                ),
+                if_none_match=validators.etag if validators else None,
+                if_modified_since=validators.last_modified if validators else None,
+            )
+
+        revalidating = (
+            current
+            if current is not None
+            and not req.force_refresh
+            and (current.etag or current.last_modified)
+            else None
         )
+        result = fetch_page(revalidating)
+        stored_doc: Document | None = None
+        if result.status == 304 and revalidating is not None:
+            stored_doc = blobs.get_ir(revalidating.id)
+            if stored_doc.source.final_url != result.final_url:
+                # The validators belong to another URL than the one that
+                # answered 304 (the redirect chain changed): do not trust it.
+                result = fetch_page(None)
 
         # (6) 304 Not Modified: refresh fetched_at only, no new version.
         if result.status == 304 and current is not None:
@@ -546,12 +601,12 @@ def resolve_document(
                 )
                 session.commit()
                 return response
-            doc = blobs.get_ir(current.id)
+            doc = stored_doc if stored_doc is not None else blobs.get_ir(current.id)
             response = _build_response(
                 doc,
                 formats=req.formats,
                 cache_hit=False,
-                raw_text=blobs.get_raw(current.id).decode("utf-8", errors="replace"),
+                tokens_raw_html=_stored_tokens_raw_html(current, blobs),
             )
             session.commit()
             return response
@@ -577,7 +632,7 @@ def resolve_document(
                 doc,
                 formats=req.formats,
                 cache_hit=False,
-                raw_text=blobs.get_raw(current.id).decode("utf-8", errors="replace"),
+                tokens_raw_html=_stored_tokens_raw_html(current, blobs),
             )
             session.commit()
             return response
@@ -683,9 +738,10 @@ def _store_version(
             ctx.blobs.get_ir(existing.id),
             formats=ctx.req.formats,
             cache_hit=cache_hit,
-            raw_text=raw_text,
+            tokens_raw_html=count_tokens(raw_text),
         )
     doc.version_id = version_id
+    response_tokens = count_tokens(raw_text)
     raw_key = ctx.blobs.put_raw(version_id, body)
     ir_key = ctx.blobs.put_ir(version_id, doc)
     ctx.repo.create_version(
@@ -702,11 +758,15 @@ def _store_version(
         extractor_version=extractor_version,
         content_type_header=content_type_header,
         link_header=link_header,
+        tokens_raw_html=_raw_bytes_tokens(body, known=(raw_text, response_tokens)),
     )
 
     # (11) build the response (markdown/blocks per req.formats).
     return _build_response(
-        doc, formats=ctx.req.formats, cache_hit=cache_hit, raw_text=raw_text
+        doc,
+        formats=ctx.req.formats,
+        cache_hit=cache_hit,
+        tokens_raw_html=response_tokens,
     )
 
 
@@ -794,8 +854,12 @@ def get_document(
         repo = DocumentRepo(session)
         version = _resolve_version(repo, document_id, version_id)
         doc = blobs.get_ir(version.id)
-        raw_text = blobs.get_raw(version.id).decode("utf-8", errors="replace")
-        return _build_response(doc, formats=wanted, cache_hit=True, raw_text=raw_text)
+        return _build_response(
+            doc,
+            formats=wanted,
+            cache_hit=True,
+            tokens_raw_html=_stored_tokens_raw_html(version, blobs),
+        )
     finally:
         session.close()
 

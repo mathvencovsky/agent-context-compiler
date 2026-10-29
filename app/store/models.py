@@ -95,6 +95,11 @@ class DocumentVersion(Base):
     # Link) without a refetch. NULL on rows before migration 0006.
     content_type_header: Mapped[str | None] = mapped_column(nullable=True)
     link_header: Mapped[str | None] = mapped_column(nullable=True)
+    # stats.tokens_raw_html of every response served from this version: the
+    # cl100k count of the raw bytes decoded as UTF-8 (errors replaced),
+    # computed once at creation (migration 0007). NULL on older rows, which
+    # count from the raw blob instead.
+    tokens_raw_html: Mapped[int | None] = mapped_column(nullable=True)
 
 
 #: Embedding dimensionality for the pgvector column (EMBEDDING_DIM; SPEC §5).

@@ -1,6 +1,6 @@
 # Windows PowerShell equivalent of the Makefile (no `make` needed).
 #   powershell -ExecutionPolicy Bypass -File scripts/make.ps1 <target> [extra args]
-# Targets: setup, up, down, migrate, check, test, bench, dev, m10a-pending, extract-eval.
+# Targets: setup, up, down, migrate, check, test, bench, dev, m10a-pending, extract-eval, m10b-retrieval.
 # Extra arguments go to the underlying command, like ARGS="..." in make:
 #   .\scripts\make.ps1 extract-eval --split test
 # Keep the commands in sync with the Makefile.
@@ -57,8 +57,13 @@ switch ($Target) {
         Run uv @("run", "python", "-m", "bench.extract_eval.fetch")
         Run uv (@("run", "python", "-m", "bench.extract_eval.run") + $Rest)
     }
+    "m10b-retrieval" {
+        # Zero-cost M10b retrieval experiments (DECISIONS 2026-10-29), e.g.
+        #   .\scripts\make.ps1 m10b-retrieval lexical --half A --vector none
+        Run uv (@("run", "python", "-m", "bench.m10b_retrieval") + $Rest)
+    }
     default {
-        Write-Host "usage: .\scripts\make.ps1 <setup|up|down|migrate|check|test|bench|dev|m10a-pending|extract-eval> [args]"
+        Write-Host "usage: .\scripts\make.ps1 <setup|up|down|migrate|check|test|bench|dev|m10a-pending|extract-eval|m10b-retrieval> [args]"
         if ($Target -ne "help") { exit 1 }
     }
 }

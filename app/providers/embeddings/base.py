@@ -9,6 +9,13 @@ vendor API, and it is never used in tests.
 
 Every returned vector has exactly ``dim`` components so the ORM ``Vector(dim)``
 column (FEAT-002) and the HNSW index stay well-formed.
+
+``embed`` embeds DOCUMENTS (chunks); ``embed_query`` embeds a search QUERY.
+Symmetric models (OpenAI, the fake) embed both the same way, so their
+``embed_query`` is ``embed([text])[0]``; asymmetric models (Qwen3-Embedding)
+put an instruction in front of the query only (DECISIONS 2026-10-29). Callers
+use :func:`embed_query`, which falls back to ``embed([text])[0]`` for a
+provider (or wrapper) without the method.
 """
 
 from __future__ import annotations
@@ -35,3 +42,15 @@ class EmbeddingProvider(Protocol):
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed ``texts`` and return one ``dim``-length vector per input."""
         ...
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a search query (``embed([text])[0]`` for symmetric models)."""
+        ...
+
+
+def embed_query(provider: object, text: str) -> list[float]:
+    """``provider.embed_query(text)``, or ``provider.embed([text])[0]`` without it."""
+    method = getattr(provider, "embed_query", None)
+    if callable(method):
+        return list(method(text))
+    return list(provider.embed([text])[0])  # type: ignore[attr-defined]

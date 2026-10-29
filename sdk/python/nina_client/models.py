@@ -268,3 +268,56 @@ class AssembleResponse:
             trust=str(data.get("trust", "untrusted_source")),
             raw=data,
         )
+
+
+@dataclass(frozen=True)
+class SiteIndexEntry:
+    """One link of a site's ``llms.txt`` (untrusted text from the site)."""
+
+    section: str
+    title: str
+    url: str
+    note: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SiteIndexEntry:
+        return cls(
+            section=str(data.get("section", "")),
+            title=str(data.get("title", "")),
+            url=str(data.get("url", "")),
+            note=str(data.get("note", "")),
+        )
+
+
+@dataclass(frozen=True)
+class SiteIndexResponse:
+    """Response of ``POST /v1/sites/index`` (SPEC §8): a site's llms.txt links.
+
+    ``index_url`` is ``None`` when the site has no usable llms.txt; the reason
+    is in ``warnings``. ``context`` renders the entries for an agent.
+    """
+
+    index_url: str | None
+    title: str
+    summary: str
+    entries: list[SiteIndexEntry]
+    entries_total: int
+    context: str
+    warnings: list[dict[str, Any]] = field(default_factory=list)
+    trust: str = "untrusted_source"
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SiteIndexResponse:
+        index_url = data.get("index_url")
+        return cls(
+            index_url=str(index_url) if index_url is not None else None,
+            title=str(data.get("title", "")),
+            summary=str(data.get("summary", "")),
+            entries=[SiteIndexEntry.from_dict(e) for e in data.get("entries", [])],
+            entries_total=int(data.get("entries_total", 0)),
+            context=str(data.get("context", "")),
+            warnings=data.get("warnings", []),
+            trust=str(data.get("trust", "untrusted_source")),
+            raw=data,
+        )

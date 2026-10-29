@@ -25,6 +25,7 @@ from typing import Annotated, Any, Literal
 import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import Tool as MCPTool
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
@@ -97,6 +98,44 @@ def _api_call[T](call: Callable[[], T]) -> T:
         raise ToolError(str(exc)) from exc
 
 
+def _strip_titles(schema: dict[str, Any]) -> dict[str, Any]:
+    """``schema`` without the titles Pydantic derives from parameter names.
+
+    ``"title": "Max Tokens"`` repeats the property name; dropping these keys
+    saved 85 of the 800 cl100k tokens the tool list may cost per agent turn
+    (DECISIONS.md 2026-10-29). Validation uses the Pydantic model, not this
+    JSON, so nothing else changes.
+    """
+    out = {k: v for k, v in schema.items() if k != "title"}
+    properties = out.get("properties")
+    if isinstance(properties, dict):
+        out["properties"] = {
+            name: {k: v for k, v in prop.items() if k != "title"}
+            for name, prop in properties.items()
+        }
+    return out
+
+
+class _NinaServer(MCPServer[None]):
+    """:class:`MCPServer` whose ``tools/list`` omits auto-generated titles."""
+
+    async def list_tools(self) -> list[MCPTool]:
+        return [
+            tool.model_copy(update={"input_schema": _strip_titles(tool.input_schema)})
+            for tool in await super().list_tools()
+        ]
+
+
+def lean_server(name: str) -> MCPServer[None]:
+    """An :class:`MCPServer` named ``name`` whose ``tools/list`` omits the
+    auto-generated parameter titles, as NINA's own server does.
+
+    The M10 harness builds the other arms' servers with it, so every arm's tool
+    schema is shaped the same way (``bench/m10_tools.py``).
+    """
+    return _NinaServer(name=name)
+
+
 def build_server(client: NinaApiClient | None = None) -> MCPServer:
     """Build the NINA MCP server with the three SPEC §9 tools registered.
 
@@ -104,7 +143,7 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
     first tool call so merely building the server needs no API_URL/API_KEY); tests
     pass a client wired to an ``httpx.MockTransport``.
     """
-    server: MCPServer[None] = MCPServer(name="nina", instructions=INSTRUCTIONS)
+    server: MCPServer[None] = _NinaServer(name="nina", instructions=INSTRUCTIONS)
 
     def _client() -> NinaApiClient:
         return client if client is not None else NinaApiClient.from_env()
@@ -126,9 +165,16 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
     def resolve_url(
         url: Annotated[str, Field(description="Page URL.")],
         format: Annotated[
-            str, Field(description='"markdown" or "blocks".')
+            str,
+            Field(
+                description='"markdown", "blocks", or "index": the site\'s '
+                "page links from its llms.txt."
+            ),  # fmt: skip
         ] = "markdown",
-    ) -> dict[str, Any]:
+    ) -> str | dict[str, Any]:
+        if format == "index":
+            body = _api_call(lambda: _client().site_index(url))
+            return str(body["context"])
         return _api_call(lambda: _client().resolve(url, formats=[format]))
 
     @server.tool(
@@ -171,6 +217,12 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
                 "were cleared from your context, omit them to get them back."
             ),
         ] = None,
+        version: Annotated[
+            str, Field(description='Release you need, e.g. "3.12".')
+        ] = "",
+        compact: Annotated[
+            bool, Field(description="Only query-relevant sentences; low budgets.")
+        ] = False,
     ) -> str | dict[str, Any]:
         body = _api_call(
             lambda: _client().assemble(
@@ -179,6 +231,8 @@ def build_server(client: NinaApiClient | None = None) -> MCPServer:
                 max_tokens=max_tokens,
                 response_format=response_format,
                 exclude_chunk_ids=exclude_chunk_ids,
+                version=version or None,
+                compact=compact,
             )
         )
         return str(body["context"]) if response_format == "concise" else body

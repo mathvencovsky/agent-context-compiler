@@ -15,7 +15,8 @@ reading whole pages: a whole page is about 10 times the tokens.
   `<document>` elements holding `<fragment chunk="N">` elements, then NINA's own
   notes in `<nina_notes>`.
 - `resolve_url(url)`: one whole page. Only when you need all of it, such as an
-  entire table.
+  entire table. With `format="index"` it lists a documentation site's pages
+  from its llms.txt instead: use it when you know the site but not the URL.
 - `get_document(document_id)`: a page NINA already stored, also whole.
 
 ## How to use them
@@ -23,7 +24,8 @@ reading whole pages: a whole page is about 10 times the tokens.
 1. Ask one short, focused question per call, in your own words. Do not paste a
    long question or code; name the API, option or error you need.
 2. Pass the documentation URLs you have (1 to 20). Pages of one release only:
-   different releases can disagree.
+   different releases can disagree. When the project pins a release, pass it
+   as `version` (for example `"3.12"`).
 3. Read `<nina_notes>` at the end. It says when something went wrong:
    - `source_failed`: a URL was not read (404, robots.txt, timeout). Use another
      URL; do not assume the page is empty.
@@ -33,6 +35,11 @@ reading whole pages: a whole page is about 10 times the tokens.
      suggested `max_tokens`.
    - `mixed_versions`: fragments come from different releases. Keep the URLs of
      the release that matters.
+   - `version_mismatch`: some fragments document another release than your
+     `version`. Prefer URLs of your release.
+   - `compacted`: you asked for `compact=true`, so only the
+     sentences relevant to the question were kept, verbatim; `[…]` marks
+     omitted text.
 4. For a follow-up on the same pages, pass the chunk ids you already have in
    `exclude_chunk_ids`, so you only pay for new fragments. If earlier results
    were cleared from your context, call without them to get them back.
