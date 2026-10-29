@@ -47,10 +47,26 @@ def _text_blocks(doc: Document) -> list[str]:
 
 def test_words_drawn_without_spaces_are_not_glued() -> None:
     def page(pen: Pen) -> None:
-        pen.words("Register x0 is hardwired with all bits equal to zero.".split(), _LEFT, 100)
+        pen.words(
+            "Register x0 is hardwired with all bits equal to zero.".split(), _LEFT, 100
+        )
 
     doc = _extract(Doc([page]).build())
-    assert _text_blocks(doc) == ["Register x0 is hardwired with all bits equal to zero."]
+    assert _text_blocks(doc) == [
+        "Register x0 is hardwired with all bits equal to zero."
+    ]
+
+
+def test_overprinted_fake_bold_glyphs_are_dropped() -> None:
+    """A word drawn twice 0.3 pt apart (fake bold) reads once, not doubled."""
+    text = "Overprinted words read once."
+
+    def page(pen: Pen) -> None:
+        pen.words(text.split(), _LEFT, 100)
+        pen.words(text.split(), _LEFT + 0.3, 100)
+
+    doc = _extract(Doc([page]).build())
+    assert _text_blocks(doc) == [text]
 
 
 def test_lines_join_into_paragraphs_split_by_first_line_indent() -> None:
@@ -174,7 +190,9 @@ def test_outline_sets_heading_levels_and_metadata_title() -> None:
     headings = {b.text: b.level for b in doc.blocks if b.type == "heading"}
     assert headings["1 Getting Started"] == 1
     assert headings["1.1 Installing"] == 2
-    install = next(b for b in doc.blocks if b.text.startswith(lorem_lines(20, 1)[0][:20]))
+    install = next(
+        b for b in doc.blocks if b.text.startswith(lorem_lines(20, 1)[0][:20])
+    )
     assert install.heading_path[-1] == "1.1 Installing"
 
 

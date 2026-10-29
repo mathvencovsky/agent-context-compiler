@@ -55,9 +55,11 @@ import statistics
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from operator import itemgetter
 from typing import TYPE_CHECKING, Any
 
 import pdfplumber
+from pdfplumber.utils import cluster_objects
 
 from app.config import Settings, get_settings
 from app.extract.ir import (
@@ -142,9 +144,7 @@ def _is_monospace(fontname: str) -> bool:
     (Courier, Mono, Consolas, Menlo, TeX's typewriter ``cmtt``/``sfmono``).
     """
     low = fontname.lower()
-    return any(
-        token in low for token in ("courier", "mono", "consol", "menlo", "cmtt")
-    )
+    return any(token in low for token in ("courier", "mono", "consol", "menlo", "cmtt"))
 
 
 def _is_bold(fontname: str) -> bool:
@@ -251,9 +251,38 @@ def _round_size(size: float) -> float:
 # --------------------------------------------------------------------------- #
 # Words and rows
 # --------------------------------------------------------------------------- #
+def _unique_page(page: Any) -> Any:
+    """The page without overprinted duplicate glyphs (fake bold, shadows).
+
+    Same rule as pdfplumber's ``dedupe_chars`` (same upright flag, text, font
+    and size, positions within 1 pt: the first glyph in position order is
+    kept), but linear: pdfplumber restores the original order with
+    ``sorted(key=list.index)``, which is quadratic in the glyphs of a page and
+    tripled the extraction time of long technical PDFs.
+    """
+    chars = page.chars
+    groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for char in chars:
+        key = (char["upright"], char["text"], char["fontname"], char["size"])
+        groups.setdefault(key, []).append(char)
+    drop: set[int] = set()
+    for grp in groups.values():
+        if len(grp) < 2:
+            continue
+        for y_cluster in cluster_objects(grp, itemgetter("doctop"), 1):
+            if len(y_cluster) < 2:
+                continue
+            for x_cluster in cluster_objects(y_cluster, itemgetter("x0"), 1):
+                keep = min(x_cluster, key=itemgetter("doctop", "x0"))
+                drop.update(id(c) for c in x_cluster if c is not keep)
+    if not drop:
+        return page
+    return page.filter(lambda obj: id(obj) not in drop)
+
+
 def _page_words(page: Any) -> list[_Word]:
     """Extract the page's upright words with their dominant size and font."""
-    raw = page.dedupe_chars().extract_words(
+    raw = _unique_page(page).extract_words(
         x_tolerance_ratio=_X_TOLERANCE_RATIO,
         y_tolerance=3,
         keep_blank_chars=False,
@@ -437,7 +466,9 @@ def _split_columns(rows: list[_Line]) -> list[tuple[float, float]]:
     return [(c[0], c[1]) for c in columns]
 
 
-def _grid_from_rows(rows: list[_Line], columns: list[tuple[float, float]]) -> list[list[str]]:
+def _grid_from_rows(
+    rows: list[_Line], columns: list[tuple[float, float]]
+) -> list[list[str]]:
     grid: list[list[str]] = []
     for row in rows:
         cells = [""] * len(columns)
@@ -452,9 +483,7 @@ def _grid_from_rows(rows: list[_Line], columns: list[tuple[float, float]]) -> li
     return grid
 
 
-def _rule_tables(
-    page: Any, words: list[_Word], taken: list[_Table]
-) -> list[_Table]:
+def _rule_tables(page: Any, words: list[_Word], taken: list[_Table]) -> list[_Table]:
     """Tables bounded only by horizontal rules of equal extent (booktabs).
 
     Rules sharing the same left and right ends (within 2 pt) are grouped; the
@@ -1002,7 +1031,9 @@ def _join_lines(prev_text: str, next_text: str, vocab: Counter[str]) -> str:
 class _Builder:
     """Deterministic builder turning reading-order items into IR blocks."""
 
-    def __init__(self, items: list[_Item], headings: dict[int, tuple[int, int]]) -> None:
+    def __init__(
+        self, items: list[_Item], headings: dict[int, tuple[int, int]]
+    ) -> None:
         self._items = items
         self._headings = headings
         self._pitch = _line_pitches(items)
@@ -1083,7 +1114,9 @@ class _Builder:
             self._emit("paragraph", text=text, data={}, page=lines[0].page_number)
 
     # -- classification ---------------------------------------------------- #
-    def _breaks(self, prev: _Line, prev_item: _Item, cur: _Line, cur_item: _Item) -> bool:
+    def _breaks(
+        self, prev: _Line, prev_item: _Item, cur: _Line, cur_item: _Item
+    ) -> bool:
         """True when ``cur`` starts a new paragraph after ``prev``."""
         if cur_item.page_number != prev_item.page_number:
             return True
@@ -1171,8 +1204,10 @@ class _Builder:
                 i += 1
                 continue
             flush_code()
-            if para and para_item is not None and self._breaks(
-                para[-1], para_item, line, item
+            if (
+                para
+                and para_item is not None
+                and self._breaks(para[-1], para_item, line, item)
             ):
                 flush_para()
             para.append(line)

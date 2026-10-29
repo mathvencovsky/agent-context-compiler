@@ -32,7 +32,9 @@ class Pen:
     font: str = FONT
     gap_ratio: float = 0.26
 
-    def width(self, text: str, font: str | None = None, size: float | None = None) -> float:
+    def width(
+        self, text: str, font: str | None = None, size: float | None = None
+    ) -> float:
         return float(self.c.stringWidth(text, font or self.font, size or self.size))
 
     def words(
@@ -92,7 +94,9 @@ class Doc:
 
     pages: list[Callable[[Pen], None]] = field(default_factory=list)
     title: str | None = None
-    outline: list[tuple[str, int, int]] = field(default_factory=list)  # (title, level, page)
+    outline: list[tuple[str, int, int]] = field(
+        default_factory=list
+    )  # (title, level, page)
 
     def build(self) -> bytes:
         buf = io.BytesIO()
