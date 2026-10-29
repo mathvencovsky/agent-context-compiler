@@ -174360,22 +174360,6 @@
         'text': 'add docs add history',
         'type': 'list',
       }),
-      dict({
-        'block_id': 'b_5d4b41a25f7c',
-        'data': dict({
-        }),
-        'heading_path': list([
-          'Changelog',
-          'v0.1.0 (2017-06-03)',
-        ]),
-        'level': None,
-        'links': list([
-        ]),
-        'order': 912,
-        'page': None,
-        'text': 'Thanks for your feedback!',
-        'type': 'paragraph',
-      }),
     ]),
     'document_id': 'doc_21376fdbdf995a0a',
     'metadata': dict({
@@ -178497,22 +178481,6 @@
   
         ''',
         'type': 'code',
-      }),
-      dict({
-        'block_id': 'b_f6413eabd3e9',
-        'data': dict({
-        }),
-        'heading_path': list([
-          'Fields',
-          'The computed_field decorator',
-        ]),
-        'level': None,
-        'links': list([
-        ]),
-        'order': 169,
-        'page': None,
-        'text': 'Thanks for your feedback!',
-        'type': 'paragraph',
       }),
     ]),
     'document_id': 'doc_e0c8064aca09ebf6',
@@ -185778,22 +185746,6 @@
         'page': None,
         'text': "Note There are some situations where Pydantic does not copy attributes, such as when passing models — we use the model as is. You can override this behaviour by setting model_config['revalidate_instances'] = 'always'.",
         'type': 'admonition',
-      }),
-      dict({
-        'block_id': 'b_04ed693c5ef0',
-        'data': dict({
-        }),
-        'heading_path': list([
-          'Models',
-          'Attribute copies',
-        ]),
-        'level': None,
-        'links': list([
-        ]),
-        'order': 250,
-        'page': None,
-        'text': 'Thanks for your feedback!',
-        'type': 'paragraph',
       }),
     ]),
     'document_id': 'doc_ad4dea9765db4ab0',
@@ -246042,8 +245994,6 @@
   
   - add docs
   - add history
-  
-  Thanks for your feedback!
   '''
 # ---
 # name: test_fixture_markdown_snapshot[pydantic_fields]
@@ -246886,8 +246836,6 @@
       def volume(self) -> float:
           return self.width * self.height * self.depth
   ```
-  
-  Thanks for your feedback!
   '''
 # ---
 # name: test_fixture_markdown_snapshot[pydantic_models]
@@ -248546,8 +248494,6 @@
   
   > [!NOTE]
   > Note There are some situations where Pydantic does not copy attributes, such as when passing models — we use the model as is. You can override this behaviour by setting model_config['revalidate_instances'] = 'always'.
-  
-  Thanks for your feedback!
   '''
 # ---
 # name: test_fixture_markdown_snapshot[python_stdlib_argparse]

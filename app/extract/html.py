@@ -117,6 +117,98 @@ _CHROME_TEXT_LABELS = (
     "back to top",
 )
 
+# --- page widgets (M10b Phase P H3) --------------------------------------- #
+# Removed only inside the chosen content subtree (``_clean_subtree``). They do
+# NOT feed ``_content_chars``: the content-root thresholds were calibrated with
+# ``_is_chrome`` alone (DECISIONS 2026-10-16) and must not move with this list.
+# Every rule below was derived from the WCXB dev pages only.
+
+# ``template`` content is inert (a browser never renders it), so it is not page
+# text; ``lite-youtube``/``lite-vimeo`` are video players whose only text is
+# the "Watch on YouTube" fallback link.
+_WIDGET_TAGS = frozenset({"template", "lite-youtube", "lite-vimeo"})
+
+# Whole class tokens of documentation-platform widgets.
+_WIDGET_CLASS_TOKENS = frozenset(
+    {
+        "printfooter",  # MediaWiki permanent-link footer
+        "mw-pt-languages",  # MediaWiki translation-language bar
+        "nocontent",  # Google's "not page content" marker (devsite)
+        "language-selection",  # Sphinx themes' translations bar
+    }
+)
+
+# Words inside one class name (or a ``<div>`` id) that mark a widget: feedback
+# prompts, article-column footers, breadcrumbs, pagination, in-page tables of
+# contents, site banners and cookie notices. A name is split into words at
+# non-alphanumerics and camelCase boundaries, so ``article-footer__inner``,
+# ``feedback--response`` and ``tocCollapsible`` match while ``footnote``,
+# ``toctree`` or ``feedbacks`` do not. A name that also holds a negation word
+# (``hide-from-toc``, ``no-feedback``) describes content and never matches.
+# Headings are never matched by name, and only elements holding at most
+# ``_WIDGET_NAME_MAX_CHARS`` of text are: a ``page-with-footer`` wrapper
+# around the whole article is never dropped. Ids name content too often (Sphinx
+# ``<dt id="flask.Request.cookies">``, heading slugs such as ``<section
+# id="pagination">``), so an id is read only on a plain ``<div>`` (no
+# ``section`` class) and only when it holds no ``.``/``:`` (API object names):
+# ``<div id="quick-feedback-yes">`` and ``<div id="site-banner">`` match.
+_WIDGET_NAME_WORDS = frozenset(
+    {
+        "feedback",
+        "footer",
+        "breadcrumb",
+        "breadcrumbs",
+        "pagination",
+        "pager",
+        "toc",
+        "banner",
+        "cookie",
+        "cookies",
+        "consent",
+    }
+)
+_WIDGET_NAME_NEGATIONS = frozenset({"hide", "hidden", "no", "not", "ignore", "skip"})
+_WIDGET_NAME_MAX_CHARS = 500
+_NAME_WORD_SPLIT = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+_HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+
+# Whole texts of page-action and page-metadata widgets: an element whose ENTIRE
+# normalized text, trailing punctuation aside, is one of these. Exact match, so
+# "On this page, you will learn..." is never removed.
+_WIDGET_EXACT_LABELS = frozenset(
+    {
+        "on this page",
+        "in this article",
+        "table of contents",
+        "copy page",
+        "copy as markdown",
+        "copy markdown",
+        "copy for llm",
+        "more page actions",
+        "edit this page",
+        "edit this page on github",
+        "edit on github",
+        "view this page on github",
+        "view source",
+        "report a problem with this content",
+        "report an issue",
+        "suggest a fix",
+        "send feedback",
+        "is this helpful",
+        "learn how to contribute",
+        "translate this page",
+    }
+)
+# Prefixes of widget lines ("This page was last modified on Oct 20, 2025 by
+# MDN contributors.", "Thanks for the feedback. If you have..."), only on
+# elements of at most ``_WIDGET_PREFIX_MAX_CHARS``. A bare "Last updated: <date>"
+# is kept: the date of the content can matter to the reader.
+_WIDGET_PREFIX_LABELS = (
+    "this page was last modified on",
+    "thanks for the feedback",
+)
+_WIDGET_PREFIX_MAX_CHARS = 200
+
 # Admonition class/role → canonical kind (SPEC §4 five-value set).
 _ADMONITION_KINDS = ("danger", "warning", "tip", "info", "note")
 _ADMONITION_SYNONYMS = {
@@ -196,6 +288,7 @@ def _clean_subtree(root: HtmlElement) -> None:
             or _is_copy_control(el)
             or _is_permalink(el)
             or _is_chrome(el)
+            or _is_page_widget(el)
         ):
             _drop(el)
 
@@ -221,6 +314,46 @@ def _is_chrome(el: HtmlElement) -> bool:
     if text and len(text) <= 40:
         return any(label in text for label in _CHROME_TEXT_LABELS)
     return False
+
+
+def _is_page_widget(el: HtmlElement) -> bool:
+    """True if ``el`` is a page widget inside the content (M10b Phase P H3).
+
+    Feedback prompts, article footers, breadcrumbs, pagination, in-page ToCs,
+    banners, page-action buttons ("Copy page", "Edit this page") and metadata
+    lines ("Last updated on ...") that sit inside ``<main>``/``<article>``,
+    where ``_is_chrome`` does not look. Only used by ``_clean_subtree``.
+    """
+    if el.tag in _WIDGET_TAGS:
+        return True
+    raw_classes = el.get("class") or ""
+    if _WIDGET_CLASS_TOKENS.intersection(raw_classes.lower().split()):
+        return True
+    text = normalize_text(el.text_content() or "").lower()
+    if len(text) <= _WIDGET_NAME_MAX_CHARS and el.tag not in _HEADING_TAGS:
+        names = raw_classes.split()
+        widget_id = el.get("id") or ""
+        if (
+            el.tag == "div"
+            and "section" not in names
+            and not any(c in widget_id for c in ".:")
+        ):
+            names.append(widget_id)
+        if any(_is_widget_name(name) for name in names):
+            return True
+    if not text:
+        return False
+    if text.rstrip(" .:!?") in _WIDGET_EXACT_LABELS:
+        return True
+    return len(text) <= _WIDGET_PREFIX_MAX_CHARS and text.startswith(
+        _WIDGET_PREFIX_LABELS
+    )
+
+
+def _is_widget_name(name: str) -> bool:
+    """True if one class/id ``name`` holds a widget word and no negation."""
+    words = {w.lower() for w in _NAME_WORD_SPLIT.split(name) if w}
+    return bool(words & _WIDGET_NAME_WORDS) and not words & _WIDGET_NAME_NEGATIONS
 
 
 def _drop(el: HtmlElement) -> None:
