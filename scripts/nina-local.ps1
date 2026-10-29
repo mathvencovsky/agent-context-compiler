@@ -2,6 +2,7 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 start [-Project C:\path\to\project]
 #   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 stop
 #   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 status
+#   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 verify   (end-to-end check)
 #
 # start: installs llama.cpp if missing, serves Qwen3-Embedding-0.6B (port 8080)
 # and Qwen3-Reranker-0.6B (port 8081) on loopback, checks the reranker really
@@ -10,7 +11,7 @@
 # and, with -Project, writes the NINA block in that project's AGENTS.md.
 # Nothing here calls a paid API. See docs/USO_DIARIO.md.
 param(
-    [Parameter(Position = 0)][ValidateSet("start", "stop", "status")][string]$Action = "status",
+    [Parameter(Position = 0)][ValidateSet("start", "stop", "status", "verify")][string]$Action = "status",
     [string]$Project = ""
 )
 $ErrorActionPreference = "Stop"
@@ -58,6 +59,42 @@ function Stop-All {
 
 switch ($Action) {
     "stop" { Stop-All }
+    "verify" {
+        # End-to-end check: services up, a real assemble, the MCP registration.
+        $ok = $true
+        function Check([string]$name, [scriptblock]$test) {
+            try { $detail = & $test; Write-Host "PASS $name $detail" -ForegroundColor Green }
+            catch { Write-Host "FAIL $name : $($_.Exception.Message)" -ForegroundColor Red; $script:ok = $false }
+        }
+        Check "embeddings server" { Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "$EmbedUrl/health" | Out-Null }
+        Check "reranker server" { Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "$RerankUrl/health" | Out-Null }
+        Check "NINA API" { Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "$ApiUrl/health" | Out-Null }
+        Check "assemble (real search, up to 5 min on CPU)" {
+            $body = @{ query = "How do I read a file line by line?";
+                urls = @("https://docs.python.org/3/tutorial/inputoutput.html"); max_tokens = 1500 } | ConvertTo-Json
+            $t = Get-Date
+            $r = Invoke-RestMethod -Method Post -Uri "$ApiUrl/v1/context/assemble" -ContentType "application/json" -Body $body -TimeoutSec 300
+            $n = @($r.fragments).Count
+            if ($n -eq 0) { throw "no fragments; warnings: $($r.warnings | ConvertTo-Json -Compress)" }
+            $text = ($r.fragments | ForEach-Object { $_.md }) -join " "
+            if ($text -notmatch "readline|for line in") { throw "$n fragments, none about reading lines" }
+            "($n fragments, coverage $($r.coverage), $([int]((Get-Date) - $t).TotalSeconds) s)"
+        }
+        if (Has "claude") {
+            Check "MCP server registered in Claude Code" {
+                $out = (& claude mcp get nina 2>&1) -join " "
+                if ($LASTEXITCODE -ne 0) { throw $out }
+            }
+        } else { Write-Host "SKIP Claude Code not found (claude)" }
+        if ($ok) { Write-Host "ALL PASS: NINA is working." -ForegroundColor Green }
+        else {
+            Write-Host "Something failed. Send this output and the lines below to Claude." -ForegroundColor Yellow
+            foreach ($f in @("api", "embed", "rerank")) {
+                $log = Join-Path $State "$f.log.err"
+                if (Test-Path $log) { Write-Host "--- $f.log.err"; Get-Content $log -Tail 15 }
+            }
+        }
+    }
     "status" {
         foreach ($u in @("$EmbedUrl/health", "$RerankUrl/health", "$ApiUrl/health")) {
             try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 $u | Out-Null; Write-Host "up   $u" }
