@@ -145,6 +145,31 @@ def test_host_lowercased_and_fragment_stripped() -> None:
     assert result.normalized_url == "http://public.example.com/Path"
 
 
+def test_tracking_params_removed_from_normalized_url() -> None:
+    """Tracking parameters never change the page, so they never change its id."""
+    resolver = FakeResolver({"public.example.com": ["93.184.216.34"]})
+    result = validate_url(
+        "http://public.example.com/p?utm_source=x&a=1&UTM_Medium=y&authuser=8"
+        "&hl=it&b=%20&gclid=z&utm_campaign",
+        resolver=resolver,
+        settings=SETTINGS,
+    )
+    assert result.normalized_url == "http://public.example.com/p?a=1&hl=it&b=%20"
+
+
+def test_only_tracking_params_leaves_no_query() -> None:
+    resolver = FakeResolver({"public.example.com": ["93.184.216.34"]})
+    plain = validate_url(
+        "http://public.example.com/p", resolver=resolver, settings=SETTINGS
+    )
+    tracked = validate_url(
+        "http://public.example.com/p?fbclid=1", resolver=resolver, settings=SETTINGS
+    )
+    assert (
+        tracked.normalized_url == plain.normalized_url == "http://public.example.com/p"
+    )
+
+
 def test_trailing_dot_fqdn_normalized() -> None:
     """A fully-qualified name with a trailing dot resolves under its bare form."""
     resolver = FakeResolver({"public.example.com": ["93.184.216.34"]})
