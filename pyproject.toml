@@ -6,7 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
-    "pydantic>=2",
+    "pydantic>=2.12",  # Field(exclude_if=...) in app/extract/ir.py
     "pydantic-settings",
     "sqlalchemy>=2",
     "alembic",
@@ -28,6 +28,10 @@ dependencies = [
     # PyPI license classifier), satisfying the MIT/BSD/Apache-2.0 rule in
     # CLAUDE.md. Powers app/mcp_server/ (FEAT-003); see DECISIONS.md.
     "mcp>=1.0",
+    # markdown-it-py (+ mdurl): MIT. CommonMark parser for documents served as
+    # text/markdown (M10b, DECISIONS.md 2026-10-29); >=3.0 carries the fixes
+    # for CVE-2023-26302/26303 (crash and infinite loop on crafted input).
+    "markdown-it-py>=3.0",
 ]
 
 [dependency-groups]

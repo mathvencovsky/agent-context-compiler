@@ -36,6 +36,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.alternate import FetchAlternate, use_markdown_alternate
 from app.api.auth import require_api_key
 from app.api.errors import NotFound
 from app.api.schemas import (
@@ -55,9 +56,16 @@ from app.extract.ir import (
     make_document_id,
     make_version_id,
 )
+from app.extract.markdown import (
+    MARKDOWN_CONTENT_TYPES,
+    PLAIN_TEXT_CONTENT_TYPE,
+    extract_markdown,
+    extract_plain_text,
+    is_markdown_url,
+)
 from app.extract.pdf import extract_pdf
 from app.extract.to_markdown import to_markdown
-from app.fetch.client import Transport
+from app.fetch.client import FetchResult, Transport
 from app.fetch.client import fetch as default_fetch
 from app.fetch.detect import detect_charset, parse_content_type, should_render
 from app.fetch.errors import UnsupportedContentType, UpstreamStatus
@@ -85,6 +93,11 @@ _HTML_CONTENT_TYPES = frozenset(
     {"text/html", "application/xhtml+xml", "application/xml", "text/xml"}
 )
 _PDF_CONTENT_TYPE = "application/pdf"
+#: Accept header sent only when settings.fetch_accept_markdown is on (SPEC §3.5).
+_ACCEPT_MARKDOWN_FIRST = (
+    "text/markdown, text/html;q=0.9, application/xhtml+xml;q=0.9, "
+    "application/pdf;q=0.9, text/plain;q=0.8, */*;q=0.5"
+)
 _EMPTY_CONTENT_WARNING_CODE = "empty_content"
 
 
@@ -190,11 +203,16 @@ def _extract_document(
     resolver: Resolver | None,
     settings: Settings,
     on_render: Callable[[], None] | None = None,
+    link_header: str | None = None,
+    fetch_alternate: FetchAlternate | None = None,
 ) -> tuple[Document, str]:
-    """Extract an IR document from a fetched body (HTML or PDF branch).
+    """Extract an IR document from a fetched body (HTML, PDF, Markdown, text).
 
     Returns the Document and the decoded raw text used for token counting.
-    Raises :class:`UnsupportedContentType` for anything that is not HTML or PDF.
+    Raises :class:`UnsupportedContentType` for anything that is not HTML, PDF,
+    Markdown or plain text (SPEC §4). ``fetch_alternate`` (set only when
+    ``settings.markdown_alternate`` is on) lets an HTML page be replaced by its
+    same-origin Markdown alternate (SPEC §3.5, ``app/api/alternate.py``).
     ``on_render`` (M9) is invoked right BEFORE a headless-browser render so the
     caller can charge the per-key daily render quota (and reject with 429 before
     the browser work happens).
@@ -215,9 +233,33 @@ def _extract_document(
         raw_text = "\n".join(b.text for b in doc.blocks)
         return doc, raw_text
 
+    if (
+        content_type in MARKDOWN_CONTENT_TYPES
+        or content_type == PLAIN_TEXT_CONTENT_TYPE
+    ):
+        _media, charset = parse_content_type(content_type_header)
+        text = body.decode(
+            detect_charset(content_type_charset=charset, body=body), errors="replace"
+        )
+        text_source = SourceInfo(
+            url=guard.normalized_url,
+            final_url=final_url,
+            content_type=content_type,
+            fetched_at=fetched_at,
+            etag=etag,
+            last_modified=last_modified,
+            content_hash=content_hash,
+            render_mode="http",
+        )
+        as_markdown = content_type in MARKDOWN_CONTENT_TYPES or is_markdown_url(
+            final_url
+        )
+        extract = extract_markdown if as_markdown else extract_plain_text
+        return extract(text, text_source), text
+
     if content_type not in _HTML_CONTENT_TYPES:
         raise UnsupportedContentType(
-            f"content-type {content_type!r} is not HTML or PDF",
+            f"content-type {content_type!r} is not HTML, PDF, Markdown or text",
             details={"content_type": content_type, "url": guard.normalized_url},
         )
 
@@ -237,6 +279,22 @@ def _extract_document(
         render_mode="http",
     )
     doc = extract_html(decoded, http_source)
+
+    # (SPEC §3.5) The page's same-origin Markdown alternate, when enabled.
+    alternate_warning: Warning | None = None
+    if fetch_alternate is not None:
+        alternate_doc, alternate_warning = use_markdown_alternate(
+            html_text=decoded,
+            link_header=link_header,
+            html_doc=doc,
+            fetch_alternate=fetch_alternate,
+            settings=settings,
+        )
+        if alternate_doc is not None:
+            return alternate_doc, decoded
+        if alternate_warning is not None:
+            doc.warnings.append(alternate_warning)
+
     main_text_len = sum(len(b.text) for b in doc.blocks if b.type != "code")
 
     if should_render(
@@ -261,6 +319,8 @@ def _extract_document(
             render_mode="browser",
         )
         doc = extract_html(rendered.html, browser_source)
+        if alternate_warning is not None:
+            doc.warnings.append(alternate_warning)
         doc.warnings.append(
             Warning(
                 code=RENDERED_WITH_BROWSER_WARNING_CODE,
@@ -278,6 +338,28 @@ def _render_charger(request: Request | None) -> Callable[[], None] | None:
     if request is None:
         return None
     return lambda: charge_render(request)
+
+
+def _alternate_fetcher(
+    *,
+    robots: RobotsChecker,
+    resolver: Resolver | None,
+    transport: Transport | None,
+    settings: Settings,
+) -> FetchAlternate | None:
+    """Fetch a Markdown alternate like any page (robots, then the guarded
+    client), or ``None`` when ``settings.markdown_alternate`` is off."""
+    if not settings.markdown_alternate:
+        return None
+
+    def fetch_alternate(url: str) -> FetchResult:
+        reject_secret_url(url)
+        robots.is_allowed(url)
+        return default_fetch(
+            url, resolver=resolver, transport=transport, settings=settings
+        )
+
+    return fetch_alternate
 
 
 def _ensure_not_empty(doc: Document) -> None:
@@ -387,6 +469,7 @@ def resolve_document(
             resolver=resolver,
             transport=transport,
             settings=settings,
+            accept=_ACCEPT_MARKDOWN_FIRST if settings.fetch_accept_markdown else None,
         )
 
         # (6) 304 Not Modified: refresh fetched_at only, no new version.
@@ -442,6 +525,10 @@ def resolve_document(
             resolver=resolver,
             settings=settings,
             on_render=_render_charger(request),
+            link_header=result.headers.get("link"),
+            fetch_alternate=_alternate_fetcher(
+                robots=robots, resolver=resolver, transport=transport, settings=settings
+            ),
         )
 
         # (M9) record whether a browser render happened for usage accounting.

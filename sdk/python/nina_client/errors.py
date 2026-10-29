@@ -76,7 +76,7 @@ class TooLargeError(NinaError):
 
 
 class UnsupportedContentTypeError(NinaError):
-    """Content type is neither HTML nor PDF (SPEC §8 ``unsupported_content_type``)."""
+    """Content type is not HTML, PDF, Markdown or text (SPEC §8)."""
 
     code = "unsupported_content_type"
 
