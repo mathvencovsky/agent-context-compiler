@@ -225,3 +225,26 @@ by humans; `main_content` is plain text, so code and table checks rely on
   leak −0.0008, glued 119 → 34 (94 → 34 for this change, −64%; dev −99%),
   code recall unchanged, table-cell recall 79.5% → 79.5%; gates PASS.
   Accepted. Separators inside table cells stay deferred.
+- 2026-10-29: Phase P change H3 (page widgets inside the content, commit
+  `18e0286`). Targets: boilerplate. Removed only in `_clean_subtree` (not in
+  the content-root measure): `<template>`, `lite-youtube`/`lite-vimeo`;
+  class tokens `printfooter`, `mw-pt-languages`, `nocontent`,
+  `language-selection`; class-name words (`feedback`, `footer`,
+  `breadcrumb(s)`, `pagination`, `pager`, `toc`, `banner`, `cookie(s)`,
+  `consent`; plain-`div` ids without `.`/`:` too) on non-heading elements of
+  at most 500 chars, no negation word; exact page-action labels ("On this
+  page", "Copy page", "Edit this page", ...) and two prefixes. Rules derived
+  from dev pages only; the H6 hljs check still reads 0 token-class
+  languages. Dev, cumulative vs baseline: ΔF1 +0.0228 [+0.0119, +0.0364],
+  Δrecall +0.0076, ΔP +0.0333, leak 4.32% → 3.22% (−0.0110, −25.5%
+  relative), without 4.4% → 3.3%, with 70.8% → 70.4%, glued 2, code/table
+  recall unchanged; gates PASS, H3 target met (≤ 3.2% rounded; precision
+  +0.0101 for this change alone, +0.0333 cumulative). For this change alone
+  (vs the previous commit): ΔF1 +0.0052, ΔP +0.0101, Δrecall −0.0005, leak
+  3.75% → 3.22% (−14% relative); the relative target is met only against
+  the baseline, as its "4.3% → ≤ 3.2%" wording states. Test (single look):
+  cumulative ΔF1 +0.0155 [+0.0092, +0.0238], Δrecall −0.0002, ΔP +0.0287,
+  leak −0.0080, without −0.0448, glued 34, code/table recall unchanged; for
+  this change alone ΔF1 +0.0059, ΔP +0.0109, Δrecall −0.0011, leak −0.0072
+  (dev −0.0053); gates PASS, both targeted metrics beyond half their dev
+  effect. Accepted.
