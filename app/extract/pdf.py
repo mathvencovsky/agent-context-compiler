@@ -42,8 +42,9 @@ PDF", M10b Phase P — DECISIONS.md 2026-10-29):
 8. Every block carries its 1-based ``page``; ``assign_block_ids`` runs ONCE.
    ``metadata.title`` is the largest text on page 1, else the PDF's /Title.
    Warnings: ``table_no_header``, ``pdf_truncated``, ``low_text_content`` and
-   ``pages_without_text`` (pages with images or drawings but no text layer: no
-   OCR, so their content is missing). A PDF with no extractable text at all
+   ``pages_without_text`` (pages with images or drawings but no extractable
+   text: a scanned page, or text in a font encoding pdfminer cannot decode;
+   no OCR, so their content is missing). A PDF with no extractable text at all
    raises :class:`ExtractionEmpty` (HTTP 422).
 """
 
@@ -101,7 +102,8 @@ _GUTTER_BAND = (0.3, 0.7)
 #: Warning code when a PDF resource limit truncated the extraction (audit A2).
 PDF_TRUNCATED_WARNING_CODE = "pdf_truncated"
 
-#: Warning code for pages that have images or drawings but no text layer.
+#: Warning code for pages that have images or drawings but no extractable text
+#: (scanned pages, or text whose font encoding pdfminer cannot decode).
 PAGES_WITHOUT_TEXT_WARNING_CODE = "pages_without_text"
 
 _LIST_MARKER_RE = re.compile(
@@ -1321,8 +1323,9 @@ def _textless_warning(pages: list[int]) -> Warning:
     return Warning(
         code=PAGES_WITHOUT_TEXT_WARNING_CODE,
         message=(
-            f"{len(pages)} page(s) have images or drawings but no text layer "
-            f"(pages {shown}); OCR is out of scope, so their content is missing"
+            f"{len(pages)} page(s) have images or drawings but no extractable "
+            f"text (pages {shown}): scanned pages or an undecodable font "
+            "encoding; OCR is out of scope, so their content is missing"
         ),
         block_id=None,
     )
