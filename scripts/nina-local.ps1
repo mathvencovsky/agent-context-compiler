@@ -53,7 +53,9 @@ function Stop-All {
     if (-not (Test-Path $PidFile)) { Say "nothing to stop"; return }
     foreach ($line in Get-Content $PidFile) {
         $name, $id = $line -split " "
-        Stop-Process -Id ([int]$id) -Force -ErrorAction SilentlyContinue
+        # The whole tree: killing uv alone leaves uvicorn's python holding port 8000.
+        # cmd does the redirect: PS 5.1 throws on native stderr under 2>$null with Stop.
+        & cmd /c "taskkill /T /F /PID $id >nul 2>&1"
         Say "stopped $name ($id)"
     }
     Remove-Item $PidFile
