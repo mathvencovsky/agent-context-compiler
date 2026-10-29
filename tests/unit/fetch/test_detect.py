@@ -83,3 +83,31 @@ def test_meta_charset_unknown_late_or_utf16_falls_back_to_utf8() -> None:
         )
         == "utf-8"
     )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj",
+        b"%PDF-2.0\r\n",
+        b"\n\r\t %PDF-1.4\n",
+        codecs.BOM_UTF8 + b"%PDF-1.5\n",
+    ],
+)
+def test_looks_like_pdf_accepts_the_signature(body: bytes) -> None:
+    assert detect.looks_like_pdf(body)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"",
+        b"%PDF",  # truncated signature
+        b"<html><body>Save as %PDF-1.7</body></html>",
+        b"\x89PNG\r\n\x1a\n",
+        b"PK\x03\x04",  # zip / docx
+        b"x" * 10 + b"%PDF-1.7",  # not at the start
+    ],
+)
+def test_looks_like_pdf_rejects_other_bodies(body: bytes) -> None:
+    assert not detect.looks_like_pdf(body)

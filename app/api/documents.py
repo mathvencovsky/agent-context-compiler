@@ -59,7 +59,13 @@ from app.extract.pdf import extract_pdf
 from app.extract.to_markdown import to_markdown
 from app.fetch.client import Transport
 from app.fetch.client import fetch as default_fetch
-from app.fetch.detect import detect_charset, parse_content_type, should_render
+from app.fetch.detect import (
+    CONTENT_TYPE_MISMATCH_WARNING_CODE,
+    detect_charset,
+    looks_like_pdf,
+    parse_content_type,
+    should_render,
+)
 from app.fetch.errors import UnsupportedContentType, UpstreamStatus
 from app.fetch.guard import GuardResult, Resolver, validate_url
 from app.fetch.render import RENDERED_WITH_BROWSER_WARNING_CODE, render_url
@@ -194,11 +200,19 @@ def _extract_document(
 
     Returns the Document and the decoded raw text used for token counting.
     Raises :class:`UnsupportedContentType` for anything that is not HTML or PDF.
+    A body that starts with the ``%PDF-`` signature is extracted as a PDF
+    whatever its declared type, with a ``content_type_mismatch`` warning.
     ``on_render`` (M9) is invoked right BEFORE a headless-browser render so the
     caller can charge the per-key daily render quota (and reject with 429 before
     the browser work happens).
     """
-    if content_type == _PDF_CONTENT_TYPE:
+    mismatch: str | None = None
+    if content_type != _PDF_CONTENT_TYPE and looks_like_pdf(body):
+        # The bytes are a PDF whatever the label says (octet-stream, x-download,
+        # no type...): extract it as a PDF and say so (G L2).
+        mismatch = content_type or "(none)"
+
+    if content_type == _PDF_CONTENT_TYPE or mismatch is not None:
         source = SourceInfo(
             url=guard.normalized_url,
             final_url=final_url,
@@ -210,6 +224,17 @@ def _extract_document(
             render_mode="pdf",
         )
         doc = extract_pdf(body, source, settings=settings)
+        if mismatch is not None:
+            doc.warnings.append(
+                Warning(
+                    code=CONTENT_TYPE_MISMATCH_WARNING_CODE,
+                    message=(
+                        f"the server declared content-type {mismatch!r} but the "
+                        "body is a PDF; it was extracted as a PDF"
+                    ),
+                    block_id=None,
+                )
+            )
         # PDF raw text for tokens: use the extracted block text (bytes are binary).
         raw_text = "\n".join(b.text for b in doc.blocks)
         return doc, raw_text
