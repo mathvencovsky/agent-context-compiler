@@ -62,6 +62,13 @@ REQUEST_STATE_USAGE_UNITS = "usage_units"
 #: scope["state"] key carrying the limiter the quota dependency used, so a
 #: handler can charge the render quota against the SAME limiter instance.
 REQUEST_STATE_LIMITER = "usage_limiter"
+#: scope["state"] key telling the middleware to record a keyless (local) request.
+REQUEST_STATE_RECORD_LOCAL = "usage_record_local"
+
+
+def records_local_usage(settings: Settings) -> bool:
+    """Whether keyless requests are recorded (ENV=dev + ``record_local_usage``)."""
+    return settings.env == "dev" and settings.record_local_usage
 
 
 # --------------------------------------------------------------------------- #
@@ -118,6 +125,9 @@ def require_quota(
     setattr(request.state, REQUEST_STATE_LIMITER, limiter)
     api_key = getattr(request.state, REQUEST_STATE_API_KEY, None)
     if api_key is None:
+        setattr(
+            request.state, REQUEST_STATE_RECORD_LOCAL, records_local_usage(settings)
+        )
         return
 
     result = limiter.acquire(api_key.id, cost=1.0, limits=dict(api_key.limits or {}))
@@ -186,6 +196,7 @@ def _rollup_by_day(buckets: list[UsageBucket]) -> list[UsageByDay]:
                 endpoint=b.endpoint,
                 requests=b.requests,
                 tokens_delivered=b.tokens_delivered,
+                page_tokens=b.page_tokens,
                 renders=b.renders,
                 latency_p50_ms=b.latency_p50_ms,
                 latency_p95_ms=b.latency_p95_ms,
@@ -197,6 +208,7 @@ def _rollup_by_day(buckets: list[UsageBucket]) -> list[UsageByDay]:
                 day=day,
                 requests=sum(b.requests for b in endpoint_buckets),
                 tokens_delivered=sum(b.tokens_delivered for b in endpoint_buckets),
+                page_tokens=sum(b.page_tokens for b in endpoint_buckets),
                 renders=sum(b.renders for b in endpoint_buckets),
                 latency_p50_ms=max(b.latency_p50_ms for b in endpoint_buckets),
                 latency_p95_ms=max(b.latency_p95_ms for b in endpoint_buckets),
@@ -210,15 +222,17 @@ def _rollup_by_day(buckets: list[UsageBucket]) -> list[UsageByDay]:
 def get_usage(
     request: Request,
     session_factory: UsageSessionFactoryDep,
+    settings: UsageSettingsDep,
 ) -> UsageResponse:
-    """Return the current key's usage aggregated by day and by endpoint."""
+    """Return the key's usage (dev: the keyless local use) by day and endpoint."""
     api_key = getattr(request.state, REQUEST_STATE_API_KEY, None)
 
-    # Dev / no-op auth: no key means no attributed usage.
-    if api_key is None:
+    # Dev / no-op auth: no key means no attributed usage, unless local use is recorded.
+    if api_key is None and not records_local_usage(settings):
         return UsageResponse(
             requests=0,
             tokens_delivered=0,
+            page_tokens=0,
             renders=0,
             latency_p50_ms=0,
             latency_p95_ms=0,
@@ -227,7 +241,9 @@ def get_usage(
 
     session = session_factory()
     try:
-        buckets = UsageEventRepo(session).aggregate(api_key.id)
+        buckets = UsageEventRepo(session).aggregate(
+            None if api_key is None else api_key.id
+        )
     finally:
         session.close()
 
@@ -235,6 +251,7 @@ def get_usage(
     return UsageResponse(
         requests=sum(d.requests for d in by_day),
         tokens_delivered=sum(d.tokens_delivered for d in by_day),
+        page_tokens=sum(d.page_tokens for d in by_day),
         renders=sum(d.renders for d in by_day),
         latency_p50_ms=max((d.latency_p50_ms for d in by_day), default=0),
         latency_p95_ms=max((d.latency_p95_ms for d in by_day), default=0),
@@ -298,10 +315,13 @@ class UsageMiddleware:
     def _record(
         self, scope: Scope, *, path: str, status_code: int, latency_ms: int
     ) -> None:
-        """Persist one usage event for the authenticated key, if any."""
+        """Persist one usage event for the authenticated key, or keyless local use."""
         state = scope.get("state") or {}
         api_key = state.get(REQUEST_STATE_API_KEY)
-        if not isinstance(api_key, ApiKey):
+        if (
+            not isinstance(api_key, ApiKey)
+            and state.get(REQUEST_STATE_RECORD_LOCAL) is not True
+        ):
             return
 
         units = state.get(REQUEST_STATE_USAGE_UNITS)
@@ -311,7 +331,7 @@ class UsageMiddleware:
         session = self._resolve_factory()()
         try:
             UsageEventRepo(session).record(
-                api_key_id=api_key.id,
+                api_key_id=api_key.id if isinstance(api_key, ApiKey) else None,
                 endpoint=path,
                 ts=self._now_fn(),
                 status_code=status_code,

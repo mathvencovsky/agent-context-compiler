@@ -245,7 +245,7 @@ document_versions(id pk, source_id fk, content_hash, fetched_at, etag, last_modi
 chunks(id pk, version_id fk, block_ids text[], heading_path text[], text, md,
        tokens int, tsv tsvector generated, embedding vector(DIM), embedding_model text null, ord int)
 api_keys(id pk, key_hash unique, name, created_at, revoked_at null, limits jsonb)
-usage_events(id pk, api_key_id fk, endpoint, ts, status_code, latency_ms, units jsonb)
+usage_events(id pk, api_key_id fk null, endpoint, ts, status_code, latency_ms, units jsonb)
 ```
 
 O HTML ou PDF bruto e a IR completa ficam no armazenamento S3 (SeaweedFS no dev local, AWS S3 em produção — ver DECISIONS.md 2026-10-11). O Postgres guarda metadados, chunks e índices. `tokens_raw_html` guarda, desde a migração 0007, o `stats.tokens_raw_html` que toda resposta servida da versão armazenada devolve (tokens `cl100k_base` dos bytes brutos decodificados como UTF-8), calculado uma vez na criação da versão; linhas antigas (`NULL`) contam a partir do blob bruto, com o mesmo resultado. Chaves de API são armazenadas apenas como hash (sha256) e mostradas uma única vez na criação.
@@ -385,7 +385,9 @@ Nunca há 200 vazio sem aviso. Warnings (com `code`, `message` e `url`): `llms_t
 
 ### `GET /v1/usage`
 
-Agregados da chave atual por dia e por endpoint: requisições, tokens entregues, renderizações e latência p50/p95.
+Agregados da chave atual por dia e por endpoint: requisições, tokens entregues, tokens das páginas inteiras (`page_tokens`, só do `assemble`: a soma do `page_tokens` das fontes `ok`, o que o agente leria sem o NINA; base da economia), renderizações e latência p50/p95.
+
+Uso local: com `ENV=dev` e `RECORD_LOCAL_USAGE=true` (o `scripts/nina-local.ps1` liga), cada requisição sem chave é registrada com `api_key_id` nulo, e o `GET /v1/usage` sem chave devolve esse uso local. Desligado (o padrão, e no benchmark), nada muda: sem chave, nada é registrado e o `GET /v1/usage` devolve zeros. Em produção a configuração não tem efeito. O texto da pergunta nunca é guardado, só os contadores (DECISIONS 2026-11-02).
 
 ### Erros
 

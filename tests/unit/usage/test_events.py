@@ -152,6 +152,39 @@ def test_aggregate_percentiles_nearest_rank(
         session.close()
 
 
+def test_aggregate_keyless_local_rows_apart_with_page_tokens(
+    session_factory: sessionmaker[Session],
+) -> None:
+    session = session_factory()
+    try:
+        repo = UsageEventRepo(session)
+        ts = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
+        for key, units in (
+            (None, {"output_tokens": 900, "page_tokens": 5000}),
+            (None, {"output_tokens": 100, "page_tokens": 1000}),
+            (_KEY, {"output_tokens": 7, "page_tokens": 70}),
+        ):
+            repo.record(
+                api_key_id=key,
+                endpoint="/v1/context/assemble",
+                ts=ts,
+                status_code=200,
+                latency_ms=50,
+                units=units,
+            )
+        session.commit()
+        (local,) = repo.aggregate(None)
+        assert (local.requests, local.tokens_delivered, local.page_tokens) == (
+            2,
+            1000,
+            6000,
+        )
+        (keyed,) = repo.aggregate(_KEY)
+        assert (keyed.requests, keyed.tokens_delivered, keyed.page_tokens) == (1, 7, 70)
+    finally:
+        session.close()
+
+
 def test_aggregate_empty_for_unknown_key(
     session_factory: sessionmaker[Session],
 ) -> None:

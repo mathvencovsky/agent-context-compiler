@@ -262,6 +262,8 @@ class UsageByEndpoint(BaseModel):
     endpoint: str
     requests: int
     tokens_delivered: int
+    #: Tokens of the whole pages behind the assembles (savings baseline).
+    page_tokens: int
     renders: int
     latency_p50_ms: int
     latency_p95_ms: int
@@ -273,6 +275,8 @@ class UsageByDay(BaseModel):
     day: str
     requests: int
     tokens_delivered: int
+    #: Tokens of the whole pages behind the assembles (savings baseline).
+    page_tokens: int
     renders: int
     latency_p50_ms: int
     latency_p95_ms: int
@@ -289,6 +293,8 @@ class UsageResponse(BaseModel):
 
     requests: int
     tokens_delivered: int
+    #: Tokens of the whole pages behind the assembles (savings baseline).
+    page_tokens: int
     renders: int
     latency_p50_ms: int
     latency_p95_ms: int

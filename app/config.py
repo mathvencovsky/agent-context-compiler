@@ -203,6 +203,10 @@ class Settings(BaseSettings):
     rate_limit_capacity: int = 60
     rate_limit_refill_per_sec: float = 1.0
     render_daily_quota: int = 200
+    # Local usage record (DECISIONS 2026-11-02): with ENV=dev and this on, every
+    # /v1 request is recorded with no API key so local use can be measured.
+    # scripts/nina-local.ps1 turns it on; the benchmark leaves it off.
+    record_local_usage: bool = False
 
     # Benchmark LLM keys (M2, SPEC §10). Optional: the deterministic fake
     # provider ignores them and every test runs without network. Only the real

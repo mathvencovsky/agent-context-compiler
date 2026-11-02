@@ -108,6 +108,7 @@ def _make_harness(
     *,
     capacity: int,
     limits: dict[str, object] | None = None,
+    seam_settings: Settings | None = None,
 ) -> UsageHarness:
     _truncate(engine)
     _truncate_keys(engine)
@@ -121,6 +122,8 @@ def _make_harness(
         prod_settings.model_copy(update={"rate_limit_capacity": capacity}),
         time_fn=FakeMonotonic(),
     )
+    # Auth + usage seams: production unless a test passes its own (local use).
+    seam = seam_settings or prod_settings
 
     # Resolve-path seams.
     app.dependency_overrides[documents.provide_session_factory] = lambda: (
@@ -141,13 +144,13 @@ def _make_harness(
     app.dependency_overrides[assemble.provide_embeddings] = FakeEmbeddingProvider
     app.dependency_overrides[assemble.provide_reranker] = FakeRerankProvider
     # Auth seams: enforce production against the real test DB.
-    app.dependency_overrides[auth.provide_settings] = lambda: prod_settings
+    app.dependency_overrides[auth.provide_settings] = lambda: seam
     app.dependency_overrides[auth.provide_auth_session_factory] = lambda: (
         session_factory
     )
     # Usage seams: fresh limiter + settings + the test session factory.
     app.dependency_overrides[usage.provide_limiter] = lambda: limiter
-    app.dependency_overrides[usage.provide_usage_settings] = lambda: prod_settings
+    app.dependency_overrides[usage.provide_usage_settings] = lambda: seam
     app.dependency_overrides[usage.provide_usage_session_factory] = lambda: (
         session_factory
     )
@@ -287,10 +290,75 @@ def test_requests_write_one_usage_event_each_and_usage_aggregates(
     assert endpoints["/v1/context/assemble"]["requests"] == 1
     # The assemble endpoint delivered some tokens; p50/p95 are present ints.
     assert endpoints["/v1/context/assemble"]["tokens_delivered"] >= 0
+    # Whole-page tokens behind the assemble (the savings baseline) are recorded.
+    assert endpoints["/v1/context/assemble"]["page_tokens"] > 0
+    assert endpoints["/v1/documents/resolve"]["page_tokens"] == 0
     for ep in day["endpoints"]:
         assert isinstance(ep["latency_p50_ms"], int)
         assert isinstance(ep["latency_p95_ms"], int)
         assert ep["latency_p95_ms"] >= ep["latency_p50_ms"]
+
+
+def _count_keyless(session_factory: sessionmaker[Session]) -> int:
+    session = session_factory()
+    try:
+        rows = session.execute(
+            text("SELECT count(*) FROM usage_events WHERE api_key_id IS NULL")
+        ).scalar_one()
+        return int(rows)
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("record", [True, False])
+def test_local_use_recorded_only_when_enabled(
+    engine: Engine,
+    session_factory: sessionmaker[Session],
+    blob_store: BlobStore,
+    resolver: FakeResolver,
+    clock: FakeClock,
+    settings: Settings,
+    record: bool,
+) -> None:
+    # ENV=dev, no API key: what scripts/nina-local.ps1 runs (record on) and what
+    # the benchmark runs (record off, so its measured path writes nothing new).
+    local = settings.model_copy(update={"env": "dev", "record_local_usage": record})
+    harness = _make_harness(
+        engine,
+        session_factory,
+        blob_store,
+        resolver,
+        clock,
+        settings,
+        capacity=100,
+        seam_settings=local,
+    )
+    try:
+        with harness.client:
+            r = harness.client.post(
+                "/v1/context/assemble", json=_assemble_body(harness)
+            )
+            assert r.status_code == 200, r.text
+            usage_resp = harness.client.get("/v1/usage")
+        assert usage_resp.status_code == 200, usage_resp.text
+        body = usage_resp.json()
+        if not record:
+            assert _count_keyless(harness.session_factory) == 0
+            assert body["requests"] == 0
+            assert body["by_day"] == []
+            return
+        # The assemble and the GET /v1/usage itself, both without a key.
+        assert _count_keyless(harness.session_factory) == 2
+        endpoints = {e["endpoint"]: e for e in body["by_day"][0]["endpoints"]}
+        assemble_usage = endpoints["/v1/context/assemble"]
+        assert assemble_usage["requests"] == 1
+        assert assemble_usage["tokens_delivered"] > 0
+        assert assemble_usage["page_tokens"] > 0
+        assert body["page_tokens"] == assemble_usage["page_tokens"]
+    finally:
+        harness.client.app.dependency_overrides.clear()
+        _truncate_keys(engine)
+        _truncate(engine)
 
 
 def test_exceeding_bucket_returns_429_with_retry_after(
