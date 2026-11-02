@@ -5,7 +5,12 @@ page(s) the agent would read without it, savings and time. Writes a JSON array
 for the "NINA na vida real" panel. Nothing in NINA or Claude Code is changed.
 
     uv run python scripts/nina_usage.py out.json
+    uv run python scripts/nina_usage.py --api out.json
     uv run python scripts/nina_usage.py --selfcheck
+
+``--api`` reads instead what NINA recorded itself (GET /v1/usage, local use
+recorded since DECISIONS 2026-11-02): every client, per day and endpoint, with
+no question text.
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +27,7 @@ from urllib.parse import urlsplit
 from app.index.tokens import count_tokens
 
 HISTORY = Path.home() / ".claude" / "projects"
+USAGE_URL = "http://127.0.0.1:8000/v1/usage"
 PREFIX = "mcp__nina__"
 _HEADER = re.compile(
     r"coverage: (\w+) \| (\d+)/\d+ tokens \| sources: (\d+) ok, (\d+) failed"
@@ -153,6 +160,24 @@ def collect() -> list[dict[str, Any]]:
     return sorted(rows.values(), key=lambda r: r["quando"])
 
 
+def from_api(body: dict[str, Any], made: str) -> list[dict[str, Any]]:
+    """One row per (day, endpoint) of a GET /v1/usage body, leaving out /v1/usage."""
+    return [
+        {
+            "dia": day["day"],
+            "endpoint": e["endpoint"],
+            "requisicoes": e["requests"],
+            "tokens_entregues": e["tokens_delivered"],
+            "tokens_paginas": e["page_tokens"],
+            "p50_ms": e["latency_p50_ms"],
+            "gerado": made,
+        }
+        for day in body["by_day"]
+        for e in day["endpoints"]
+        if e["endpoint"] != "/v1/usage"
+    ]
+
+
 def _selfcheck() -> None:
     sample = (
         "coverage: sufficient | 980/1000 tokens | sources: 1 ok, 0 failed\n"
@@ -162,12 +187,40 @@ def _selfcheck() -> None:
     assert parse_reply("assemble_context", sample) == (980, 5600, "sufficient", 1, 0)
     assert parse_reply("assemble_context", "error: all_sources_failed") is None
     assert parse_reply("resolve_url", "hello world")[:2] == (2, 2)  # type: ignore[index]
+    endpoint = {
+        "requests": 1,
+        "tokens_delivered": 9,
+        "page_tokens": 90,
+        "latency_p50_ms": 5,
+    }
+    body = {
+        "by_day": [
+            {
+                "day": "2026-11-02",
+                "endpoints": [
+                    {**endpoint, "endpoint": "/v1/context/assemble"},
+                    {**endpoint, "endpoint": "/v1/usage"},
+                ],
+            }
+        ]
+    }
+    (row,) = from_api(body, "t")
+    assert (row["endpoint"], row["tokens_paginas"]) == ("/v1/context/assemble", 90)
     print("selfcheck ok")
 
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["--selfcheck"]:
         _selfcheck()
+    elif sys.argv[1] == "--api":
+        with urllib.request.urlopen(USAGE_URL, timeout=30) as response:
+            usage = json.load(response)
+        made = datetime.now().astimezone().isoformat(timespec="seconds")
+        found = from_api(usage, made)
+        Path(sys.argv[2]).write_text(
+            json.dumps(found, ensure_ascii=False, indent=1), encoding="utf-8"
+        )
+        print(f"{len(found)} day/endpoint rows -> {sys.argv[2]}")
     else:
         found = collect()
         Path(sys.argv[1]).write_text(
