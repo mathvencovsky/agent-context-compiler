@@ -10,6 +10,16 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-02: uso local registrado (`RECORD_LOCAL_USAGE`) e `page_tokens` no `GET /v1/usage`
+Contexto: o humano quer medir o NINA em uso real, de qualquer cliente (Claude Code, chat do app Claude, outros), e não só em listas de perguntas escolhidas. No uso local (`ENV=dev`) não há chave de API, e o `UsageMiddleware` pulava o registro: não existia nenhum dado de uso real. O histórico do Claude Code (`scripts/nina_usage.py`) só cobre o Claude Code. O humano aprovou o plano em 2026-11-02.
+Decisão:
+- `usage_events.api_key_id` passa a aceitar nulo (migração 0008). Com `ENV=dev` e `record_local_usage` ligado, o `require_quota` marca a requisição sem chave e o middleware grava a linha com chave nula; o `GET /v1/usage` sem chave agrega essas linhas.
+- A configuração vem desligada. Só o `scripts/nina-local.ps1` liga. O benchmark do M10 (protocolo pré-registrado) roda sem ela, então o caminho medido não ganha uma gravação extra no banco. Em produção não tem efeito: continua exigindo chave.
+- O `assemble` grava `page_tokens` (soma do `page_tokens` das fontes `ok`) ao lado de `output_tokens`, e o `GET /v1/usage` devolve `page_tokens` por dia, por endpoint e no total. Campo novo, nenhum removido.
+- O texto da pergunta não é guardado (decisão do humano): quem pergunta pode colar coisa sensível. O detalhe por pergunta continua vindo do histórico do Claude Code.
+Alternativas: chave fixa "local" criada no arranque (mexe na autenticação e mistura uso local com chaves reais); hook do Claude Code (só vê o Claude Code); contar tokens entregues também no `resolve` (mudaria o significado de `tokens_delivered` para chaves existentes; o `resolve` entrega a página inteira, então não tem economia a medir).
+Consequências: SPEC §7 (`api_key_id fk null`) e §8 (`GET /v1/usage`: `page_tokens` e o uso local). Testes: unidade (agregado sem chave e `page_tokens`) e integração (registro local só com a configuração ligada).
+
 ## 2026-10-29: M10b, produto da rodada 4 (J1, J3, J6, L7): `nina init`, índice do site, `version` e `compact`
 Contexto: a pesquisa da rodada 4 (`docs/PESQUISA_RODADA4.md` §2.C; `docs/pesquisa/rodada4/J_entrega_agentes.md` e `K_eficiencia.md`, L7) mostrou que o fator que mais pesa fora do benchmark é o agente chegar a chamar o NINA (bloco sempre carregado no AGENTS.md vence a skill sob demanda; Vercel), que o agente não sabe quais URLs passar, que o NINA não sabe que versão o projeto usa e que com 1.000 tokens o acerto cai para 0,29 (0,59 com 4.000). O humano aprovou as quatro propostas em 2026-10-29.
 Decisão:

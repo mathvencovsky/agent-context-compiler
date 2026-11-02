@@ -174,7 +174,10 @@ class UsageEvent(Base):
 
     # Holds the evt_... id (make_usage_event_id).
     id: Mapped[str] = mapped_column(primary_key=True)
-    api_key_id: Mapped[str] = mapped_column(ForeignKey("api_keys.id"), index=True)
+    # NULL for local use recorded without a key (ENV=dev + record_local_usage).
+    api_key_id: Mapped[str | None] = mapped_column(
+        ForeignKey("api_keys.id"), index=True, nullable=True
+    )
     endpoint: Mapped[str] = mapped_column()
     ts: Mapped[datetime] = mapped_column()
     status_code: Mapped[int] = mapped_column()

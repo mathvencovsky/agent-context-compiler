@@ -299,7 +299,16 @@ def assemble(
     # are not separately metered for assemble — its internal resolves are
     # cache-first and already governed by the per-key token bucket (documented
     # MVP choice); only resolve meters a browser render.
-    set_usage_units(request, {"output_tokens": result.output_tokens, "renders": 0})
+    # page_tokens: the whole pages an agent would read without NINA (savings).
+    page_tokens = sum(s.page_tokens or 0 for s in result.sources if s.status == "ok")
+    set_usage_units(
+        request,
+        {
+            "output_tokens": result.output_tokens,
+            "page_tokens": page_tokens,
+            "renders": 0,
+        },
+    )
 
     if settings.providers == "fake":
         result.warnings.append(

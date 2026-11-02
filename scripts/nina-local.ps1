@@ -173,6 +173,8 @@ switch ($Action) {
         $env:RERANKER_BASE_URL = $RerankUrl
         $env:RERANKER_MODEL = "Qwen3-Reranker-0.6B-Q8_0@ggml-org-GGUF"
         $env:RERANKER_SCORE_TRANSFORM = $transform
+        # Record local use (no API key) for GET /v1/usage and the usage panel.
+        $env:RECORD_LOCAL_USAGE = "true"
         & uv run alembic upgrade head
         if ($LASTEXITCODE -ne 0) { throw "migration failed" }
         Start-Bg "api" "uv" @("run", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000")

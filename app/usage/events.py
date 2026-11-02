@@ -4,8 +4,9 @@
 ``ApiKeyRepo``). :meth:`record` persists ONE :class:`~app.store.models.UsageEvent`
 per authenticated /v1 request (written by the usage middleware AFTER the
 response). :meth:`aggregate` rolls a key's events up BY (UTC day, endpoint) with
-request count, delivered tokens (``units.output_tokens``), renders
-(``units.renders``) and p50/p95 latency.
+request count, delivered tokens (``units.output_tokens``), whole-page tokens
+(``units.page_tokens``), renders (``units.renders``) and p50/p95 latency. Key
+``None`` means the keyless local-use rows (DECISIONS 2026-11-02).
 
 The percentiles use the NEAREST-RANK method over the matching rows' integer
 ``latency_ms`` (quantiles computed in Python, not SQL — simpler and trivially
@@ -36,6 +37,7 @@ class UsageBucket:
     endpoint: str
     requests: int
     tokens_delivered: int
+    page_tokens: int
     renders: int
     latency_p50_ms: int
     latency_p95_ms: int
@@ -50,7 +52,7 @@ class UsageEventRepo:
     def record(
         self,
         *,
-        api_key_id: str,
+        api_key_id: str | None,
         endpoint: str,
         ts: datetime,
         status_code: int,
@@ -71,15 +73,21 @@ class UsageEventRepo:
         self._session.flush()
         return event
 
-    def aggregate(self, api_key_id: str) -> list[UsageBucket]:
-        """Roll a key's events up by (UTC day, endpoint).
+    def aggregate(self, api_key_id: str | None) -> list[UsageBucket]:
+        """Roll a key's events (``None``: keyless local use) up by (day, endpoint).
 
         Returns one :class:`UsageBucket` per (day, endpoint) pair, sorted by day
         then endpoint, with request count, summed delivered tokens
-        (``units.output_tokens``), summed renders (``units.renders``) and
+        (``units.output_tokens``), summed whole-page tokens
+        (``units.page_tokens``), summed renders (``units.renders``) and
         nearest-rank p50/p95 of the group's ``latency_ms``.
         """
-        stmt = select(UsageEvent).where(UsageEvent.api_key_id == api_key_id)
+        key = (
+            UsageEvent.api_key_id.is_(None)
+            if api_key_id is None
+            else UsageEvent.api_key_id == api_key_id
+        )
+        stmt = select(UsageEvent).where(key)
         events = self._session.scalars(stmt).all()
 
         grouped: dict[tuple[str, str], list[UsageEvent]] = defaultdict(list)
@@ -97,6 +105,9 @@ class UsageEventRepo:
                     requests=len(rows),
                     tokens_delivered=sum(
                         _unit_int(row.units, "output_tokens") for row in rows
+                    ),
+                    page_tokens=sum(
+                        _unit_int(row.units, "page_tokens") for row in rows
                     ),
                     renders=sum(_unit_int(row.units, "renders") for row in rows),
                     latency_p50_ms=_percentile(latencies, 50),
