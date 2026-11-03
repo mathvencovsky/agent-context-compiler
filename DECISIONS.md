@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-03: no modo web, o NINA pede para ser usado na leitura de páginas
+Contexto: uma pesquisa real no chat do app Claude não passou pelo NINA, com o servidor conectado. O chat tem busca e leitura próprias, que rodam nos servidores da Anthropic, e o texto do modo web só dizia o que o NINA faz. A regra do `CLAUDE.md` global só vale no Claude Code, e o agente não pode mudar as configurações do próprio Claude. O humano pediu a correção em 2026-11-03.
+Decisão: só no modo web, `WEB_INSTRUCTIONS` pede para chamar `assemble_context` depois de uma busca e sempre que for preciso ler uma página, em vez de buscar a página, e a descrição da ferramenta começa com "Instead of fetching web pages, answer a question from them". Os tetos de 100 e 800 tokens continuam.
+Alternativas: mudar o texto padrão (é o que o PREREG congela para o M10); depender só da preferência pessoal do chat (só o humano pode escrever).
+Consequências: SPEC §9. O braço `nina` do M10 não muda. O texto aumenta a chance de o chat escolher o NINA, mas não obriga: quem decide é o modelo, e a busca continua sendo a do Claude. Não foi medido.
+
 ## 2026-11-03: modo web opcional do servidor MCP (`NINA_SCOPE=web`)
 Contexto: o humano quer que toda leitura de página da web feita pelo Claude passe pelo NINA, não só documentação técnica, sem precisar mandar link nem pedir o NINA. As instruções e descrições do servidor MCP dizem "documentação técnica" e "não use para páginas que não são documentação", e esse texto está congelado no PREREG do M10 (braço `nina`, Emenda 10). O humano aprovou o plano em 2026-11-03.
 Decisão: modo web opcional, desligado por padrão. Com `NINA_SCOPE=web`, lido só pelo `python -m app.mcp_server`, o servidor usa `WEB_INSTRUCTIONS` (qualquer página pública, inclusive as fontes de uma busca; o NINA não busca), e o `_NinaServer.list_tools` troca, numa passada, "documentation page(s)"/"page of documentation"/"documentation URLs" por "web page(s)"/"page URLs" em títulos, descrições e parâmetros. As dicas de busca continuam com "documentation", para a busca de ferramentas do Claude Code achar o NINA. Os textos padrão ficam no código como estavam. O `scripts/nina-local.ps1` registra o NINA no Claude Code com a variável, e o chat do app recebe a mesma variável na configuração.
