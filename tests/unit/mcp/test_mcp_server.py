@@ -285,6 +285,33 @@ async def test_instructions_and_descriptions_let_a_deferred_agent_find_nina() ->
         assert "documentation" in (tool.description or "").lower(), tool.name
 
 
+async def test_web_scope_reads_any_page_within_the_same_limits() -> None:
+    # NINA_SCOPE=web (DECISIONS 2026-11-03): any public page. The default texts,
+    # frozen for M10, are what the tests above check.
+    from app.index.tokens import count_tokens
+    from app.mcp_server.server import WEB_INSTRUCTIONS
+
+    server = build_server(web=True)
+    assert server.instructions == WEB_INSTRUCTIONS
+    assert "assemble_context" in WEB_INSTRUCTIONS
+    assert "untrusted" in WEB_INSTRUCTIONS and "does not search" in WEB_INSTRUCTIONS
+    assert "not documentation" not in WEB_INSTRUCTIONS
+    assert count_tokens(WEB_INSTRUCTIONS) <= 100
+    web = {t.name: t for t in await server.list_tools()}
+    docs = {t.name: t for t in await build_server().list_tools()}
+    assert web.keys() == docs.keys()
+    for name, tool in web.items():
+        text = json.dumps([tool.title, tool.description, tool.input_schema])
+        assert "documentation page" not in text and "of documentation" not in text
+        assert "documentation URLs" not in text, name
+        assert UNTRUSTED_NOTICE in (tool.description or "")
+        assert tool.meta == docs[name].meta  # search hints still say documentation
+    urls = web["assemble_context"].input_schema["properties"]["urls"]
+    assert urls["description"] == "1-20 page URLs."
+    schema = [t.model_dump(exclude_none=True) for t in web.values()]
+    assert count_tokens(json.dumps(schema)) <= 800
+
+
 async def test_exclude_chunk_ids_says_how_to_restore_cleared_fragments() -> None:
     tools = {t.name: t for t in await _build().list_tools()}
     param = tools["assemble_context"].input_schema["properties"]["exclude_chunk_ids"]

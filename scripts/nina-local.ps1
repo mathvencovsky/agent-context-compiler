@@ -186,7 +186,8 @@ switch ($Action) {
             # Windows PowerShell 5.1 turns a native command's stderr into a terminating
             # error under "Stop"; "remove" writes there when nina is not registered yet.
             cmd /c "claude mcp remove nina -s user >nul 2>&1"
-            & claude mcp add nina -s user -e "API_URL=$ApiUrl" -e "API_KEY=nina_local_dev" -- `
+            # NINA_SCOPE=web: any public page, not only documentation (DECISIONS 2026-11-03).
+            & claude mcp add nina -s user -e "API_URL=$ApiUrl" -e "API_KEY=nina_local_dev" -e "NINA_SCOPE=web" -- `
                 uv --directory $Repo run python -m app.mcp_server
         } else {
             Write-Host "Claude Code (claude) not found: add the MCP server by hand (docs/USO_DIARIO.md)."
