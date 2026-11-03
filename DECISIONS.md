@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-03: modo web opcional do servidor MCP (`NINA_SCOPE=web`)
+Contexto: o humano quer que toda leitura de página da web feita pelo Claude passe pelo NINA, não só documentação técnica, sem precisar mandar link nem pedir o NINA. As instruções e descrições do servidor MCP dizem "documentação técnica" e "não use para páginas que não são documentação", e esse texto está congelado no PREREG do M10 (braço `nina`, Emenda 10). O humano aprovou o plano em 2026-11-03.
+Decisão: modo web opcional, desligado por padrão. Com `NINA_SCOPE=web`, lido só pelo `python -m app.mcp_server`, o servidor usa `WEB_INSTRUCTIONS` (qualquer página pública, inclusive as fontes de uma busca; o NINA não busca), e o `_NinaServer.list_tools` troca, numa passada, "documentation page(s)"/"page of documentation"/"documentation URLs" por "web page(s)"/"page URLs" em títulos, descrições e parâmetros. As dicas de busca continuam com "documentation", para a busca de ferramentas do Claude Code achar o NINA. Os textos padrão ficam no código como estavam. O `scripts/nina-local.ps1` registra o NINA no Claude Code com a variável, e o chat do app recebe a mesma variável na configuração.
+Alternativas: trocar o texto para todos (mudaria o produto que o M10 testa e exigiria emenda ao PREREG antes da tese ser provada em documentação); um parâmetro na API (o texto que orienta o agente é do MCP, não da API).
+Consequências: SPEC §9 (parágrafo do modo web). O benchmark constrói o servidor direto pelo `build_server`, sem ler a variável, então o braço `nina` do M10 não muda. Fetcher, guard e robots.txt valem igual para qualquer site; muitos sites de notícia e comércio proíbem robôs e serão recusados (o cliente cai na leitura própria). A extração não foi medida fora de documentação.
+
 ## 2026-11-02: uso local registrado (`RECORD_LOCAL_USAGE`) e `page_tokens` no `GET /v1/usage`
 Contexto: o humano quer medir o NINA em uso real, de qualquer cliente (Claude Code, chat do app Claude, outros), e não só em listas de perguntas escolhidas. No uso local (`ENV=dev`) não há chave de API, e o `UsageMiddleware` pulava o registro: não existia nenhum dado de uso real. O histórico do Claude Code (`scripts/nina_usage.py`) só cobre o Claude Code. O humano aprovou o plano em 2026-11-02.
 Decisão:

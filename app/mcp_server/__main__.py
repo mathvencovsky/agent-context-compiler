@@ -95,7 +95,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    server = build_server(client=client)
+    # NINA_SCOPE=web: opt-in, any public page (DECISIONS 2026-11-03).
+    server = build_server(client=client, web=os.environ.get("NINA_SCOPE") == "web")
     # Dispatch on the concrete literal so the correct run() overload is selected.
     if transport == _HTTP:
         server.run(
