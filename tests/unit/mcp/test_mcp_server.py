@@ -296,6 +296,7 @@ async def test_web_scope_reads_any_page_within_the_same_limits() -> None:
     assert "assemble_context" in WEB_INSTRUCTIONS
     assert "untrusted" in WEB_INSTRUCTIONS and "does not search" in WEB_INSTRUCTIONS
     assert "not documentation" not in WEB_INSTRUCTIONS
+    assert "instead of fetching the page" in WEB_INSTRUCTIONS
     assert count_tokens(WEB_INSTRUCTIONS) <= 100
     web = {t.name: t for t in await server.list_tools()}
     docs = {t.name: t for t in await build_server().list_tools()}
@@ -308,6 +309,9 @@ async def test_web_scope_reads_any_page_within_the_same_limits() -> None:
         assert tool.meta == docs[name].meta  # search hints still say documentation
     urls = web["assemble_context"].input_schema["properties"]["urls"]
     assert urls["description"] == "1-20 page URLs."
+    assert (web["assemble_context"].description or "").startswith(
+        "Instead of fetching web pages, answer a question from them:"
+    )
     schema = [t.model_dump(exclude_none=True) for t in web.values()]
     assert count_tokens(json.dumps(schema)) <= 800
 
