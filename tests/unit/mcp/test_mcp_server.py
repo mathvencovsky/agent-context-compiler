@@ -395,3 +395,17 @@ def test_titles_and_annotations_cross_the_wire() -> None:
     for tool in asyncio.run(listed()):
         assert tool["title"], tool["name"]
         assert tool["annotations"] == _READ_ONLY_HINTS, tool["name"]
+
+
+async def test_web_scope_first_pass_is_small_and_relevant() -> None:
+    # DECISIONS 2026-11-03: the docs defaults, frozen for M10, do not change.
+    async def props(*, web: bool) -> dict[str, Any]:
+        tools = await build_server(web=web).list_tools()
+        tool = next(t for t in tools if t.name == "assemble_context")
+        return tool.input_schema["properties"]
+
+    web, docs = await props(web=True), await props(web=False)
+    assert web["max_tokens"]["default"] == 1000
+    assert web["compact"]["default"] is True
+    assert docs["max_tokens"]["default"] == 4000
+    assert docs["compact"]["default"] is False
