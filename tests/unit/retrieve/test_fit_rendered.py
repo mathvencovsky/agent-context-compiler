@@ -14,11 +14,13 @@ from app.retrieve.compact import compact_result, pool_budget
 from app.retrieve.render import render_concise
 
 FILLER = " ".join(f"Unrelated sentence {i} talks about gardening." for i in range(40))
+#: Enough relevant text that the compact budget fills and the wrapper overshoots.
+RELEVANT = " ".join(f"Header number {i} carries the key {i}." for i in range(30))
 QUERY = "Which header carries the key?"
 
 
 def _fragment(n: int, doc: str) -> Fragment:
-    md = f"## Keys\n\n{FILLER} Send the key in the X-Api-Key header. {FILLER}"
+    md = f"## Keys\n\n{FILLER} {RELEVANT} {FILLER}"
     return Fragment(
         chunk_id=f"chunk_{n}",
         document_id=f"doc_{doc}",
@@ -33,7 +35,7 @@ def _fragment(n: int, doc: str) -> Fragment:
 
 
 def test_compact_render_fits_the_budget_on_several_documents() -> None:
-    max_tokens = 340
+    max_tokens = 300
     fragments = [_fragment(i, d) for i, d in enumerate("abc")]
     result = AssembleResult(
         query=QUERY,
@@ -58,4 +60,4 @@ def test_compact_render_fits_the_budget_on_several_documents() -> None:
     assert result.fragments
     assert count_tokens(rendered) <= max_tokens
     assert result.output_tokens == count_tokens(rendered)
-    assert f"/{max_tokens} tokens" in rendered
+    assert result.budget_tokens == max_tokens

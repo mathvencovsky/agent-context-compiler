@@ -10,6 +10,54 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: nenhuma variante de escolha de frases aprovada
+Contexto: regra na entrada abaixo. A simulação reproduz o produto: texto idêntico em 80 de 80 respostas.
+Decisão: o produto não muda. Metade A, `soft_hit` da base 0,638: `window` 0,674 (+3,6, avançou), `heading` 0,652, `paragraph` 0,638, `short5` 0,630, `density_quarter` 0,630, `context` 0,609, `density_none` 0,609; `window+heading` 0,659. Metade B, 110 tarefas: `window` 0,609 contra base 0,609, ganho zero, então falhou. Só 2 discordâncias, sem leitura às cegas por a condição de ganho já ter falhado.
+Alternativas: tentar outras variantes na mesma metade A, rejeitado: seria procurar até algo passar por acaso.
+Consequências: paro os ajustes de escolha de frases. O ganho da metade A era ruído. `context` e `heading` foram medidas de novo depois de corrigir um defeito do avaliador que as tornava idênticas à base. `DENSITY_EXPONENT` fica como constante, com o mesmo valor, porque o avaliador a usa.
+
+## 2026-11-04: como escolher frases dentro de 560 tokens (regra antes de medir)
+Contexto: o humano pediu para seguir melhorando a escolha das frases. Em 80 respostas, linhas de 1 a 4 palavras são só 6,4% do texto, então o lixo visto em um teste real não é a causa principal. A pesquisa aponta pontuar a frase com seu contexto e decidir por pergunta.
+Decisão: medir em `bench/compact_select_eval.py` as variantes `short5`, `context`, `heading`, `paragraph`, `density_quarter`, `density_none` e `window`, mais a combinação das duas melhores. A metade A (138 tarefas) escolhe: ganho de pelo menos 3 pontos de `soft_hit`, em até 560 tokens. A metade B (110 tarefas) decide: ganho de pelo menos 2 pontos, e o leitor às cegas aprova a variante ao menos tanto quanto a base nas discordâncias.
+Alternativas: um reranker maior, adiado por exigir outro modelo e mais tempo por chamada.
+Consequências: sem variante aprovada, o produto não muda. O teste usa só modelos locais. Comparar de novo com o Context7 em tarefas novas depende da cota grátis, que volta perto de 2026-12-01.
+
+## 2026-11-04: modo web em 560 tokens, por decisão do humano contra a regra
+Contexto: o limite 560 não passou na regra da entrada abaixo, que pedia `NINA VENCE` contra `c7_fetch`.
+Decisão (humano, 2026-11-04): adotar 560 como exceção, sabendo que a regra não passou. `WEB_MAX_TOKENS` vale 560.
+Alternativas: manter 1000, que entrega mais respostas pelo `soft_hit` (0,725 contra 0,613 nas 80 tarefas) e gasta 960 tokens em vez de 535.
+Consequências: a regra não foi alterada e o resultado continua `SEM VANTAGEM` contra `c7_fetch`. O agente pode ler mais chamando de novo com `exclude_chunk_ids`, o que custa outra chamada. Só o modo web muda; os padrões do modo de documentação, congelados para o M10, não mudam.
+
+## 2026-11-04: limite 560 não passou na regra; forma enxuta fica
+Contexto: regra na entrada abaixo, 71 discordâncias lidas às cegas.
+Decisão: o modo web continua em 1000 tokens, porque a condição 1 falhou. Nas 80 tarefas, contra `c7_fetch`: acerto 0,487 contra 0,425, `d` +0,062, CI [-0,013; +0,150], 535 tokens contra 509 (1,05x), `SEM VANTAGEM`, não `NINA VENCE`. A condição 2 passou nas 30 tarefas novas: 0,533 contra 0,533, 530 tokens contra 605 (0,88x). Contra `c7_docs`, nas 80: 0,375 contra 0,287, CI [-0,013; +0,188], 535 contra 821 (0,65x), `NINA VENCE`.
+Alternativas: adotar 560 mesmo assim, o que só o humano pode decidir, porque a regra foi escrita para impedir exatamente esta escolha depois do resultado.
+Consequências: o custo deixou de ser a desvantagem clara, de 1,85x para 1,05x, mas não há vantagem provada sobre `c7_fetch`. As 80 tarefas escolheram o limite, e o NINA recebe a página certa, o que favorece o resultado contra `c7_docs`. A forma enxuta fica porque mantém o texto; em 1000 tokens, `soft_hit` foi de 0,675 para 0,725. A cota grátis do Context7 acabou até 2026-12-01. O custo contra o leitor nativo do Claude não foi medido de novo.
+
+## 2026-11-04: verificação final do limite 560 (regra antes de medir)
+Contexto: o teste de tokens passou nas 80 tarefas já vistas. Com a forma enxuta: limite 500, `soft_hit` 0,562, 473 tokens; 560, 0,613, 535; 620, 0,588, 594; 700, 0,662, 666; 1000, 0,725, 960. `c7_fetch` tem 0,450 e 509. Venceu 560.
+Decisão: o limite 560 só vira a leitura do modo web se, depois da leitura às cegas, o veredito contra `c7_fetch` for `NINA VENCE` nas 80 tarefas e, nas 30 tarefas seguintes nunca usadas aqui, `d` >= 0 com tokens até 110% do rival.
+Alternativas: guardar a cota grátis restante do Context7, rejeitado porque esta é a pergunta que decide o produto.
+Consequências: usa as 30 consultas grátis restantes do mês. Trinta tarefas podem refutar, mas não provar. A limpeza do cegamento passa a ficar no repositório, com teste contra o defeito anterior.
+
+## 2026-11-04: forma enxuta do `compact` e regra do teste de tokens (antes de medir)
+Contexto: o humano pediu para pesquisar e melhorar. Nas 80 respostas, 35% dos tokens do NINA eram marcações e notas (331 de 945); o texto era 614. O Context7 usa cerca de 45 tokens de cabeçalho.
+Decisão: só com `compact` e `concise`, um `<document>` por página com `source` e `chunks`, sem `<fragment>`, sem ids, sem cobertura e com notas curtas. Depois, testar limites 500, 560, 620, 700 e 1000 nas mesmas 80 tarefas: passa com média <= 560 tokens e `soft_hit` >= 0,450. Nenhum passando encerra esta aposta, sem novo ajuste; passar só dá direito à leitura às cegas e ao teste em tarefas novas.
+Alternativas: um limite menor sem mexer nas marcações, rejeitado porque cortaria texto da página antes do que não é texto; piso de nota, já rejeitado na fase 2.
+Consequências: esta é uma leitura da regra de proveniência para decisão do humano: o texto do contexto compacto mantém URL e `chunks`, e `document_id`, `version_id` e PDFs seguem nos campos JSON e em `pages`, mas o agente do MCP não vê mais os ids. O formato padrão, congelado para o M10, não muda.
+
+## 2026-11-04: NINA contra Context7, resultado: SEM VANTAGEM
+Contexto: regra na entrada abaixo. 80 tarefas da metade B, 65 discordâncias lidas às cegas por um leitor Haiku; só documentação pública, 64% das tarefas em docs.python.org.
+Decisão: pela regra, `SEM VANTAGEM` contra os dois braços, então não há razão mostrada para escolher o NINA em documentação pública. Contra `c7_fetch`: acerto 0,512 contra 0,463, `d` +0,050, CI [-0,013; +0,125], 945 tokens contra 509 (1,85x). Contra `c7_docs`: 0,388 contra 0,350, `d` +0,037, CI [-0,062; +0,150], 945 contra 821 (1,15x). `c7_fetch` respondeu `no_relevant_content` em 24 das 80 tarefas; nas 56 restantes, 728 tokens.
+Alternativas: um primeiro resultado `NINA PERDE` foi anulado antes de valer: a limpeza do cegamento apagou as 65 respostas do NINA, porque o cabeçalho cita `<nina_notes>`. Corrigida, os 65 casos foram relidos com a mesma regra e a mesma amostra; os arquivos ficaram marcados como `INVALID`.
+Consequências: a amostra só detecta diferenças grandes, e o acerto do NINA pode ser um pouco maior ou menor. Mede presença da resposta, não a resposta final de um modelo. Concordâncias pelo `soft_hit` não foram relidas, e a limpeza do cegamento ficou em script local, fora do repositório. Não testa documentos privados.
+
+## 2026-11-04: NINA contra Context7, regra escrita antes de medir
+Contexto: o humano pediu um motivo real para continuar ou matar o projeto. O Context7 tem `/api/v3/fetch`, que lê uma URL focando em uma pergunta: a mesma função do NINA, grátis e sem conta. A Firecrawl nunca foi medida (sem chave) e entrega a página inteira, então não testa esta função.
+Decisão (humano, 2026-11-04: rodar sem pagar): 80 tarefas da metade B, mesma pergunta, ao vivo, em `bench/context7_compare.py`: `nina` e `c7_fetch` na página da resposta, `c7_docs` na biblioteca do site. Presença da resposta por `soft_hit`; discordâncias decididas às cegas pela resposta de referência. `NINA VENCE`: CI de `d` acima de 0 e tokens <= 110% do rival, ou `d` >= -0,03 e tokens <= 70%. `NINA PERDE`: CI abaixo de 0, ou `d` <= 0,03 e tokens >= 120%. Outro caso: `SEM VANTAGEM`. Só `NINA VENCE` contra `c7_fetch` é evidência para escolher o NINA em documentação pública.
+Alternativas: `answer_hit` literal, rejeitado porque o Context7 reformata o texto e seria prejudicado; juiz LLM em todas as tarefas, rejeitado por gastar limite.
+Consequências: mede presença da resposta e tokens em documentação pública, não a resposta final do modelo, documentos privados nem proveniência. A regra não muda depois do resultado.
+
 ## 2026-11-04: painel local de uso, exceção ao "painel web" fora do escopo
 Contexto: o humano pediu para ver o uso do chat atualizado sozinho. O painel no claude.ai só muda com chamadas do Claude, que gastam limite, e o chat não grava histórico neste PC.
 Decisão (humano, 2026-11-04): página em `/painel`, servida pela própria API e só local (`ENV=dev`, `RECORD_LOCAL_USAGE` e `Host` de loopback), que consulta os dados a cada 5 s. `units` ganha `client`, `hosts` e `failed`, sem migração. O nome do cliente vem de `clientInfo` do MCP, não é autenticado e serve só para separar a origem.
