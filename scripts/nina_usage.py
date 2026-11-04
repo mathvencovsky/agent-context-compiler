@@ -76,7 +76,12 @@ def parse_reply(tool: str, text: str) -> tuple[int, int, str | None, int, int] |
         )
     m = _HEADER.search(text)
     if m is None:
-        return None
+        # The compact form has no status line and no page size.
+        if "<document " not in text:
+            return None
+        failed = re.search(r"^sources: \d+ ok, (\d+) failed$", text, re.M)
+        ok = text.count("<document ")
+        return count_tokens(text), 0, None, ok, int(failed[1]) if failed else 0
     pages = sum(int(n) for n in _PAGE.findall(text))
     return int(m[2]), pages, m[1], int(m[3]), int(m[4])
 
@@ -354,6 +359,8 @@ def _selfcheck() -> None:
     )
     assert parse_reply("assemble_context", sample) == (980, 5600, "sufficient", 1, 0)
     assert parse_reply("assemble_context", "error: all_sources_failed") is None
+    lean = '[untrusted_source] x\nsources: 1 ok, 2 failed\n\n<document source="u">'
+    assert parse_reply("assemble_context", lean)[1:] == (0, None, 1, 2)  # type: ignore[index]
     assert parse_reply("resolve_url", "hello world")[:2] == (2, 2)  # type: ignore[index]
     endpoint = {
         "requests": 1,

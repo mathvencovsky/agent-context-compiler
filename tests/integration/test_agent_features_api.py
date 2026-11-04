@@ -83,7 +83,8 @@ def test_compact_keeps_verbatim_runs_within_budget(
             harness, "/classes", max_tokens=300, compact=True, response_format="concise"
         ),
     ).json()
-    assert "- compacted: " in concise["context"]
+    assert ELISION in concise["context"]
+    assert "compacted" in [h["code"] for h in concise["hints"]]
 
 
 def test_version_mismatch_hint(

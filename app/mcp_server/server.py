@@ -100,6 +100,9 @@ _WEB_TEXT = {
     "documentation pages": "web pages",
     "documentation page": "web page",
     "documentation URLs": "page URLs",
+    'as <document> elements of <fragment chunk="N">': (
+        'as <document chunks="N ..."> elements'
+    ),
 }
 _WEB_RE = re.compile("|".join(map(re.escape, _WEB_TEXT)))
 

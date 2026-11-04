@@ -385,6 +385,10 @@ O parser segue o formato do llmstxt.org: H1 como título, citação `>` antes da
 
 Nunca há 200 vazio sem aviso. Warnings (com `code`, `message` e `url`): `llms_txt_not_found` (404 ou 410), `llms_txt_unavailable` (outro status não 2xx), `llms_txt_not_markdown` (tipo diferente de `text/plain`, `text/markdown` ou `text/x-markdown`, ou corpo que começa como HTML, como nos sites que servem a casca do app em qualquer caminho; o tipo só é repetido se tiver forma de media type), `llms_txt_too_large` (acima do teto de corpo, sem entradas; ou acima de 1 MB, quando só o começo, cortado em fim de linha, é lido), `llms_txt_empty` (arquivo sem lista de links), `entries_dropped`, `invisible_text_removed` e `index_truncated` (entradas além de `max_tokens`). O `llms-full.txt` não é lido: é conteúdo, não índice.
 
+### Forma enxuta do `compact` em `response_format=concise`
+
+Com `compact=true`, `context` traz uma linha de aviso, `sources: X ok, Y failed` só se houve falha, um `<document source="..." chunks="1 2">` por página (com `date` e `pages` quando houver) e o texto literal, com `[…]` só entre trechos cortados e `§ título` quando muda a seção. Sem `<fragment>`, sem ids e sem linha de cobertura; esses dados seguem nos campos JSON da resposta. Em `<nina_notes>`, `compacted` sai por estar na primeira linha. O formato padrão não muda (DECISIONS.md 2026-11-04).
+
 ### Painel local (`GET /painel`, `GET /painel/dados`)
 
 Só com `ENV=dev` e `RECORD_LOCAL_USAGE=true`, e só para um `Host` de loopback; fora disso, 404. Fica fora de `/v1`: consultá-lo não é registrado nem limitado. `dados` devolve `version` e as chamadas locais mais novas primeiro (`ts`, `endpoint`, `status`, `latency_ms`, `output_tokens`, `page_tokens`, `failed`, `hosts`, `client`). O servidor MCP envia em `X-NINA-Client` o nome que o cliente MCP informou ao conectar; `units` passa a guardar `client`, `hosts` e `failed`. Nunca guarda a pergunta nem o caminho das páginas (DECISIONS.md 2026-11-04).
