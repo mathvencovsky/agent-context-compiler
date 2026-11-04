@@ -79,6 +79,16 @@ def test_context_and_heading_use_the_title_kept_apart_from_the_chunk() -> None:
     assert scores == [len(md.strip()) + 0.25 * len("Install")]
 
 
+def test_heading_arm_reads_each_piece_title_across_pieces() -> None:
+    first, second = "Run pip install nina right now.\n", "Open the file and read it.\n"
+    units = _units(first, 0) + _units(second, 1)
+    scores = scored(
+        ARMS["heading"], _by_length, [first, second], units, ["Install", "Files"]
+    )
+    assert scores[0] == len(first.strip()) + 0.25 * len("Install")
+    assert scores[1] == len(second.strip()) + 0.25 * len("Files")
+
+
 def test_combination_applies_each_change() -> None:
     merged = combined("short5", "context")
     assert merged.short_min == 5 and merged.context

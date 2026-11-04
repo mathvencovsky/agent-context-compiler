@@ -142,8 +142,8 @@ def scored(
         inputs.append(f"{title}\n{text(unit)}" if title else text(unit))
     own = dict(zip(((u.piece, u.index) for u in body), score(inputs), strict=True))
     if arm.heading_weight:
-        titles = list(dict.fromkeys(t for t in map(heading_of, body) if t))
-        values = dict(zip(titles, score(titles), strict=True)) if titles else {}
+        unique = list(dict.fromkeys(t for t in map(heading_of, body) if t))
+        values = dict(zip(unique, score(unique), strict=True)) if unique else {}
         for unit in body:
             bonus = arm.heading_weight * values.get(heading_of(unit), 0.0)
             own[(unit.piece, unit.index)] += bonus
