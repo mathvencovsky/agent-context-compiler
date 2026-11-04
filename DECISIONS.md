@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: fase 2, regra do freio por relevância (antes de medir)
+Contexto: sem freio, o `compact` ocupa o orçamento mesmo com frases sem relação. Os pisos 0,1 e 0,5 foram rejeitados, mas este reranker dá cerca de 0,9 a uma resposta e 0,0001 a ruído: a faixa entre os dois não foi testada. Além disso, um piso que zera tudo cai no `_fallback`, que devolve pedaços inteiros.
+Decisão: medir pisos absolutos (0,0001, 0,001, 0,01, 0,03) e relativos à melhor frase (0,001, 0,01, 0,05), sempre mantendo a melhor frase, em `bench/compact_stop_eval.py`, só com modelos locais, em 1000 tokens. Passa na metade A se, contra o braço sem freio: `answer_hit` cai no máximo 2 pontos; tokens ficam em no máximo 80%; e, com a pergunta de outra tarefa sobre estas páginas, tokens ficam em no máximo 50%. O braço com menos tokens vai à metade B, aberta uma vez, com as mesmas três verificações.
+Alternativas: 1 ponto de tolerância, rejeitado porque o reranker ganhou 6 sobre o BM25 e 1 ponto é pouco mais de uma tarefa.
+Consequências: nenhum braço passando, o produto fica como está. Passar é evidência só em documentação e não diz nada sobre custo.
+
 ## 2026-11-04: fase 2, poda do plano B da extração
 Contexto: o plano B do readability dispara em cerca de 2 de cada 3 páginas e entregava o contêiner inteiro, com menus e widgets. A regra foi escrita antes de qualquer correção, em `bench/extract_eval/wcxb_types.py`: `without` cai em ao menos 4 dos 6 tipos fora de documentação e não sobe mais de 1 ponto em nenhum; F1 cai no máximo 1 ponto por tipo e sobe no total; em documentação, recall cai no máximo 0,5 ponto, código e tabelas no máximo 1 ponto.
 Decisão: podar o contêiner (SPEC, "Extração HTML"), em vez de trocar de extrator. Dados: WCXB commit c039d5ee. Ajuste em dev (1497 páginas); teste (511) aberto uma vez, depois do ajuste, e passou em todas as linhas. Teste: F1 0,800 para 0,804; `without` 14,0% para 11,3%; caiu em 5 dos 6 tipos (fórum não mudou); pior variação de F1 por tipo -0,002 (service). Dev: F1 0,775 para 0,781; `without` 14,2% para 11,0%. ESC restante (`[2J`) resolvido removendo ANSI antes do parsing.
