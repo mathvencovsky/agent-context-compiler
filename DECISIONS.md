@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: nenhuma variante de escolha de frases aprovada
+Contexto: regra na entrada abaixo. A simulação reproduz o produto: texto idêntico em 80 de 80 respostas.
+Decisão: o produto não muda. Metade A, `soft_hit` da base 0,638: `window` 0,674 (+3,6, avançou), `heading` 0,652, `paragraph` 0,638, `short5` 0,630, `density_quarter` 0,630, `context` 0,609, `density_none` 0,609; `window+heading` 0,659. Metade B, 110 tarefas: `window` 0,609 contra base 0,609, ganho zero, então falhou. Só 2 discordâncias, sem leitura às cegas por a condição de ganho já ter falhado.
+Alternativas: tentar outras variantes na mesma metade A, rejeitado: seria procurar até algo passar por acaso.
+Consequências: paro os ajustes de escolha de frases. O ganho da metade A era ruído. `context` e `heading` foram medidas de novo depois de corrigir um defeito do avaliador que as tornava idênticas à base. `DENSITY_EXPONENT` fica como constante, com o mesmo valor, porque o avaliador a usa.
+
 ## 2026-11-04: como escolher frases dentro de 560 tokens (regra antes de medir)
 Contexto: o humano pediu para seguir melhorando a escolha das frases. Em 80 respostas, linhas de 1 a 4 palavras são só 6,4% do texto, então o lixo visto em um teste real não é a causa principal. A pesquisa aponta pontuar a frase com seu contexto e decidir por pergunta.
 Decisão: medir em `bench/compact_select_eval.py` as variantes `short5`, `context`, `heading`, `paragraph`, `density_quarter`, `density_none` e `window`, mais a combinação das duas melhores. A metade A (138 tarefas) escolhe: ganho de pelo menos 3 pontos de `soft_hit`, em até 560 tokens. A metade B (110 tarefas) decide: ganho de pelo menos 2 pontos, e o leitor às cegas aprova a variante ao menos tanto quanto a base nas discordâncias.
