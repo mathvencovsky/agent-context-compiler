@@ -85,6 +85,7 @@ const TOOLS = [
   ["/v1/sites/index", "Índice do site"],
 ];
 let data = null;
+let lastRaw = "";
 let filter = "all";
 
 function origin(e) {
@@ -221,10 +222,15 @@ async function refresh() {
   try {
     const response = await fetch("/painel/dados", { cache: "no-store" });
     if (!response.ok) throw new Error(String(response.status));
-    const body = await response.json();
-    body.events.forEach((e) => { e.date = new Date(e.ts); e.day = localDay(e.date); });
-    data = body;
-    render();
+    const raw = await response.text();
+    const body = JSON.parse(raw);
+    // Same data: keep the page as it is, so a selection or the keyboard focus survives.
+    if (raw !== lastRaw) {
+      lastRaw = raw;
+      body.events.forEach((e) => { e.date = new Date(e.ts); e.day = localDay(e.date); });
+      data = body;
+      render();
+    }
     status.className = "";
     status.textContent = "Atualizado às " + new Date().toLocaleTimeString("pt-BR") + " · versão " + body.version;
   } catch (error) {
