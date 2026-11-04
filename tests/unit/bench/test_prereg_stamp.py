@@ -26,7 +26,7 @@ def repo(tmp_path: Path) -> Path:
     }.items():
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "add", ".")
     _git(

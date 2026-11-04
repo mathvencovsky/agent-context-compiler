@@ -433,3 +433,27 @@ async def test_web_scope_first_pass_is_small_and_relevant() -> None:
     assert "Option: max_tokens=9." in text  # page text stays literal
     assert "Option: call again with exclude_chunk_ids." in text
     assert "max_tokens=2000" not in text and "compact=false" not in text
+
+
+@pytest.mark.parametrize("web", [True, False])
+async def test_numeric_chunk_ids_are_accepted_and_sent_as_strings(web: bool) -> None:
+    sent: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"context": "<fragment>x</fragment>"})
+
+    client = NinaApiClient(
+        base_url="http://nina.local",
+        api_key="test-key",
+        transport=httpx.MockTransport(handler),
+    )
+    await build_server(client=client, web=web).call_tool(
+        "assemble_context",
+        {
+            "query": "q",
+            "urls": ["https://x.org/a"],
+            "exclude_chunk_ids": [1353, "7"],
+        },
+    )
+    assert sent[0]["exclude_chunk_ids"] == ["1353", "7"]
