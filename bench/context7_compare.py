@@ -50,7 +50,20 @@ soft hit is not below ``c7_fetch``'s 0.450; the highest soft hit wins, then fewe
 tokens. None passing kills this bet, with no retuning. These tasks were already
 seen, so a pass only earns the blind review and a check on new tasks.
 
+**Final check (written before measuring, DECISIONS.md 2026-11-04).** The sweep's
+winner was budget 560 (soft hit 0.613, 535 tokens). Its disagreements with
+Context7 are read blind together with :data:`NEW_TASKS` tasks never used here,
+the next in the same hash order, against ``c7_fetch`` only (all of the free quota
+left). The budget becomes the web scope's read if both hold:
+
+1. on the 80 tasks, the verdict above against ``c7_fetch`` is ``NINA VENCE``;
+2. on the new tasks, after blind reading, ``d`` >= 0 and NINA's mean tokens are at
+   most 110% of ``c7_fetch``'s. So few tasks can refute this but not prove it.
+
     uv run python -m bench.context7_compare run
+    uv run python -m bench.context7_compare new
+    uv run python -m bench.context7_compare sheet2
+    uv run python -m bench.context7_compare final
     uv run python -m bench.context7_compare sweep
     uv run python -m bench.context7_compare sheet
     uv run python -m bench.context7_compare verdict
@@ -84,6 +97,8 @@ ARMS = ("nina", "c7_fetch", "c7_docs")
 BUDGETS = (500, 560, 620, 700, 1000)
 MAX_TOKENS_SEEN = 560
 MIN_HIT_SEEN = 0.45
+FINAL_BUDGET = 560
+NEW_TASKS = 30
 RIVALS = ("c7_fetch", "c7_docs")
 #: The first result of Context7's library search per site, taken before measuring.
 LIBRARIES = {
@@ -133,6 +148,21 @@ def verdict(d: float, lo: float, hi: float, share: float) -> str:
     return "SEM VANTAGEM"
 
 
+def scrub(text: str) -> str:
+    """A reply without what names its tool; page text stays untouched.
+
+    The notice goes first: it names the notes tag, and removing notes before it
+    once erased whole replies.
+    """
+    text = re.sub(r"^\[untrusted_source\].*$", "", text, flags=re.M)
+    text = re.sub(r"<nina_notes>.*?</nina_notes>", "", text, flags=re.S)
+    text = re.sub(r"^coverage: .*$|^sources: \d+ ok, \d+ failed$", "", text, flags=re.M)
+    text = re.sub(r"^Note: this page comes from the open web.*$", "", text, flags=re.M)
+    text = re.sub(r"</?(document|fragment)\b[^>]*>", "", text)
+    text = re.sub(r"\bNINA\b|Context7", "TOOL", text)
+    return text.strip() or "(the tool returned nothing)"
+
+
 def blind_sheet(
     rows: Sequence[Mapping[str, Any]], seed: int = 7
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
@@ -142,7 +172,7 @@ def blind_sheet(
     key: dict[str, dict[str, str]] = {}
     for row in rows:
         for rival in RIVALS:
-            if row["hit"]["nina"] == row["hit"][rival]:
+            if rival not in row["hit"] or row["hit"]["nina"] == row["hit"][rival]:
                 continue
             case = f"{row['task']}|{rival}"
             first, second = rng.sample(["nina", rival], 2)
@@ -303,6 +333,141 @@ def sweep() -> None:  # pragma: no cover - local API and data
     (_OUT.parent / "context7_sweep.md").write_text(text, encoding="utf-8")
 
 
+def _new_keys() -> list[dict[str, Any]]:  # pragma: no cover - local data
+    from bench.anchor_qrels import in_tune_half
+
+    lines = Path("bench/results/m10a/qrels.jsonl").read_text("utf-8").splitlines()
+    half_b = {
+        k["task_id"]: k
+        for k in map(json.loads, lines)
+        if not in_tune_half(k["task_id"])
+    }
+    order = sample(list(half_b), size=len(half_b))
+    return [half_b[t] for t in order[SAMPLE : SAMPLE + NEW_TASKS]]
+
+
+def new() -> None:  # pragma: no cover - network and local API
+    from app.mcp_server.client import NinaApiClient
+    from bench.tasks_schema import load_external_tasks
+
+    tasks = {t.id: t for t in load_external_tasks(Path("bench/tasks/external.yaml"))}
+    api = NinaApiClient(base_url="http://127.0.0.1:8000", api_key="nina_local_dev")
+    api.set_caller("teste-context7")
+    folder = _OUT / "new"
+    folder.mkdir(parents=True, exist_ok=True)
+    keys = _new_keys()
+    for done, key in enumerate(keys):
+        path = folder / f"{key['task_id']}.json"
+        replies = json.loads(path.read_text("utf-8")) if path.exists() else {}
+        question = tasks[key["task_id"]].question_title
+        url = urldefrag(key["url"])[0]
+        if "nina" not in replies:
+            replies["nina"] = _nina(api, question, url, FINAL_BUDGET)
+        if "c7_fetch" not in replies:
+            replies["c7_fetch"] = _context7("/v3/fetch", url=url, query=question)
+        path.write_text(json.dumps(replies, ensure_ascii=False), encoding="utf-8")
+        left = replies["c7_fetch"].get("left")
+        print(f"{done + 1}/{len(keys)} quota left {left}", flush=True)
+
+
+def _final_rows(fresh: bool) -> list[dict[str, Any]]:  # pragma: no cover - local data
+    """The 80 seen tasks at the final budget, or the new tasks."""
+    from bench.tasks_schema import load_external_tasks
+
+    tasks = {t.id: t for t in load_external_tasks(Path("bench/tasks/external.yaml"))}
+    rows = []
+    for key in _new_keys() if fresh else _keys():
+        name = f"{key['task_id']}.json"
+        folder = _OUT / "new" if fresh else _OUT
+        raw = json.loads((folder / name).read_text("utf-8"))
+        if not fresh:
+            lean = (_OUT / f"budget_{FINAL_BUDGET}" / name).read_text("utf-8")
+            raw["nina"] = json.loads(lean)
+        section = units(key["section"])
+        task = tasks[key["task_id"]]
+        kept = [a for a in ARMS if a in raw]
+        rows.append(
+            {
+                "task": key["task_id"],
+                "site": key["site"],
+                "question": task.question_title,
+                "reference": task.reference_answer,
+                "raw": raw,
+                "reply": {a: raw[a].get("text", "") for a in kept},
+                "hit": {a: soft_hit(section, raw[a].get("text", "")) for a in kept},
+            }
+        )
+    return rows
+
+
+def sheet2() -> None:  # pragma: no cover - local data
+    """One shuffled blind sheet for both task sets, split into small batches."""
+    folder = _OUT.parent / "context7_final"
+    folder.mkdir(exist_ok=True)
+    cases, key = blind_sheet(_final_rows(False) + _final_rows(True), seed=11)
+    random.Random(11).shuffle(cases)
+    (folder / "key.json").write_text(json.dumps(key), encoding="utf-8")
+    batch: list[dict[str, Any]] = []
+    size = number = 0
+    for case in cases:
+        clean = {**case, "A": scrub(case["A"]), "B": scrub(case["B"])}
+        for label in "AB":  # scrubbing must never empty a reply with page text
+            if len(case[label]) > 300 and len(clean[label]) < 100:
+                raise SystemExit(f"scrub emptied {case['case']}")
+        batch.append(clean)
+        size += len(clean["A"]) + len(clean["B"]) + len(clean["reference_answer"])
+        if size > 60_000:
+            path = folder / f"batch_{number}.json"
+            path.write_text(json.dumps(batch, ensure_ascii=False), encoding="utf-8")
+            batch, size, number = [], 0, number + 1
+    if batch:
+        path = folder / f"batch_{number}.json"
+        path.write_text(json.dumps(batch, ensure_ascii=False), encoding="utf-8")
+        number += 1
+    print(f"{len(cases)} blind cases in {number} batches")
+
+
+def final() -> None:  # pragma: no cover - local data
+    from app.index.tokens import count_tokens
+
+    folder = _OUT.parent / "context7_final"
+    key = json.loads((folder / "key.json").read_text("utf-8"))
+    decisions: dict[str, dict[str, bool]] = {}
+    text = (folder / "decisions.txt").read_text("utf-8")
+    for code, a, b in re.findall(r"(\w+) A=(yes|no) B=(yes|no)", text):
+        decisions[code] = {"A": a == "yes", "B": b == "yes"}
+    if len(decisions) != len(key):
+        raise SystemExit(f"{len(decisions)} decisions for {len(key)} cases")
+    out = [f"# Final check, budget {FINAL_BUDGET}, {len(key)} blind decisions", ""]
+    groups = [("80 seen", False, RIVALS), (f"{NEW_TASKS} new", True, ("c7_fetch",))]
+    for name, fresh, rivals in groups:
+        rows = _final_rows(fresh)
+        for rival in rivals:
+            kept = [r for r in rows if rival in r["raw"]]
+            pairs = [adjusted(r, rival, decisions, key) for r in kept]
+            result = paired([p[0] for p in pairs], [p[1] for p in pairs])
+            ours = statistics.mean(count_tokens(r["reply"]["nina"]) for r in kept)
+            theirs = statistics.mean(count_tokens(r["reply"][rival]) for r in kept)
+            refused = sum(1 for r in kept if r["raw"][rival]["status"] != 200)
+            share = ours / theirs
+            found = statistics.mean(p[0] for p in pairs)
+            other = statistics.mean(p[1] for p in pairs)
+            out += [
+                f"## {name}: nina vs {rival} ({len(kept)} tasks)",
+                f"- hit: nina {found:.3f}, {rival} {other:.3f}",
+                f"- d {result['diff']:+.3f}, "
+                f"CI [{result['lo']:+.3f}, {result['hi']:+.3f}], "
+                f"only nina {result['only_a']}, only rival {result['only_b']}",
+                f"- tokens: nina {ours:,.0f}, {rival} {theirs:,.0f}, share {share:.2f}",
+                f"- {rival} refused or failed: {refused}",
+                f"- **{verdict(result['diff'], result['lo'], result['hi'], share)}**",
+                "",
+            ]
+    report_text = "\n".join(out)
+    (folder / "verdict.md").write_text(report_text, encoding="utf-8")
+    print(report_text)
+
+
 def _rows() -> list[dict[str, Any]]:  # pragma: no cover - local data
     from bench.tasks_schema import load_external_tasks
 
@@ -399,8 +564,19 @@ def report() -> None:  # pragma: no cover - local data
 
 def main() -> None:  # pragma: no cover - dispatch
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["run", "sheet", "verdict", "sweep"])
-    steps = {"run": run, "sheet": sheet, "verdict": report, "sweep": sweep}
+    parser.add_argument(
+        "step",
+        choices=["run", "sheet", "verdict", "sweep", "new", "sheet2", "final"],
+    )
+    steps = {
+        "run": run,
+        "sheet": sheet,
+        "verdict": report,
+        "sweep": sweep,
+        "new": new,
+        "sheet2": sheet2,
+        "final": final,
+    }
     steps[parser.parse_args().step]()
 
 

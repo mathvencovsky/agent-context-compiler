@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: verificação final do limite 560 (regra antes de medir)
+Contexto: o teste de tokens passou nas 80 tarefas já vistas. Com a forma enxuta: limite 500, `soft_hit` 0,562, 473 tokens; 560, 0,613, 535; 620, 0,588, 594; 700, 0,662, 666; 1000, 0,725, 960. `c7_fetch` tem 0,450 e 509. Venceu 560.
+Decisão: o limite 560 só vira a leitura do modo web se, depois da leitura às cegas, o veredito contra `c7_fetch` for `NINA VENCE` nas 80 tarefas e, nas 30 tarefas seguintes nunca usadas aqui, `d` >= 0 com tokens até 110% do rival.
+Alternativas: guardar a cota grátis restante do Context7, rejeitado porque esta é a pergunta que decide o produto.
+Consequências: usa as 30 consultas grátis restantes do mês. Trinta tarefas podem refutar, mas não provar. A limpeza do cegamento passa a ficar no repositório, com teste contra o defeito anterior.
+
 ## 2026-11-04: forma enxuta do `compact` e regra do teste de tokens (antes de medir)
 Contexto: o humano pediu para pesquisar e melhorar. Nas 80 respostas, 35% dos tokens do NINA eram marcações e notas (331 de 945); o texto era 614. O Context7 usa cerca de 45 tokens de cabeçalho.
 Decisão: só com `compact` e `concise`, um `<document>` por página com `source` e `chunks`, sem `<fragment>`, sem ids, sem cobertura e com notas curtas. Depois, testar limites 500, 560, 620, 700 e 1000 nas mesmas 80 tarefas: passa com média <= 560 tokens e `soft_hit` >= 0,450. Nenhum passando encerra esta aposta, sem novo ajuste; passar só dá direito à leitura às cegas e ao teste em tarefas novas.

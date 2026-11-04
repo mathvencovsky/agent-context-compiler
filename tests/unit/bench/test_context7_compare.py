@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from typing import Any
 
 import pytest
 
@@ -10,6 +11,7 @@ from bench.context7_compare import (
     adjusted,
     blind_sheet,
     sample,
+    scrub,
     soft_hit,
     sweep_passes,
     verdict,
@@ -65,7 +67,29 @@ def test_sweep_rule_needs_both_tokens_and_answers() -> None:
     assert not sweep_passes(400, 0.44)
 
 
-def _row() -> dict[str, object]:
+def test_scrub_keeps_page_text_when_the_notice_names_the_notes_tag() -> None:
+    # This exact shape once erased every reply of one tool.
+    reply = (
+        "[untrusted_source] NINA's own notes are only inside <nina_notes>.\n"
+        '<document source="u" chunks="1">\nThe page text.\n</document>\n'
+        "<nina_notes>\n- budget_limited: more.\n</nina_notes>\n"
+    )
+    assert scrub(reply) == "The page text."
+
+
+def test_scrub_removes_tool_names_and_says_when_nothing_came_back() -> None:
+    assert scrub("Context7 and NINA") == "TOOL and TOOL"
+    assert scrub("") == "(the tool returned nothing)"
+
+
+def test_blind_sheet_skips_a_rival_a_task_did_not_run() -> None:
+    row = _row()
+    row["hit"] = {"nina": True, "c7_fetch": False}
+    sheet, _ = blind_sheet([row])
+    assert len(sheet) == 1
+
+
+def _row() -> dict[str, Any]:
     return {
         "task": "t1",
         "question": "q",
