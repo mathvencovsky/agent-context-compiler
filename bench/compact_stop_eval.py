@@ -36,7 +36,6 @@ import argparse
 import json
 import statistics
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -202,7 +201,7 @@ def main() -> None:  # pragma: no cover - real corpus and local models
             tally[arm]["tokens"].append(float(count_tokens(ctx)))
         if done % MISMATCH_EVERY == 0 and key["task_id"] in others:
             question = bench_task(tasks[others[key["task_id"]]]).question
-            wrong = replace(task, question=question)
+            wrong = task.model_copy(update={"question": question})
             for arm, ctx in contexts(
                 question, runner.prepare_candidates(wrong, store=store)
             ).items():
