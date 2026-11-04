@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: NINA contra Context7, regra escrita antes de medir
+Contexto: o humano pediu um motivo real para continuar ou matar o projeto. O Context7 tem `/api/v3/fetch`, que lê uma URL focando em uma pergunta: a mesma função do NINA, grátis e sem conta. A Firecrawl nunca foi medida (sem chave) e entrega a página inteira, então não testa esta função.
+Decisão (humano, 2026-11-04: rodar sem pagar): 80 tarefas da metade B, mesma pergunta, ao vivo, em `bench/context7_compare.py`: `nina` e `c7_fetch` na página da resposta, `c7_docs` na biblioteca do site. Presença da resposta por `soft_hit`; discordâncias decididas às cegas pela resposta de referência. `NINA VENCE`: CI de `d` acima de 0 e tokens <= 110% do rival, ou `d` >= -0,03 e tokens <= 70%. `NINA PERDE`: CI abaixo de 0, ou `d` <= 0,03 e tokens >= 120%. Outro caso: `SEM VANTAGEM`. Só `NINA VENCE` contra `c7_fetch` é evidência para escolher o NINA em documentação pública.
+Alternativas: `answer_hit` literal, rejeitado porque o Context7 reformata o texto e seria prejudicado; juiz LLM em todas as tarefas, rejeitado por gastar limite.
+Consequências: mede presença da resposta e tokens em documentação pública, não a resposta final do modelo, documentos privados nem proveniência. A regra não muda depois do resultado.
+
 ## 2026-11-04: painel local de uso, exceção ao "painel web" fora do escopo
 Contexto: o humano pediu para ver o uso do chat atualizado sozinho. O painel no claude.ai só muda com chamadas do Claude, que gastam limite, e o chat não grava histórico neste PC.
 Decisão (humano, 2026-11-04): página em `/painel`, servida pela própria API e só local (`ENV=dev`, `RECORD_LOCAL_USAGE` e `Host` de loopback), que consulta os dados a cada 5 s. `units` ganha `client`, `hosts` e `failed`, sem migração. O nome do cliente vem de `clientInfo` do MCP, não é autenticado e serve só para separar a origem.
