@@ -64,6 +64,21 @@ def test_paragraph_arm_mixes_the_whole_line() -> None:
     assert scores[2] == 0.5 * 12.0 + 0.5 * whole
 
 
+def test_context_and_heading_use_the_title_kept_apart_from_the_chunk() -> None:
+    # Real chunks hold no heading line: without this both arms change nothing.
+    md = "Run pip install nina right now.\n"
+    seen: list[str] = []
+
+    def spy(texts: Sequence[str]) -> list[float]:
+        seen.extend(texts)
+        return [1.0 for _ in texts]
+
+    scored(ARMS["context"], spy, [md], _units_of(md), ["Install"])
+    assert seen == ["Install\nRun pip install nina right now."]
+    scores = scored(ARMS["heading"], _by_length, [md], _units_of(md), ["Install"])
+    assert scores == [len(md.strip()) + 0.25 * len("Install")]
+
+
 def test_combination_applies_each_change() -> None:
     merged = combined("short5", "context")
     assert merged.short_min == 5 and merged.context

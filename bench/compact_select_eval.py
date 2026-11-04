@@ -116,8 +116,12 @@ def scored(
     score: Callable[[Sequence[str]], Sequence[float]],
     texts: Sequence[str],
     units: Sequence[Any],
+    titles: Sequence[str] = (),
 ) -> list[float]:
-    """Each unit's own score under ``arm``; headings stay at 0, as in the product."""
+    """Each unit's own score under ``arm``; headings stay at 0, as in the product.
+
+    ``titles`` is each piece's last heading: chunks hold it apart from their text.
+    """
 
     def text(unit: Any) -> str:
         return str(texts[unit.piece][unit.start : unit.end])
@@ -126,7 +130,7 @@ def scored(
 
     def heading_of(unit: Any) -> str:
         if unit.heading is None:
-            return ""
+            return titles[unit.piece] if titles else ""
         return text(by_key[(unit.piece, unit.heading)]).lstrip("# ").strip()
 
     body = [u for u in units if u.kind != "heading"]
@@ -214,8 +218,9 @@ def _reply(  # pragma: no cover - runs the product's pipeline on stored pools
         compact_module.WINDOW_WEIGHT,
         compact_module.DENSITY_EXPONENT,
     )
+    title_of = {f.md: f.heading_path[-1] if f.heading_path else "" for f in fragments}
     compact_module._scored_by = lambda scorer, texts, units: scored(
-        arm, scorer, texts, units
+        arm, scorer, texts, units, [title_of.get(t, "") for t in texts]
     )
     compact_module.WINDOW_WEIGHT = arm.window
     compact_module.DENSITY_EXPONENT = arm.exponent
