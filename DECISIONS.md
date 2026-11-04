@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: limite 560 não passou na regra; forma enxuta fica
+Contexto: regra na entrada abaixo, 71 discordâncias lidas às cegas.
+Decisão: o modo web continua em 1000 tokens, porque a condição 1 falhou. Nas 80 tarefas, contra `c7_fetch`: acerto 0,487 contra 0,425, `d` +0,062, CI [-0,013; +0,150], 535 tokens contra 509 (1,05x), `SEM VANTAGEM`, não `NINA VENCE`. A condição 2 passou nas 30 tarefas novas: 0,533 contra 0,533, 530 tokens contra 605 (0,88x). Contra `c7_docs`, nas 80: 0,375 contra 0,287, CI [-0,013; +0,188], 535 contra 821 (0,65x), `NINA VENCE`.
+Alternativas: adotar 560 mesmo assim, o que só o humano pode decidir, porque a regra foi escrita para impedir exatamente esta escolha depois do resultado.
+Consequências: o custo deixou de ser a desvantagem clara, de 1,85x para 1,05x, mas não há vantagem provada sobre `c7_fetch`. As 80 tarefas escolheram o limite, e o NINA recebe a página certa, o que favorece o resultado contra `c7_docs`. A forma enxuta fica porque mantém o texto; em 1000 tokens, `soft_hit` foi de 0,675 para 0,725. A cota grátis do Context7 acabou até 2026-12-01. O custo contra o leitor nativo do Claude não foi medido de novo.
+
 ## 2026-11-04: verificação final do limite 560 (regra antes de medir)
 Contexto: o teste de tokens passou nas 80 tarefas já vistas. Com a forma enxuta: limite 500, `soft_hit` 0,562, 473 tokens; 560, 0,613, 535; 620, 0,588, 594; 700, 0,662, 666; 1000, 0,725, 960. `c7_fetch` tem 0,450 e 509. Venceu 560.
 Decisão: o limite 560 só vira a leitura do modo web se, depois da leitura às cegas, o veredito contra `c7_fetch` for `NINA VENCE` nas 80 tarefas e, nas 30 tarefas seguintes nunca usadas aqui, `d` >= 0 com tokens até 110% do rival.
