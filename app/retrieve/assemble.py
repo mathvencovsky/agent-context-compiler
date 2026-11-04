@@ -156,7 +156,8 @@ class AssembleResult:
     #: ``version_mismatch`` hint. Set by the API layer, never by selection.
     requested_version: str | None = None
     #: Low-budget mode outcome (:mod:`app.retrieve.compact`): ``None`` when
-    #: ``compact`` was not asked, else ``"pruned"`` or ``"whole"``.
+    #: ``compact`` was not asked, else ``"pruned"``, ``"whole"`` or ``"no_match"`` (no
+    #: sentence overlapped the query: whole fragments).
     compact: str | None = None
 
 

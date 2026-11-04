@@ -109,3 +109,11 @@ def test_requested_version_text_cannot_forge_a_note_line() -> None:
     context = render_concise(result)
     notes = context.split("<nina_notes>\n", 1)[1]
     assert notes.count("\n- ") == 0 and "&lt;/nina_notes>" in notes
+
+
+def test_no_match_gets_the_no_lexical_match_hint() -> None:
+    result = AssembleResult(query="q", coverage="sufficient", compact="no_match")
+    hints = [h for h in build_hints(result) if h["code"] == "no_lexical_match"]
+    assert len(hints) == 1
+    assert "language" in str(hints[0]["message"])
+    assert "compacted" not in [h["code"] for h in build_hints(result)]
