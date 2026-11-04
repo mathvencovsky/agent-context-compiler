@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: fase 2, frases escolhidas pelo reranker local
+Contexto: o `compact` escolhia frases por coincidência de palavras e perdia respostas. A regra foi escrita antes de medir, em `bench/compact_rerank_eval.py`.
+Decisão: com reranker local, `compact` usa a nota dele por frase, sem piso. Medição na metade A, 99 de 138 tarefas (`bench/results/m10a/compact_rerank_A.md`): `answer_hit` 0,636 contra 0,576 em 1000 tokens e 0,556 contra 0,465 em 500; mediana de 3,6 s por chamada. Aceito pela regra (a).
+Alternativas: pisos de 0,1 e 0,5 na nota bruta, rejeitados (0,495 em 1000 tokens, perde resposta); 500 tokens por padrão, rejeitado por ora: em teste real, as duas perguntas do Graphify perderam o nome do pacote.
+Consequências: SPEC §9. Limites: 39 tarefas ficaram de fora por falta de cache, a metade B não foi aberta, os candidatos vieram do Jina e não do Qwen3, e só há documentação. Sem freio, o orçamento é ocupado: no teste real, a página da loja foi de 280 para 977 tokens e a do GTA de 658 para 824. Calibrar um piso continua aberto, e o custo não foi medido de novo. O corte por relevância continua sem solução.
+
 ## 2026-11-04: fase 1 do plano, defeitos óbvios
 Contexto: defeitos verificados no pente fino (`reports/Custo do NINA e correção.md`).
 Decisão: remover cópias exatas de pedaços; não emitir título vazio; `tokenize` sem acentos e para qualquer alfabeto; stopwords em português; nota `no_lexical_match`; `coverage` `unknown` com reranker local; `max_tokens` cobre a resposta inteira em `compact` conciso; mensagem clara para 401, 403 e 429; `exclude_chunk_ids` aceita números.
