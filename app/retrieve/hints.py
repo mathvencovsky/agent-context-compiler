@@ -135,6 +135,16 @@ def _compacted(result: AssembleResult) -> list[dict[str, object]]:
                 "details": {},
             }
         ]
+    if result.compact == "no_match":
+        return [
+            {
+                "code": "no_lexical_match",
+                "message": "The words of the question were not found on the page, so "
+                "the fragments are whole, not pruned. Option: retry with the "
+                "question in the page's language.",
+                "details": {},
+            }
+        ]
     return []
 
 

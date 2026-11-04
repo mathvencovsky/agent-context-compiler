@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -51,7 +52,8 @@ if TYPE_CHECKING:
 #: SPEC §6 step 2: top-50 by lexical rank.
 _DEFAULT_LIMIT = 50
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
+#: Letters and digits of any script; underscore is a separator.
+_TOKEN_RE = re.compile(r"[^\W_]+")
 
 #: (document_id, ord), the fusion key.
 Key = tuple[str, int]
@@ -64,8 +66,14 @@ BM25_B = 0.75
 
 
 def tokenize(text: str) -> list[str]:
-    """Return lowercase alphanumeric tokens for ``text``."""
-    return _TOKEN_RE.findall(text.lower())
+    """Return lowercase alphanumeric tokens for ``text``, accents removed.
+
+    For matching only (``instalação`` and ``instalacao`` both give
+    ``instalacao``); callers keep their own text verbatim.
+    """
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    plain = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return _TOKEN_RE.findall(plain)
 
 
 def overlap_ranks(

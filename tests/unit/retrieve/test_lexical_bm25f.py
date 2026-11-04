@@ -6,6 +6,8 @@ other knob is opt-in (DECISIONS 2026-10-29).
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from app.retrieve.lexical import (
@@ -258,3 +260,10 @@ def test_token_cache_does_not_change_results() -> None:
 def test_limit_caps_the_ranking() -> None:
     items = [_item("d", i, [], f"word {i}") for i in range(10)]
     assert len(lexical_ranks(items, "word", LexicalConfig("bm25f"), limit=3)) == 3
+
+
+def test_tokenize_folds_accents_and_keeps_ascii_unchanged() -> None:
+    assert tokenize("instalação") == tokenize("instalacao") == ["instalacao"]
+    assert tokenize("snake_case 2fa, Über") == ["snake", "case", "2fa", "uber"]
+    ascii_text = "Call os.path.join() with API_KEY v2.1-beta!"
+    assert tokenize(ascii_text) == re.findall(r"[a-z0-9]+", ascii_text.lower())

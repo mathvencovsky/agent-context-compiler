@@ -114,3 +114,37 @@ def test_compact_result_rewrites_md_tokens_and_budget() -> None:
     for frag in result.fragments:
         assert frag.tokens == count_tokens(frag.md)
         assert frag.heading_path == ["Auth"] and frag.chunk_id in {"1", "2"}
+
+
+PT_QUESTION = "Como faço a instalação do pacote?"
+
+
+def test_no_overlap_is_reported_as_unmatched() -> None:
+    out = compact_pieces(PT_QUESTION, [AUTH], [0.9], 2000)
+    assert not out.matched and not out.pruned
+    assert compact_pieces(
+        "Which header carries the API key?", [AUTH], [0.9], 2000
+    ).matched
+
+
+def test_portuguese_question_over_english_page_sets_no_match() -> None:
+    result = AssembleResult(
+        query="q",
+        fragments=[_fragment("1", AUTH, 0.9)],
+        budget_tokens=pool_budget(2000),
+    )
+    compact_result(result, query=PT_QUESTION, budget=2000)
+    assert result.compact == "no_match"
+    assert result.fragments[0].md == AUTH
+
+
+def test_accented_query_matches_unaccented_page_text_verbatim() -> None:
+    page = "## Setup\n\nRun the instalacao step first. Unrelated gardening text here."
+    out = compact_pieces("Qual a instalação?", [page], [0.9], 2000)
+    assert out.matched
+    assert out.texts[0] is not None and "Run the instalacao step first." in out.texts[0]
+
+
+def test_portuguese_function_words_are_not_terms() -> None:
+    out = compact_pieces("Como para uma de do da em", [AUTH], [0.9], 2000)
+    assert not out.matched
