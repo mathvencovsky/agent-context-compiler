@@ -50,6 +50,7 @@ from urllib.parse import urlsplit
 
 from app.api.documents import resolve_document
 from app.api.schemas import AssembleRequest, ResolveRequest, ResolveResponse
+from app.fetch.errors import refusal_note
 from app.index.indexer import index_version
 from app.providers.embeddings.base import embed_query
 from app.retrieve.lexical import LexicalConfig, lexical_search_ranked
@@ -211,6 +212,9 @@ def _failed(url: str, exc: Exception) -> _UrlOutcome:
     code = getattr(exc, "code", "fetch_failed")
     upstream = getattr(exc, "details", {}).get("upstream_status")
     reason = f"{code} (HTTP {upstream})" if upstream else code
+    note = refusal_note(upstream) if isinstance(upstream, int) else None
+    if note:
+        reason = f"{code}: {note}"
     return _UrlOutcome(
         source=SourceStatus(
             url=url,

@@ -42,3 +42,14 @@ def test_errors_share_base_and_carry_payload(
 def test_details_default_is_empty_dict() -> None:
     err = errors.FetchFailed("x")
     assert err.details == {}
+
+
+def test_refusal_note_names_block_and_alternative() -> None:
+    for status in (401, 403):
+        note = errors.refusal_note(status)
+        assert note is not None
+        assert "refused" in note and "another way" in note
+    limited = errors.refusal_note(429)
+    assert limited is not None
+    assert "rate-limited" in limited and "another way" in limited
+    assert errors.refusal_note(404) is None

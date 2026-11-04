@@ -272,3 +272,8 @@ def test_body_without_any_element_is_an_empty_document(raw: str | bytes) -> None
     assert doc.blocks == []
     assert doc.metadata.title is None
     assert doc.metadata.jsonld == []
+
+
+def test_empty_heading_emits_no_block() -> None:
+    doc = _extract("<h2></h2><p>body text content lives here now</p>")
+    assert [b.text for b in doc.blocks if b.type == "heading"] == ["Doc"]

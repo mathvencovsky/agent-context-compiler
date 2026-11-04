@@ -112,6 +112,22 @@ class UpstreamStatus(FetchError):
     http_status = 502
 
 
+def refusal_note(status: int) -> str | None:
+    """Plain wording for a site that refused (401/403) or rate-limited (429)
+    NINA's identified bot, or ``None`` for any other status. Message text only."""
+    if status in (401, 403):
+        return (
+            f"the site refused the identified NINA bot (HTTP {status}); "
+            "the agent should read the page another way"
+        )
+    if status == 429:
+        return (
+            "the site rate-limited the identified NINA bot (HTTP 429); "
+            "the agent should read the page another way"
+        )
+    return None
+
+
 class Timeout(FetchError):
     """Connect or total timeout was exceeded."""
 
