@@ -5,6 +5,10 @@ M10)**. O humano não financia rodada paga até lá (2026-10-28).
 **`app/` mudou depois da Emenda 15 (correções de segurança, Emenda 17): o
 harness recusa rodar até o recongelamento no fim do M10b.**
 
+### Pente fino e plano de conserto (2026-11-04)
+
+Diagnóstico verificado e plano aprovado pelo humano em `reports/Custo do NINA e correção.md`. Fase 0 concluída: trava de chamada paga (`ALLOW_PAID_CALLS`), leitura forçada retirada, documentos corrigidos, custo decomposto (`scripts/real_use_breakdown.py`). Próximo: fase 1. Correção de registro: o split `test` foi medido quatro vezes, apesar do "medido UMA vez" citado abaixo e em DECISIONS.
+
 ### M10b — recuperação: experimentos sem custo (2026-10-29, rodada 4 H e I)
 
 Branch `claude/m10b-retrieval`. Tudo desligado por padrão: a saída do produto e

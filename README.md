@@ -20,9 +20,11 @@ a token budget you set, with the source of every line.
 
 ## Why NINA?
 
-- **Fewer tokens, equal quality.** In our single-call benchmark NINA used about
-  half the context of a strong RAG baseline at equal quality
-  ([results](#benchmark)).
+- **Fewer tokens than RAG, on documentation.** In our single-call benchmark NINA
+  used about half the context of a strong RAG baseline, with no significant
+  quality difference ([results](#benchmark)). This does not extend to agents with
+  a native page reader: on 5 real questions, NINA cost more than Claude Code's own
+  reader (+24% at best).
 - **Every line is citable.** Each fragment carries `document_id`, `version_id`,
   `chunk_id`, `source_url` and, for PDFs, the page.
 - **Deterministic.** No LLM in extraction or selection: the same URLs and
@@ -54,6 +56,9 @@ Requirements: Docker and [uv](https://docs.astral.sh/uv/).
 make setup     # dependencies, .env, Postgres + S3 storage, migrations
 make dev       # API at http://localhost:8000
 ```
+
+Paid APIs stay off even with keys in `.env`: set `ALLOW_PAID_CALLS=true` only when
+you mean to spend, or use local models (`docs/USO_DIARIO.md`).
 
 `assemble` uses an embeddings key (`EMBEDDINGS_API_KEY`, OpenAI) and a rerank
 key (`RERANKER_API_KEY`, Jina) from `.env`. To try it without keys, set
@@ -146,7 +151,8 @@ indexes them and answers. Details: [`docs/REFERENCE.md`](docs/REFERENCE.md) and
 NINA is only worth using if it costs less at equal quality, so the benchmark
 is part of the product.
 
-**Single-call results (M8):** 41 held-out tasks, 4,000-token budget.
+**Single-call results (M8):** 41 tasks of the test split, 4,000-token budget. The
+split was measured four times during development, so it is not truly held out.
 
 | Strategy | Success (95% CI) | Context tokens | Cost per correct answer |
 |---|---|---|---|

@@ -829,6 +829,10 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - paid run
     keys = _AgentKey()
     api_key = keys.m10_agent_api_key
     settings = get_settings()
+    if not settings.allow_paid_calls:
+        raise SystemExit(
+            "paid run: set ALLOW_PAID_CALLS=true only when you mean to spend"
+        )
     if not (
         api_key and settings.bench_answerer_api_key and settings.bench_judge_api_key
     ):

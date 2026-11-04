@@ -72,7 +72,7 @@ INSTRUCTIONS = (
 #: the variable, so the bench, which builds the server directly, never gets it.
 WEB_INSTRUCTIONS = (
     "NINA reads public web pages for you: documentation and any other site. "
-    "After a web search, and whenever you need to read a page, call "
+    "When you need to read a page, call "
     "assemble_context with one short question, in the language of the page, and "
     "the page URLs instead of fetching the page: it returns only the relevant "
     "sentences, each with its source. Use resolve_url only when you need a whole "

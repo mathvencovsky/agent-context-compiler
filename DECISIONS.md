@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: chamada paga só com autorização; sem leitura forçada
+Contexto: `compact_eval` gastou nas contas do humano porque uma chave no `.env` bastava para pagar, e `make dev` também pagaria. A regra de ler toda página de uma busca respondeu por cerca de 60% do gasto a mais medido. O humano aprovou o plano do pente fino em 2026-11-04.
+Decisão: `ALLOW_PAID_CALLS` (padrão `false`) é exigida por OpenAI, Anthropic, Jina e pelo `m10_agent` antes de qualquer chamada. A falha usa o mesmo caminho de chave ausente (503 na API). `WEB_INSTRUCTIONS` e a regra do `CLAUDE.md` global passam de "leia toda página encontrada" para "quando precisar abrir uma página, use o NINA".
+Alternativas: tirar as chaves do `.env` (depende de ninguém as recolocar); trava só nos scripts (não cobre `make dev`).
+Consequências: rodar benchmark pago agora exige `ALLOW_PAID_CALLS=true` e aprovação do humano. O NINA será chamado menos: o objetivo de medir uso real passa a incluir essa taxa. Implantação pendente: o chat só muda quando o app reiniciar, e a frase nas instruções do Claude é do humano.
+
 ## 2026-11-04: modo web com primeira leitura enxuta; corte relativo rejeitado
 Contexto: em 5 perguntas reais com e sem NINA (`bench/results/m10b/real_use_2026-11-03/`, local), o NINA gastou 49% a mais. O WebFetch do Claude Code entrega ao modelo principal um resumo feito por um modelo pequeno (325 a 501 tokens por chamada), e o NINA entregou 2.515 e 4.426 tokens: encheu o orçamento (`min_value = 0`, λ = 0) e ainda sugeriu subir. O benchmark premia achar a seção dentro do orçamento, não gastar pouco, e a economia do painel compara com a página inteira, que o Claude Code não lê. Quem entrega pouco faz primeiro um recorte literal e amplia só quando precisa: Exa (highlights e depois texto inteiro), Ref (500 a 5 mil tokens por consulta), Parallel (teto por resultado), Provence (poda por frase com limiar).
 Decisão: só no modo web, `assemble_context` lê sempre com `compact=true` e `max_tokens=1000`, e `max_tokens`, `compact`, `response_format` e `version` saem do `tools/list`: com a opção à vista, o agente pediu 2.000 e 3.000 mesmo com padrão de 1.000. Para ler mais, chama de novo com `exclude_chunk_ids`, e as notas dizem isso. As `instructions` pedem a pergunta no idioma da página. Com `compact`, `section` traz só o último título, e só quando muda. O `bench/compact_eval.py` passa a recusar chamada paga.

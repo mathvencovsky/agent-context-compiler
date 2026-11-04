@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, TypeVar
 from app.config import Settings, get_settings
 
 # Reuse the shared missing-key error so callers catch one type across providers.
-from app.providers.llm.openai import MissingAPIKey
+from app.providers.llm.openai import MissingAPIKey, require_paid_calls
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -59,6 +59,7 @@ class OpenAIEmbeddingProvider:
                 "the answerer key via BENCH_ANSWERER_API_KEY. The real embeddings "
                 "provider requires one; use FakeEmbeddingProvider in tests."
             )
+        require_paid_calls(self._settings, "OpenAI embeddings")
         return key
 
     def embed_query(self, text: str) -> list[float]:

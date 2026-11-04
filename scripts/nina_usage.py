@@ -1,8 +1,10 @@
 """Real NINA use, read from Claude Code's own session history (~/.claude/projects).
 
 Every NINA MCP call becomes one row: tokens NINA delivered, tokens of the whole
-page(s) the agent would read without it, savings and time. Writes a JSON array
-for the "NINA na vida real" panel. Nothing in NINA or Claude Code is changed.
+page(s), the share cut from the whole page, and time. That share is not savings:
+Claude Code's own reader does not hand the whole page to the model, and it cost
+less than NINA on 5 real questions (DECISIONS 2026-11-04). Writes a JSON array for
+the "NINA na vida real" panel. Nothing in NINA or Claude Code is changed.
 
     uv run python scripts/nina_usage.py out.json
     uv run python scripts/nina_usage.py --api out.json

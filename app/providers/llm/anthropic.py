@@ -12,7 +12,7 @@ from __future__ import annotations
 from app.config import Settings, get_settings
 from app.index.tokens import count_tokens
 from app.providers.llm.base import DEFAULT_SEED, LLMResult, ResponseFormat
-from app.providers.llm.openai import MissingAPIKey
+from app.providers.llm.openai import MissingAPIKey, require_paid_calls
 
 #: Cap on judge output; the verdict JSON is tiny.
 _MAX_TOKENS = 1024
@@ -54,6 +54,7 @@ class AnthropicProvider:
                 "requires it. Set it in .env for the real benchmark run, or use "
                 "FakeLLMProvider in tests."
             )
+        require_paid_calls(self._settings, "Anthropic")
 
         # Lazy import: keep the SDK off the import path for construction/tests.
         from anthropic import Anthropic

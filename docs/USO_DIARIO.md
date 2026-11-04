@@ -1,7 +1,8 @@
 # NINA no dia a dia (custo zero de API)
 
 Para usar o NINA nas suas sessões do Claude Code no seu computador, com modelos
-locais gratuitos (Qwen3, Apache 2.0, via llama.cpp, MIT). Nada chama API paga.
+locais gratuitos (Qwen3, Apache 2.0, via llama.cpp, MIT). Nada chama API paga: sem
+`ALLOW_PAID_CALLS=true`, o NINA recusa OpenAI e Jina mesmo com chaves no `.env`.
 
 ## Ligar (um comando)
 

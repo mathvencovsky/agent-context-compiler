@@ -16,7 +16,7 @@ from app.providers.embeddings.openai import MissingAPIKey, OpenAIEmbeddingProvid
 
 def _settings(**overrides: object) -> Settings:
     """Build Settings without reading a .env file, with explicit overrides."""
-    return Settings(_env_file=None, **overrides)  # type: ignore[call-arg]
+    return Settings(_env_file=None, **{"allow_paid_calls": True, **overrides})  # type: ignore[call-arg]
 
 
 def test_satisfies_protocol() -> None:
