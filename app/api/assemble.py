@@ -55,7 +55,7 @@ from app.api.schemas import (
     SourceStatusModel,
     TokenUsage,
 )
-from app.api.usage import require_quota, set_usage_units
+from app.api.usage import require_quota, set_usage_units, source_hosts
 from app.config import Settings
 from app.index.tokens import count_tokens
 from app.providers.embeddings.base import EmbeddingProvider
@@ -355,6 +355,13 @@ def assemble(
         compact(req.max_tokens)
     result.requested_version = req.version
 
+    set_usage_units(
+        request,
+        {
+            "hosts": source_hosts(src.url for src in result.sources),
+            "failed": sum(1 for src in result.sources if src.status != "ok"),
+        },
+    )
     # All URLs failed to resolve: there is nothing to assemble (SPEC §8).
     if result.sources and all(src.status != "ok" for src in result.sources):
         raise AllSourcesFailed(

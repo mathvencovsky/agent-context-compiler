@@ -29,6 +29,7 @@ from app.main import create_app
 from app.providers.embeddings.fake import FakeEmbeddingProvider
 from app.providers.rerank.fake import FakeRerankProvider
 from app.store.blobs import BlobStore
+from app.usage.events import UsageEventRepo
 from app.usage.keys import ApiKeyRepo
 from app.usage.limits import TokenBucketLimiter
 from tests.integration.conftest import (
@@ -355,6 +356,9 @@ def test_local_use_recorded_only_when_enabled(
         assert assemble_usage["tokens_delivered"] > 0
         assert assemble_usage["page_tokens"] > 0
         assert body["page_tokens"] == assemble_usage["page_tokens"]
+        with harness.session_factory() as session:
+            row = UsageEventRepo(session).recent(1)[0]
+        assert row.units["hosts"] and row.units["failed"] == 0
     finally:
         harness.client.app.dependency_overrides.clear()
         _truncate_keys(engine)

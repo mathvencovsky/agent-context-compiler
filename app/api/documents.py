@@ -63,7 +63,12 @@ from app.api.schemas import (
     ResolveResponse,
     Stats,
 )
-from app.api.usage import charge_render, require_quota, set_usage_units
+from app.api.usage import (
+    charge_render,
+    require_quota,
+    set_usage_units,
+    source_hosts,
+)
 from app.config import Settings, get_settings
 from app.extract.html import extract_html
 from app.extract.ir import (
@@ -501,7 +506,7 @@ def resolve_document(
     """
     # Default usage units (M9): no render unless the fetch path renders below.
     if request is not None:
-        set_usage_units(request, {"renders": 0})
+        set_usage_units(request, {"renders": 0, "hosts": source_hosts([req.url])})
     # Before the guard, the cache and any network access (exfiltration via the
     # request itself; also covers every assemble URL and the MCP tools).
     reject_secret_url(req.url)

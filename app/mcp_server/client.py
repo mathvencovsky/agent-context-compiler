@@ -21,6 +21,8 @@ from urllib.parse import quote
 
 import httpx
 
+from app.logging import CLIENT_HEADER
+
 __all__ = ["NinaApiClient", "MissingApiConfig"]
 
 #: Environment variables carrying the API location and credential (SPEC §9).
@@ -80,6 +82,12 @@ class NinaApiClient:
             )
         assert base_url is not None and api_key is not None  # narrowed by `missing`
         return cls(base_url=base_url, api_key=api_key, transport=transport)
+
+    def set_caller(self, name: str | None) -> None:
+        """Name the MCP client on later requests (the local usage record)."""
+        clean = re.sub(r"[^A-Za-z0-9._-]", "", name or "")[:40]
+        if clean:
+            self._client.headers[CLIENT_HEADER] = clean
 
     def close(self) -> None:
         """Close the underlying HTTP connection pool."""

@@ -57,6 +57,8 @@ def configure_logging() -> None:
 
 #: Response header carrying the request id (guide §11: debuggability).
 REQUEST_ID_HEADER = "X-Request-ID"
+#: Which MCP client made the call, for the local usage record.
+CLIENT_HEADER = "X-NINA-Client"
 #: Key of the request id in ``scope["state"]`` (``request.state.request_id``).
 REQUEST_ID_STATE_KEY = "request_id"
 
