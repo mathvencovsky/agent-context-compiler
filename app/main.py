@@ -40,6 +40,7 @@ class HealthResponse(TypedDict):
     status: CheckStatus
     db: CheckStatus
     blobs: CheckStatus
+    version: str
 
 
 def _check_db(settings: Settings) -> CheckStatus:
@@ -143,7 +144,12 @@ def create_app() -> FastAPI:
         db = _check_db(settings)
         blobs = _check_blobs(settings)
         status: CheckStatus = "ok" if db == "ok" and blobs == "ok" else "error"
-        body: HealthResponse = {"status": status, "db": db, "blobs": blobs}
+        body: HealthResponse = {
+            "status": status,
+            "db": db,
+            "blobs": blobs,
+            "version": settings.nina_version,
+        }
         status_code = 200 if status == "ok" else 503
         return JSONResponse(content=body, status_code=status_code)
 

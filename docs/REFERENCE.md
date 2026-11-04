@@ -50,7 +50,7 @@ PowerShell equivalent: `.\scripts\make.ps1 check` (also `up`, `down`,
 `migrate`, `test`, `dev`, `m10a-pending`, `extract-eval`).
 
 ```bash
-curl http://localhost:8000/health   # {"status":"ok","db":"ok","blobs":"ok"}, or 503 naming the broken dependency
+curl http://localhost:8000/health   # {"status":"ok","db":"ok","blobs":"ok","version":"..."}, or 503 naming the broken dependency
 ```
 
 - `assemble` needs an OpenAI key (`EMBEDDINGS_API_KEY`) and a Jina key

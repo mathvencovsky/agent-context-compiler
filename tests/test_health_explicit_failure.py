@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main
+from app.config import Settings
 from app.main import create_app
 
 
@@ -27,7 +28,12 @@ def test_health_503_when_db_down(
     monkeypatch.setattr(main, "_check_blobs", lambda _s: "ok")
     response = client.get("/health")
     assert response.status_code == 503
-    assert response.json() == {"status": "error", "db": "error", "blobs": "ok"}
+    assert response.json() == {
+        "status": "error",
+        "db": "error",
+        "blobs": "ok",
+        "version": "dev",
+    }
 
 
 def test_health_503_when_blobs_down(
@@ -37,7 +43,12 @@ def test_health_503_when_blobs_down(
     monkeypatch.setattr(main, "_check_blobs", lambda _s: "error")
     response = client.get("/health")
     assert response.status_code == 503
-    assert response.json() == {"status": "error", "db": "ok", "blobs": "error"}
+    assert response.json() == {
+        "status": "error",
+        "db": "ok",
+        "blobs": "error",
+        "version": "dev",
+    }
 
 
 def test_health_503_when_both_down(
@@ -47,7 +58,12 @@ def test_health_503_when_both_down(
     monkeypatch.setattr(main, "_check_blobs", lambda _s: "error")
     response = client.get("/health")
     assert response.status_code == 503
-    assert response.json() == {"status": "error", "db": "error", "blobs": "error"}
+    assert response.json() == {
+        "status": "error",
+        "db": "error",
+        "blobs": "error",
+        "version": "dev",
+    }
 
 
 def test_health_200_when_all_ok(
@@ -57,4 +73,18 @@ def test_health_200_when_all_ok(
     monkeypatch.setattr(main, "_check_blobs", lambda _s: "ok")
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "db": "ok", "blobs": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "db": "ok",
+        "blobs": "ok",
+        "version": "dev",
+    }
+
+
+def test_health_reports_the_running_version(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(main, "_check_db", lambda _s: "ok")
+    monkeypatch.setattr(main, "_check_blobs", lambda _s: "ok")
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(nina_version="abc123"))
+    assert client.get("/health").json()["version"] == "abc123"

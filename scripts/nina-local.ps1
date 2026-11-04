@@ -3,6 +3,8 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 stop
 #   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 status
 #   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 verify   (end-to-end check)
+#   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 autostart      (start at logon)
+#   powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 autostart-off  (undo it)
 #
 # start: installs llama.cpp if missing, serves Qwen3-Embedding-0.6B (port 8080)
 # and Qwen3-Reranker-0.6B (port 8081) on loopback, checks the reranker really
@@ -11,8 +13,11 @@
 # and, with -Project, writes the NINA block in that project's AGENTS.md.
 # Nothing here calls a paid API. See docs/USO_DIARIO.md.
 param(
-    [Parameter(Position = 0)][ValidateSet("start", "stop", "status", "verify")][string]$Action = "status",
-    [string]$Project = ""
+    [Parameter(Position = 0)][ValidateSet("start", "stop", "status", "verify", "autostart", "autostart-off")][string]$Action = "status",
+    [string]$Project = "",
+    # start at logon (the autostart shortcut): log to a file, do nothing if NINA is
+    # up, open Docker Desktop if needed, keep the MCP registration as it is.
+    [switch]$Boot
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path $PSScriptRoot -Parent
@@ -20,6 +25,7 @@ Set-Location $Repo
 $State = Join-Path $Repo ".nina-local"
 New-Item -ItemType Directory -Force -Path $State | Out-Null
 $PidFile = Join-Path $State "pids.txt"
+$Startup = Join-Path ([Environment]::GetFolderPath("Startup")) "NINA.lnk"
 
 $EmbedRepo = "Qwen/Qwen3-Embedding-0.6B-GGUF:Q8_0"
 $RerankRepo = "ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF"
@@ -49,10 +55,27 @@ function Start-Bg([string]$name, [string]$exe, [string[]]$arguments) {
     Say "$name started (pid $($p.Id), log $log)"
 }
 
+function Wait-Docker {
+    cmd /c "docker info >nul 2>&1"
+    if ($LASTEXITCODE -eq 0) { return }
+    $desktop = Join-Path $env:ProgramFiles "Docker\Docker\Docker Desktop.exe"
+    if (Test-Path $desktop) { Start-Process $desktop }
+    $deadline = (Get-Date).AddSeconds(300)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 5
+        cmd /c "docker info >nul 2>&1"
+        if ($LASTEXITCODE -eq 0) { return }
+    }
+    throw "Docker did not answer within 300 s"
+}
+
 function Stop-All {
     if (-not (Test-Path $PidFile)) { Say "nothing to stop"; return }
     foreach ($line in Get-Content $PidFile) {
         $name, $id = $line -split " "
+        # pids.txt survives a reboot, and the id may now belong to another program.
+        $alive = Get-Process -Id ([int]$id) -ErrorAction SilentlyContinue
+        if (-not $alive -or $alive.ProcessName -notin @("llama-server", "uv")) { continue }
         # The whole tree: killing uv alone leaves uvicorn's python holding port 8000.
         # cmd does the redirect: PS 5.1 throws on native stderr under 2>$null with Stop.
         & cmd /c "taskkill /T /F /PID $id >nul 2>&1"
@@ -63,6 +86,19 @@ function Stop-All {
 
 switch ($Action) {
     "stop" { Stop-All }
+    "autostart" {
+        $link = (New-Object -ComObject WScript.Shell).CreateShortcut($Startup)
+        $link.TargetPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+        $link.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSCommandPath`" start -Boot"
+        $link.WorkingDirectory = $Repo
+        $link.WindowStyle = 7
+        $link.Save()
+        Say "NINA will start at logon ($Startup). Log: .nina-local\boot.log"
+    }
+    "autostart-off" {
+        Remove-Item $Startup -ErrorAction SilentlyContinue
+        Say "NINA will no longer start at logon"
+    }
     "verify" {
         # End-to-end check: services up, a real assemble, the MCP registration.
         $ok = $true
@@ -82,7 +118,7 @@ switch ($Action) {
                 throw "$($_.Exception.Message) ($state)"
             }
             if ($h.status -ne "ok") { throw "db=$($h.db) blobs=$($h.blobs)" }
-            "(db $($h.db), blobs $($h.blobs))"
+            "(db $($h.db), blobs $($h.blobs), version $($h.version))"
         }
         Check "assemble (real search, up to 5 min on CPU)" {
             $body = @{ query = "How do I read a file line by line?";
@@ -117,6 +153,15 @@ switch ($Action) {
         }
     }
     "start" {
+        if ($Boot) {
+            Start-Transcript -Path (Join-Path $State "boot.log") | Out-Null
+            try {
+                Invoke-RestMethod -TimeoutSec 10 "$ApiUrl/health" | Out-Null
+                Say "NINA is already up"
+                exit 0
+            } catch { Say "NINA is down: starting it" }
+            Wait-Docker
+        }
         Stop-All
         foreach ($exe in @("docker", "uv", "git")) {
             if (-not (Has $exe)) { throw "$exe is missing: run scripts\setup.ps1 first" }
@@ -175,13 +220,16 @@ switch ($Action) {
         $env:RERANKER_SCORE_TRANSFORM = $transform
         # Record local use (no API key) for GET /v1/usage and the usage panel.
         $env:RECORD_LOCAL_USAGE = "true"
+        $env:NINA_VERSION = "$(& git -C $Repo describe --always --dirty --abbrev=8)".Trim()
         & uv run alembic upgrade head
         if ($LASTEXITCODE -ne 0) { throw "migration failed" }
         Start-Bg "api" "uv" @("run", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000")
         Wait-Http "$ApiUrl/health" 120 "NINA API"
         Pop-Location
 
-        if (Has "claude") {
+        if ($Boot) {
+            Say "MCP registration kept as it is"
+        } elseif (Has "claude") {
             Say "registering the NINA MCP server in Claude Code (user scope)"
             # Windows PowerShell 5.1 turns a native command's stderr into a terminating
             # error under "Stop"; "remove" writes there when nina is not registered yet.

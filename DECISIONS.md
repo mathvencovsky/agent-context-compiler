@@ -10,6 +10,24 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: fase 3, uso real
+Contexto: a regra de saída do plano pede saber se o NINA é chamado sem ser pedido, e o NINA só valia enquanto alguém o ligasse. Sem versão visível, não dava para saber qual código estava respondendo.
+Decisão: `GET /health` passa a devolver `version` (`NINA_VERSION`, o commit, definido por `scripts/nina-local.ps1`; `dev` fora dele). `nina-local.ps1 autostart` cria um atalho na pasta Inicializar do usuário, e `start -Boot` abre o Docker Desktop se preciso e não refaz o registro do MCP. `Stop-All` só mata `llama-server` e `uv`, porque `pids.txt` sobrevive à reinicialização e o número pode ser de outro programa. `nina_usage --tasks` conta por tarefa, usando o `promptId` do histórico.
+Alternativas: tarefa agendada, rejeitada porque costuma exigir administrador; serviço do Windows, desnecessário para um usuário só.
+Consequências: mudança de contrato do `/health`, com os testes de corpo exato atualizados. Limites: o chat do app não grava nesse histórico, então só aparece no total de `GET /v1/usage`; o início automático sobe a branch ativa na pasta; "sem ser pedido" significa só que o texto não cita o NINA, e a regra global do Claude Code continua orientando seu uso.
+
+## 2026-11-04: fase 2, freio por relevância rejeitado
+Contexto: regra escrita antes de medir, na entrada abaixo. Metade A, modelos locais, 138 tarefas, 46 com pergunta trocada, 1000 tokens.
+Decisão: nenhum braço passou; o produto fica sem freio e a metade B não foi aberta. Sem freio: `answer_hit` 0,674, 996 tokens, 985 com pergunta trocada. Melhores: piso 0,01: 0,645 (-2,9 pontos), 916 tokens (92%), 450 (46%); relativo 0,05: 0,645, 846 (85%), 540 (55%); piso 0,03: 0,594, 822 (83%), 292 (30%).
+Alternativas: afrouxar a regra depois do resultado, rejeitado; trava por página (só a melhor frase quando a melhor nota é baixa), não testada, e por construção não reduziria tokens em perguntas respondíveis.
+Consequências: nas perguntas respondíveis, cortar tokens custa respostas nesta faixa, então o freio não resolve a diferença de custo para o leitor nativo. O piso 0,01 reduz bem o texto em página sem relação (46%), mas perde respostas nas outras. Medido só em documentação. `bench/compact_stop_eval.py` fica para repetir a medição.
+
+## 2026-11-04: fase 2, regra do freio por relevância (antes de medir)
+Contexto: sem freio, o `compact` ocupa o orçamento mesmo com frases sem relação. Os pisos 0,1 e 0,5 foram rejeitados, mas este reranker dá cerca de 0,9 a uma resposta e 0,0001 a ruído: a faixa entre os dois não foi testada. Além disso, um piso que zera tudo cai no `_fallback`, que devolve pedaços inteiros.
+Decisão: medir pisos absolutos (0,0001, 0,001, 0,01, 0,03) e relativos à melhor frase (0,001, 0,01, 0,05), sempre mantendo a melhor frase, em `bench/compact_stop_eval.py`, só com modelos locais, em 1000 tokens. Passa na metade A se, contra o braço sem freio: `answer_hit` cai no máximo 2 pontos; tokens ficam em no máximo 80%; e, com a pergunta de outra tarefa sobre estas páginas, tokens ficam em no máximo 50%. O braço com menos tokens vai à metade B, aberta uma vez, com as mesmas três verificações.
+Alternativas: 1 ponto de tolerância, rejeitado porque o reranker ganhou 6 sobre o BM25 e 1 ponto é pouco mais de uma tarefa.
+Consequências: nenhum braço passando, o produto fica como está. Passar é evidência só em documentação e não diz nada sobre custo.
+
 ## 2026-11-04: fase 2, poda do plano B da extração
 Contexto: o plano B do readability dispara em cerca de 2 de cada 3 páginas e entregava o contêiner inteiro, com menus e widgets. A regra foi escrita antes de qualquer correção, em `bench/extract_eval/wcxb_types.py`: `without` cai em ao menos 4 dos 6 tipos fora de documentação e não sobe mais de 1 ponto em nenhum; F1 cai no máximo 1 ponto por tipo e sobe no total; em documentação, recall cai no máximo 0,5 ponto, código e tabelas no máximo 1 ponto.
 Decisão: podar o contêiner (SPEC, "Extração HTML"), em vez de trocar de extrator. Dados: WCXB commit c039d5ee. Ajuste em dev (1497 páginas); teste (511) aberto uma vez, depois do ajuste, e passou em todas as linhas. Teste: F1 0,800 para 0,804; `without` 14,0% para 11,3%; caiu em 5 dos 6 tipos (fórum não mudou); pior variação de F1 por tipo -0,002 (service). Dev: F1 0,775 para 0,781; `without` 14,2% para 11,0%. ESC restante (`[2J`) resolvido removendo ANSI antes do parsing.
