@@ -42,6 +42,7 @@ from readability.readability import Unparseable
 from app.extract.hidden import hidden_text_warning
 from app.extract.invisible import (
     invisible_text_warning,
+    strip_ansi,
     strip_invisible,
     strip_invisible_blocks,
 )
@@ -143,6 +144,9 @@ _WIDGET_CLASS_TOKENS = frozenset(
         "mw-pt-languages",  # MediaWiki translation-language bar
         "nocontent",  # Google's "not page content" marker (devsite)
         "language-selection",  # Sphinx themes' translations bar
+        "reviews-summary",  # shop rating summary (the reviews themselves stay)
+        "review-summary",
+        "rating-summary",
     }
 )
 
@@ -173,6 +177,16 @@ _WIDGET_NAME_WORDS = frozenset(
         "cookie",
         "cookies",
         "consent",
+        # shop and blog widgets; real reviews and forum comments stay content
+        "related",
+        "recommended",
+        "recommendations",
+        "share",
+        "sharing",
+        "newsletter",
+        "subscribe",
+        "cart",
+        "upsell",
     }
 )
 _WIDGET_NAME_NEGATIONS = frozenset({"hide", "hidden", "no", "not", "ignore", "skip"})
@@ -1022,8 +1036,9 @@ class _Walker:
             self.walk(el)
             return
 
+        # A leaf <button> is a control ("Add to cart"), not page text.
         text = _block_text(el)
-        if text:
+        if text and tag != "button":
             self._emit("paragraph", el, text=text, data={})
 
     def _visit_heading(self, el: HtmlElement, level: int) -> None:
@@ -1314,6 +1329,103 @@ def _structural_counts(el: HtmlElement | None) -> dict[str, int]:
     return {tag: _count_tag(el, tag) for tag in _FALLBACK_TAGS}
 
 
+_PRUNE_LISTS = frozenset({"ul", "ol", "dl"})
+_PRUNE_KEEP = frozenset({"pre", "table"})
+_PRUNE_LEAVES = frozenset({"p", "blockquote", "figure", "details"})
+_LINK_DENSE_SHARE = 0.8
+
+
+def _link_dense(el: HtmlElement, text: str, share: float = _LINK_DENSE_SHARE) -> bool:
+    """True if over ``share`` of ``text`` sits inside links (a menu, a link list)."""
+    linked = sum(len(normalize_text(a.text_content() or "")) for a in el.iter("a"))
+    return linked > share * len(text)
+
+
+def _looks_like_widget(el: HtmlElement, text: str) -> bool:
+    """A leaf readability dropped is boilerplate only if it is link-dense (a button
+    or card link); prose and its short labels ("Tip", "Python 3.10+") stay."""
+    return _link_dense(el, text, 0.9 if el.tag in _PRUNE_LEAVES else _LINK_DENSE_SHARE)
+
+
+def _prune_to_readability(root: HtmlElement, kept: HtmlElement) -> None:
+    """Drop from the cleaned original ``root`` what readability dropped, in place.
+
+    The original order and structure stay (so no ``<pre>``/``<table>`` is lost),
+    but a paragraph, heading or other leaf whose text is not in readability's
+    output goes, and so does a list that is link-dense. ``pre`` and ``table`` are
+    always kept. A heading stays only if kept content follows it before the next
+    heading of the same or a higher level.
+    """
+    kept_text = normalize_text(kept.text_content() or "")
+    leaves: list[tuple[HtmlElement, bool]] = []  # (element, still in the tree)
+    # On a page with code, or right under a heading, link lists are mostly
+    # API/section indexes: content. Elsewhere they are menus and cards.
+    has_code = root.find(".//pre") is not None
+
+    def keep(el: HtmlElement, alive: bool) -> None:
+        leaves.append((el, alive))
+
+    def visit(el: HtmlElement) -> None:
+        for child in list(el):
+            tag = child.tag
+            if not isinstance(tag, str) or tag in _PRUNE_KEEP:
+                keep(child, True)
+                continue
+            text = normalize_text(child.text_content() or "")
+            if not text:
+                continue
+            if tag in _HEADING_TAGS:  # readability often drops headings it should keep
+                keep(child, True)
+            elif tag in _PRUNE_LISTS:
+                after_heading = bool(leaves) and leaves[-1][0].tag in _HEADING_TAGS
+                keep(
+                    child,
+                    text in kept_text
+                    or has_code
+                    or after_heading
+                    or not _link_dense(child, text),
+                )
+            elif tag in _PRUNE_LEAVES or not any(
+                isinstance(d.tag, str) and d.tag in _BLOCK_BOUNDARY_TAGS
+                for d in child.iterdescendants()
+            ):
+                keep(
+                    child,
+                    text in kept_text
+                    or not _looks_like_widget(child, text)
+                    or child.find(".//pre") is not None
+                    or child.find(".//table") is not None,
+                )
+            else:
+                visit(child)
+
+    visit(root)
+    # Dropping most of the text means the "boilerplate" is the page (a listing is
+    # one long list of links): leave the container as it is.
+    lost = sum(len(el.text_content() or "") for el, alive in leaves if not alive)
+    if 2 * lost > len(root.text_content() or ""):
+        return
+    for el, alive in leaves:
+        if not alive:
+            _drop(el)
+    for i, (el, alive) in enumerate(leaves):
+        if not alive or el.tag not in _HEADING_TAGS:
+            continue
+        level = int(el.tag[1])
+        has_content = pruned = False
+        for nxt, nxt_alive in leaves[i + 1 :]:
+            if nxt.tag in _HEADING_TAGS and int(nxt.tag[1]) <= level:
+                break
+            if not nxt_alive:
+                pruned = True
+            elif nxt.tag not in _HEADING_TAGS:
+                has_content = True
+        # A section that lost everything to pruning has no use for its heading;
+        # a trailing heading readability itself kept is left alone.
+        if pruned and not has_content:
+            _drop(el)
+
+
 def _readability_subtree(text: str) -> HtmlElement:
     """Return the readability-isolated main content as an lxml subtree.
 
@@ -1351,7 +1463,7 @@ def extract_html(raw: bytes | str, source: SourceInfo) -> Document:
     its warnings surface ``table_no_header`` and the mandatory
     ``readability_fallback``.
     """
-    text = _ensure_text(raw, source)
+    text, ansi_removed = strip_ansi(_ensure_text(raw, source))
     full_tree = _parse_document(text)
 
     # Original main/article, measured BEFORE cleanup, for the fallback check.
@@ -1383,10 +1495,12 @@ def extract_html(raw: bytes | str, source: SourceInfo) -> Document:
     content_root = original_main if used_fallback else readability_subtree
 
     _clean_subtree(content_root)
+    if used_fallback and not lost_text:
+        _prune_to_readability(content_root, readability_subtree)
     walker = _Walker(source.final_url)
     walker.walk(content_root)
 
-    removed = strip_invisible_blocks(walker.blocks)
+    removed = ansi_removed + strip_invisible_blocks(walker.blocks)
     assign_block_ids(walker.blocks)
     warnings = _finalize_warnings(walker)
     if used_fallback:
