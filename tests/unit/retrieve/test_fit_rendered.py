@@ -48,7 +48,12 @@ def test_compact_render_fits_the_budget_on_several_documents() -> None:
     compact_result(result, query=QUERY, budget=max_tokens)
     assert count_tokens(render_concise(result)) > max_tokens  # the wrapper overshoots
 
-    _fit_rendered(result, pooled, query=QUERY, max_tokens=max_tokens)
+    _fit_rendered(
+        result,
+        pooled,
+        compact=lambda b: compact_result(result, query=QUERY, budget=b),
+        max_tokens=max_tokens,
+    )
     rendered = render_concise(result)
     assert result.fragments
     assert count_tokens(rendered) <= max_tokens

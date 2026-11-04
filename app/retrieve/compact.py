@@ -54,6 +54,7 @@ __all__ = [
     "ELISION",
     "POOL_FACTOR",
     "CompactOutcome",
+    "cached_scorer",
     "compact_pieces",
     "compact_result",
     "pool_budget",
@@ -367,7 +368,28 @@ def compact_pieces(
     )
 
 
-def compact_result(result: AssembleResult, *, query: str, budget: int) -> None:
+def cached_scorer(
+    rerank: Callable[[str, list[str]], list[float]], query: str
+) -> Callable[[Sequence[str]], list[float]]:
+    """A ``unit_scorer`` that scores each distinct unit text once per request."""
+    known: dict[str, float] = {}
+
+    def score(texts: Sequence[str]) -> list[float]:
+        missing = [t for t in dict.fromkeys(texts) if t not in known]
+        if missing:
+            known.update(zip(missing, rerank(query, missing), strict=True))
+        return [known[t] for t in texts]
+
+    return score
+
+
+def compact_result(
+    result: AssembleResult,
+    *,
+    query: str,
+    budget: int,
+    unit_scorer: Callable[[Sequence[str]], Sequence[float]] | None = None,
+) -> None:
     """Compact ``result`` (selected with :func:`pool_budget`) to ``budget``.
 
     Fragments keep their ids, provenance, scores and evidence (the evidence
@@ -380,7 +402,9 @@ def compact_result(result: AssembleResult, *, query: str, budget: int) -> None:
         f.scores.rerank if f.scores.rerank is not None else f.scores.rrf
         for f in result.fragments
     ]
-    outcome = compact_pieces(query, [f.md for f in result.fragments], values, budget)
+    outcome = compact_pieces(
+        query, [f.md for f in result.fragments], values, budget, unit_scorer=unit_scorer
+    )
     fragments = []
     for fragment, text in zip(result.fragments, outcome.texts, strict=True):
         if text is not None:
@@ -389,7 +413,8 @@ def compact_result(result: AssembleResult, *, query: str, budget: int) -> None:
     result.output_tokens = sum(f.tokens for f in fragments)
     result.budget_tokens = budget
     result.budget_limited = result.budget_limited or outcome.dropped_relevant
-    if not outcome.matched:
+    if not outcome.matched and unit_scorer is None:
+        # Only BM25 can say the words differ; a scorer rating all units 0 cannot.
         result.compact = "no_match"
     else:
         result.compact = "pruned" if outcome.pruned else "whole"

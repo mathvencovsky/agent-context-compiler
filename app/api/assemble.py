@@ -28,6 +28,7 @@ value sent in production is rejected with
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -66,7 +67,7 @@ from app.providers.rerank.fake import FakeRerankProvider
 from app.providers.rerank.jina import JinaRerankProvider
 from app.providers.rerank.local import JinaCompatibleRerankProvider
 from app.retrieve.assemble import AssembleResult, Fragment, assemble_context
-from app.retrieve.compact import compact_result, pool_budget
+from app.retrieve.compact import cached_scorer, compact_result, pool_budget
 from app.retrieve.hints import build_hints
 from app.retrieve.render import render_concise
 from app.store.models import _EMBEDDING_DIM as EMBEDDING_DIM
@@ -189,11 +190,43 @@ def _sources(result: AssembleResult) -> list[SourceStatusModel]:
 _MIN_COMPACT_BUDGET = 50
 
 
+def _compactor(
+    result: AssembleResult, reranker: RerankProvider, settings: Settings, query: str
+) -> Callable[[int], None]:
+    """``budget -> compaction`` of ``result``, scored by the local reranker if any.
+
+    Without ``reranker_base_url`` it is BM25 (the paid Jina is never called per
+    sentence). If the local rerank raises, this request falls back to BM25.
+    """
+    scorer = (
+        cached_scorer(reranker.rerank, query) if settings.reranker_base_url else None
+    )
+
+    def compact(budget: int) -> None:
+        nonlocal scorer
+        if scorer is not None:
+            try:
+                compact_result(result, query=query, budget=budget, unit_scorer=scorer)
+                return
+            except Exception:
+                scorer = None
+                result.warnings.append(
+                    {
+                        "code": "compact_rerank_failed",
+                        "message": "The sentence reranker failed, so the sentences "
+                        "were chosen by word overlap with the question instead.",
+                    }
+                )
+        compact_result(result, query=query, budget=budget)
+
+    return compact
+
+
 def _fit_rendered(
     result: AssembleResult,
     pooled: tuple[list[Fragment], bool],
     *,
-    query: str,
+    compact: Callable[[int], None],
     max_tokens: int,
 ) -> None:
     """Make the concise render, tags and notes included, fit ``max_tokens``.
@@ -212,7 +245,7 @@ def _fit_rendered(
         kept = (result.fragments, result.budget_limited, budget)
         result.fragments, result.budget_limited = pooled
         budget = max(_MIN_COMPACT_BUDGET, min(budget, delivered) - excess)
-        compact_result(result, query=query, budget=budget)
+        compact(budget)
         if not result.fragments:
             result.fragments, result.budget_limited, budget = kept
             break
@@ -317,8 +350,9 @@ def assemble(
         now=now,
     )
     pooled = (result.fragments, result.budget_limited)
+    compact = _compactor(result, reranker, settings, req.query)
     if req.compact:
-        compact_result(result, query=req.query, budget=req.max_tokens)
+        compact(req.max_tokens)
     result.requested_version = req.version
 
     # All URLs failed to resolve: there is nothing to assemble (SPEC §8).
@@ -341,7 +375,7 @@ def assemble(
             }
         )
     if req.compact and req.response_format == "concise":
-        _fit_rendered(result, pooled, query=req.query, max_tokens=req.max_tokens)
+        _fit_rendered(result, pooled, compact=compact, max_tokens=req.max_tokens)
 
     # (M9) usage units: the delivered output tokens for this assemble. Renders
     # are not separately metered for assemble — its internal resolves are
