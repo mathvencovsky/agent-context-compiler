@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: fase 2, freio por relevância rejeitado
+Contexto: regra escrita antes de medir, na entrada abaixo. Metade A, modelos locais, 138 tarefas, 46 com pergunta trocada, 1000 tokens.
+Decisão: nenhum braço passou; o produto fica sem freio e a metade B não foi aberta. Sem freio: `answer_hit` 0,674, 996 tokens, 985 com pergunta trocada. Melhores: piso 0,01: 0,645 (-2,9 pontos), 916 tokens (92%), 450 (46%); relativo 0,05: 0,645, 846 (85%), 540 (55%); piso 0,03: 0,594, 822 (83%), 292 (30%).
+Alternativas: afrouxar a regra depois do resultado, rejeitado; trava por página (só a melhor frase quando a melhor nota é baixa), não testada, e por construção não reduziria tokens em perguntas respondíveis.
+Consequências: nas perguntas respondíveis, cortar tokens custa respostas nesta faixa, então o freio não resolve a diferença de custo para o leitor nativo. O piso 0,01 reduz bem o texto em página sem relação (46%), mas perde respostas nas outras. Medido só em documentação. `bench/compact_stop_eval.py` fica para repetir a medição.
+
 ## 2026-11-04: fase 2, regra do freio por relevância (antes de medir)
 Contexto: sem freio, o `compact` ocupa o orçamento mesmo com frases sem relação. Os pisos 0,1 e 0,5 foram rejeitados, mas este reranker dá cerca de 0,9 a uma resposta e 0,0001 a ruído: a faixa entre os dois não foi testada. Além disso, um piso que zera tudo cai no `_fallback`, que devolve pedaços inteiros.
 Decisão: medir pisos absolutos (0,0001, 0,001, 0,01, 0,03) e relativos à melhor frase (0,001, 0,01, 0,05), sempre mantendo a melhor frase, em `bench/compact_stop_eval.py`, só com modelos locais, em 1000 tokens. Passa na metade A se, contra o braço sem freio: `answer_hit` cai no máximo 2 pontos; tokens ficam em no máximo 80%; e, com a pergunta de outra tarefa sobre estas páginas, tokens ficam em no máximo 50%. O braço com menos tokens vai à metade B, aberta uma vez, com as mesmas três verificações.
