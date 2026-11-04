@@ -27,6 +27,28 @@ O script:
 
 Depois abra o Claude Code: `/mcp` deve listar `nina`.
 
+## Ligar sozinho ao entrar no Windows
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\nina-local.ps1 autostart
+```
+
+Isso cria um atalho na pasta Inicializar do seu usuário, sem pedir administrador. Ao entrar no
+Windows, ele abre o Docker Desktop se preciso e sobe o NINA escondido, na branch que estiver
+ativa na pasta. O registro fica em `.nina-local\boot.log`. Para desfazer, use `autostart-off`.
+`GET /health` mostra a versão em execução (`version`, o commit).
+
+## Contar o uso real por tarefa
+
+```powershell
+uv run python -m scripts.nina_usage --tasks tarefas.json --since 2026-11-05
+```
+
+Lê o histórico do Claude Code e mostra, entre as tarefas que leram alguma página, quantas chamaram
+o NINA sem ser pedido no texto, quantas também leram pelo leitor nativo, quantas tiveram recusa e o
+tamanho das páginas. Deixa de fora o desenvolvimento do próprio NINA e as execuções de teste. O
+chat do app não entra, porque não grava neste histórico: dele só há o total de `GET /v1/usage`.
+
 ## Desligar e conferir
 
 ```powershell

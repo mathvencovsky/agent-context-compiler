@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: fase 3, uso real
+Contexto: a regra de saída do plano pede saber se o NINA é chamado sem ser pedido, e o NINA só valia enquanto alguém o ligasse. Sem versão visível, não dava para saber qual código estava respondendo.
+Decisão: `GET /health` passa a devolver `version` (`NINA_VERSION`, o commit, definido por `scripts/nina-local.ps1`; `dev` fora dele). `nina-local.ps1 autostart` cria um atalho na pasta Inicializar do usuário, e `start -Boot` abre o Docker Desktop se preciso e não refaz o registro do MCP. `Stop-All` só mata `llama-server` e `uv`, porque `pids.txt` sobrevive à reinicialização e o número pode ser de outro programa. `nina_usage --tasks` conta por tarefa, usando o `promptId` do histórico.
+Alternativas: tarefa agendada, rejeitada porque costuma exigir administrador; serviço do Windows, desnecessário para um usuário só.
+Consequências: mudança de contrato do `/health`, com os testes de corpo exato atualizados. Limites: o chat do app não grava nesse histórico, então só aparece no total de `GET /v1/usage`; o início automático sobe a branch ativa na pasta; "sem ser pedido" significa só que o texto não cita o NINA, e a regra global do Claude Code continua orientando seu uso.
+
 ## 2026-11-04: fase 2, freio por relevância rejeitado
 Contexto: regra escrita antes de medir, na entrada abaixo. Metade A, modelos locais, 138 tarefas, 46 com pergunta trocada, 1000 tokens.
 Decisão: nenhum braço passou; o produto fica sem freio e a metade B não foi aberta. Sem freio: `answer_hit` 0,674, 996 tokens, 985 com pergunta trocada. Melhores: piso 0,01: 0,645 (-2,9 pontos), 916 tokens (92%), 450 (46%); relativo 0,05: 0,645, 846 (85%), 540 (55%); piso 0,03: 0,594, 822 (83%), 292 (30%).
