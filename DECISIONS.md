@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: NINA contra Context7, resultado: SEM VANTAGEM
+Contexto: regra na entrada abaixo. 80 tarefas da metade B, 65 discordâncias lidas às cegas por um leitor Haiku; só documentação pública, 64% das tarefas em docs.python.org.
+Decisão: pela regra, `SEM VANTAGEM` contra os dois braços, então não há razão mostrada para escolher o NINA em documentação pública. Contra `c7_fetch`: acerto 0,512 contra 0,463, `d` +0,050, CI [-0,013; +0,125], 945 tokens contra 509 (1,85x). Contra `c7_docs`: 0,388 contra 0,350, `d` +0,037, CI [-0,062; +0,150], 945 contra 821 (1,15x). `c7_fetch` respondeu `no_relevant_content` em 24 das 80 tarefas; nas 56 restantes, 728 tokens.
+Alternativas: um primeiro resultado `NINA PERDE` foi anulado antes de valer: a limpeza do cegamento apagou as 65 respostas do NINA, porque o cabeçalho cita `<nina_notes>`. Corrigida, os 65 casos foram relidos com a mesma regra e a mesma amostra; os arquivos ficaram marcados como `INVALID`.
+Consequências: a amostra só detecta diferenças grandes, e o acerto do NINA pode ser um pouco maior ou menor. Mede presença da resposta, não a resposta final de um modelo. Concordâncias pelo `soft_hit` não foram relidas, e a limpeza do cegamento ficou em script local, fora do repositório. Não testa documentos privados.
+
 ## 2026-11-04: NINA contra Context7, regra escrita antes de medir
 Contexto: o humano pediu um motivo real para continuar ou matar o projeto. O Context7 tem `/api/v3/fetch`, que lê uma URL focando em uma pergunta: a mesma função do NINA, grátis e sem conta. A Firecrawl nunca foi medida (sem chave) e entrega a página inteira, então não testa esta função.
 Decisão (humano, 2026-11-04: rodar sem pagar): 80 tarefas da metade B, mesma pergunta, ao vivo, em `bench/context7_compare.py`: `nina` e `c7_fetch` na página da resposta, `c7_docs` na biblioteca do site. Presença da resposta por `soft_hit`; discordâncias decididas às cegas pela resposta de referência. `NINA VENCE`: CI de `d` acima de 0 e tokens <= 110% do rival, ou `d` >= -0,03 e tokens <= 70%. `NINA PERDE`: CI abaixo de 0, ou `d` <= 0,03 e tokens >= 120%. Outro caso: `SEM VANTAGEM`. Só `NINA VENCE` contra `c7_fetch` é evidência para escolher o NINA em documentação pública.
