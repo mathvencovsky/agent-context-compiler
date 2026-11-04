@@ -55,7 +55,7 @@ import argparse
 import csv
 import json
 import statistics
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -88,11 +88,17 @@ def compact_context(
     md_by_key: Mapping[tuple[str, int], str],
     url_by_document: Mapping[str, str],
     budget: int,
+    *,
+    unit_scorer: Callable[[Sequence[str]], Sequence[float]] | None = None,
 ) -> str:
     """The ``compact`` arm's context, emitted like ``OursRunner`` does."""
     keys = [(c.document_id, c.ord) for c in selected]
     outcome = compact_pieces(
-        question, [md_by_key[k] for k in keys], [c.value for c in selected], budget
+        question,
+        [md_by_key[k] for k in keys],
+        [c.value for c in selected],
+        budget,
+        unit_scorer=unit_scorer,
     )
     parts = []
     for candidate, text in zip(selected, outcome.texts, strict=True):

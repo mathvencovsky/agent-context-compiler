@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
 from app.index.tokens import count_tokens
@@ -227,6 +227,18 @@ def _scores(query: str, texts: Sequence[str], units: Sequence[_Unit]) -> list[fl
     return scores
 
 
+def _scored_by(
+    scorer: Callable[[Sequence[str]], Sequence[float]],
+    texts: Sequence[str],
+    units: Sequence[_Unit],
+) -> list[float]:
+    """``scorer`` over the non-heading units, with headings at 0 as in BM25."""
+    body = [u for u in units if u.kind != "heading"]
+    scores = scorer([texts[u.piece][u.start : u.end] for u in body]) if body else []
+    by_unit = dict(zip(((u.piece, u.index) for u in body), scores, strict=True))
+    return [by_unit.get((u.piece, u.index), 0.0) for u in units]
+
+
 def _render(md: str, units: Sequence[_Unit], kept: set[int]) -> str | None:
     """The kept units of one piece in page order, gaps as :data:`ELISION`."""
     if not kept:
@@ -277,15 +289,25 @@ def _fallback(
 
 
 def compact_pieces(
-    query: str, texts: Sequence[str], values: Sequence[float], budget: int
+    query: str,
+    texts: Sequence[str],
+    values: Sequence[float],
+    budget: int,
+    *,
+    unit_scorer: Callable[[Sequence[str]], Sequence[float]] | None = None,
 ) -> CompactOutcome:
     """Compact the pooled chunks ``texts`` (page order) to ``budget`` tokens.
 
     ``values`` are the chunks' selection values, used only by the fallback.
+    ``unit_scorer`` replaces BM25 with a score per unit text; headings stay at 0.
     """
     per_piece = [_units(md, i) for i, md in enumerate(texts)]
     units = [u for piece in per_piece for u in piece]
-    own = _scores(query, texts, units)
+    own = (
+        _scores(query, texts, units)
+        if unit_scorer is None
+        else _scored_by(unit_scorer, texts, units)
+    )
     if not any(s > 0 for s in own):
         return _fallback(texts, values, budget)
     score_of = {(u.piece, u.index): s for u, s in zip(units, own, strict=True)}
