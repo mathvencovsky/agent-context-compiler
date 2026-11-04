@@ -92,7 +92,7 @@ from app.fetch.detect import (
     parse_content_type,
     should_render,
 )
-from app.fetch.errors import UnsupportedContentType, UpstreamStatus
+from app.fetch.errors import UnsupportedContentType, UpstreamStatus, refusal_note
 from app.fetch.guard import GuardResult, Resolver, validate_url
 from app.fetch.render import RENDERED_WITH_BROWSER_WARNING_CODE, render_url
 from app.fetch.robots import RobotsChecker
@@ -615,7 +615,9 @@ def resolve_document(
         # without Location, a 304 with nothing cached) is never extracted.
         if not 200 <= result.status < 300:
             raise UpstreamStatus(
-                f"{result.final_url} answered HTTP {result.status}",
+                f"{result.final_url}: {refusal_note(result.status)}"
+                if refusal_note(result.status)
+                else f"{result.final_url} answered HTTP {result.status}",
                 details={"url": result.final_url, "upstream_status": result.status},
             )
 

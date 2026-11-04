@@ -395,3 +395,65 @@ def test_titles_and_annotations_cross_the_wire() -> None:
     for tool in asyncio.run(listed()):
         assert tool["title"], tool["name"]
         assert tool["annotations"] == _READ_ONLY_HINTS, tool["name"]
+
+
+async def test_web_scope_first_pass_is_small_and_relevant() -> None:
+    # DECISIONS 2026-11-03: the docs defaults, frozen for M10, do not change.
+    async def props(*, web: bool) -> dict[str, Any]:
+        tools = await build_server(web=web).list_tools()
+        tool = next(t for t in tools if t.name == "assemble_context")
+        return tool.input_schema["properties"]
+
+    web, docs = await props(web=True), await props(web=False)
+    assert web.keys() == {"query", "urls", "exclude_chunk_ids"}
+    assert docs["max_tokens"]["default"] == 4000
+    assert docs["compact"]["default"] is False
+
+    sent: list[dict[str, Any]] = []
+    context = (
+        "<fragment>Option: max_tokens=9.</fragment>\n<nina_notes>\n"
+        "- budget_limited: Budget ran out. Option: max_tokens=2000.\n"
+        "- compacted: Cut. Option: compact=false for whole fragments.\n</nina_notes>\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"context": context})
+
+    client = NinaApiClient(
+        base_url="http://nina.local",
+        api_key="test-key",
+        transport=httpx.MockTransport(handler),
+    )
+    result = await build_server(client=client, web=True).call_tool(
+        "assemble_context", {"query": "q", "urls": ["https://x.org/a"]}
+    )
+    assert (sent[0]["max_tokens"], sent[0]["compact"]) == (1000, True)
+    text = result.content[0].text  # type: ignore[union-attr]
+    assert "Option: max_tokens=9." in text  # page text stays literal
+    assert "Option: call again with exclude_chunk_ids." in text
+    assert "max_tokens=2000" not in text and "compact=false" not in text
+
+
+@pytest.mark.parametrize("web", [True, False])
+async def test_numeric_chunk_ids_are_accepted_and_sent_as_strings(web: bool) -> None:
+    sent: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"context": "<fragment>x</fragment>"})
+
+    client = NinaApiClient(
+        base_url="http://nina.local",
+        api_key="test-key",
+        transport=httpx.MockTransport(handler),
+    )
+    await build_server(client=client, web=web).call_tool(
+        "assemble_context",
+        {
+            "query": "q",
+            "urls": ["https://x.org/a"],
+            "exclude_chunk_ids": [1353, "7"],
+        },
+    )
+    assert sent[0]["exclude_chunk_ids"] == ["1353", "7"]

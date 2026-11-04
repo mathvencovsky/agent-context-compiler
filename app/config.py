@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     assemble_fetch_concurrency: int = 6
     assemble_per_host_concurrency: int = 2
 
+    # Paid APIs stay off even with keys in .env: a key alone must never spend
+    # (DECISIONS.md 2026-11-04). Local model servers do not need this.
+    allow_paid_calls: bool = False
+
     # Embeddings (M6, SPEC §5). text-embedding-3-small produces 1536-dim vectors
     # (human decision, DECISIONS.md 2026-10-12). embeddings_api_key is the
     # OpenAI key for the real adapter; it falls back to bench_answerer_api_key

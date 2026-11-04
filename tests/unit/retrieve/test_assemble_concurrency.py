@@ -11,7 +11,7 @@ from collections import Counter
 import pytest
 
 from app.config import Settings
-from app.retrieve.assemble import _in_request_order, _url_keys
+from app.retrieve.assemble import _drop_copies, _in_request_order, _url_keys
 
 _VAR: contextvars.ContextVar[str] = contextvars.ContextVar("_VAR", default="unset")
 
@@ -141,3 +141,9 @@ def test_an_exception_reaches_the_consumer_for_its_url_only() -> None:
     with pytest.raises(RuntimeError):
         futures[1].result()
     assert futures[2].result() == urls[2]
+
+
+def test_exact_copies_are_dropped_best_ranked_kept() -> None:
+    ranked = [(("d", 1), 0.9, 0.9), (("d", 2), 0.8, 0.8), (("d", 3), 0.7, 0.7)]
+    texts = {("d", 1): "Same  text.\n", ("d", 2): "Same text.", ("d", 3): "Other."}
+    assert [k for k, _, _ in _drop_copies(ranked, texts)] == [("d", 1), ("d", 3)]

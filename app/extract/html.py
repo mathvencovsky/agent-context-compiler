@@ -1028,6 +1028,8 @@ class _Walker:
 
     def _visit_heading(self, el: HtmlElement, level: int) -> None:
         text = _block_text(el)
+        if not text:
+            return
         # Pop stack entries at the same or deeper level, then push this one.
         while self._heading_stack and self._heading_stack[-1][0] >= level:
             self._heading_stack.pop()

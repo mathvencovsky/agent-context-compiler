@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     import httpx
 
 # Reuse the shared missing-key error so callers catch one type across providers.
-from app.providers.llm.openai import MissingAPIKey
+from app.providers.llm.openai import MissingAPIKey, require_paid_calls
 
 __all__ = ["JinaRerankProvider", "MissingAPIKey"]
 
@@ -61,6 +61,7 @@ class JinaRerankProvider:
                 "it. Set it in .env for the real run, or use FakeRerankProvider "
                 "in tests."
             )
+        require_paid_calls(self._settings, "the Jina reranker")
         return key
 
     def rerank(self, query: str, documents: list[str]) -> list[float]:

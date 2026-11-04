@@ -22,8 +22,9 @@ Both arms see the same cached candidates (selection only, like
 ``bench.m10a_selection``) and the same ``[URL]`` headers and
 ``truncate_to_budget``: ``current`` is NINA at budget B; ``compact`` selects at
 :func:`app.retrieve.compact.pool_budget` (B) and compacts to B. Budgets:
-:data:`BUDGETS`. Zero cost: providers come from the disk cache and the script
-prints the paid-call counts (any number above 0 means the cache missed).
+:data:`BUDGETS`. Zero cost: providers come from the disk cache and a miss stops
+the run with ``PaidCallRefused`` instead of calling a paid API (DECISIONS.md
+2026-11-04: it used to call them, and half A paid for its misses).
 
 **Acceptance rule (DECISIONS.md 2026-10-29, written before measuring).** The
 constants of ``app/retrieve/compact.py`` are frozen; there is no tuning.
@@ -172,13 +173,11 @@ def _strong_rag_per_1k(task_ids: Sequence[str]) -> float:  # pragma: no cover
 def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corpus
     from app.config import get_settings
     from app.index.tokens import count_tokens
-    from app.providers.embeddings.openai import OpenAIEmbeddingProvider
-    from app.providers.rerank.jina import JinaRerankProvider
     from app.retrieve.select import select
     from bench.anchor_qrels import in_tune_half
     from bench.corpus_store import CorpusStore
     from bench.m10a_baseline import bench_task
-    from bench.provider_cache import CachingEmbeddingProvider, CachingRerankProvider
+    from bench.m10b_retrieval import cached_jina, cached_openai
     from bench.runners.base import truncate_to_budget
     from bench.runners.ours import OursRunner
     from bench.section_recall import HIT, coverage, token_precision, units
@@ -189,8 +188,8 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real corp
     parser.add_argument("--half", choices=["A", "B"], default="A")
     args = parser.parse_args(argv)
 
-    embeddings = CachingEmbeddingProvider(OpenAIEmbeddingProvider())
-    reranker = CachingRerankProvider(JinaRerankProvider())
+    embeddings = cached_openai()
+    reranker = cached_jina()
     store = CorpusStore(DEFAULT_CORPUS_DIR)
     tasks = {t.id: t for t in load_external_tasks(Path("bench/tasks/external.yaml"))}
     lines_in = (_OUT / "qrels.jsonl").read_text(encoding="utf-8").splitlines()

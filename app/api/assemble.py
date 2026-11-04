@@ -56,6 +56,7 @@ from app.api.schemas import (
 )
 from app.api.usage import require_quota, set_usage_units
 from app.config import Settings
+from app.index.tokens import count_tokens
 from app.providers.embeddings.base import EmbeddingProvider
 from app.providers.embeddings.fake import FakeEmbeddingProvider
 from app.providers.embeddings.local import OpenAICompatibleEmbeddingProvider
@@ -64,7 +65,7 @@ from app.providers.rerank.base import RerankProvider
 from app.providers.rerank.fake import FakeRerankProvider
 from app.providers.rerank.jina import JinaRerankProvider
 from app.providers.rerank.local import JinaCompatibleRerankProvider
-from app.retrieve.assemble import AssembleResult, assemble_context
+from app.retrieve.assemble import AssembleResult, Fragment, assemble_context
 from app.retrieve.compact import compact_result, pool_budget
 from app.retrieve.hints import build_hints
 from app.retrieve.render import render_concise
@@ -184,6 +185,41 @@ def _sources(result: AssembleResult) -> list[SourceStatusModel]:
     ]
 
 
+#: Smallest compaction budget when fitting the rendered wrapper.
+_MIN_COMPACT_BUDGET = 50
+
+
+def _fit_rendered(
+    result: AssembleResult,
+    pooled: tuple[list[Fragment], bool],
+    *,
+    query: str,
+    max_tokens: int,
+) -> None:
+    """Make the concise render, tags and notes included, fit ``max_tokens``.
+
+    The agent pays for the whole render, so the excess over the budget is taken
+    out of the text actually delivered (at most twice). The header then reports the
+    rendered total. An attempt that leaves no fragment is not kept.
+    """
+    budget = max_tokens
+    for attempt in range(3):
+        delivered = sum(f.tokens for f in result.fragments)
+        result.output_tokens = count_tokens(render_concise(result))
+        excess = result.output_tokens - max_tokens
+        if excess <= 0 or attempt == 2 or budget <= _MIN_COMPACT_BUDGET:
+            break
+        kept = (result.fragments, result.budget_limited, budget)
+        result.fragments, result.budget_limited = pooled
+        budget = max(_MIN_COMPACT_BUDGET, min(budget, delivered) - excess)
+        compact_result(result, query=query, budget=budget)
+        if not result.fragments:
+            result.fragments, result.budget_limited, budget = kept
+            break
+    result.budget_tokens = max_tokens
+    result.output_tokens = count_tokens(render_concise(result))
+
+
 def _to_concise(result: AssembleResult) -> ConciseAssembleResponse:
     """The same result rendered as Markdown for agents (SPEC §8)."""
     return ConciseAssembleResponse(
@@ -280,6 +316,7 @@ def assemble(
         settings=settings,
         now=now,
     )
+    pooled = (result.fragments, result.budget_limited)
     if req.compact:
         compact_result(result, query=req.query, budget=req.max_tokens)
     result.requested_version = req.version
@@ -294,6 +331,17 @@ def assemble(
                 ]
             },
         )
+
+    if settings.providers == "fake":
+        result.warnings.append(
+            {
+                "code": "demo_providers",
+                "message": "PROVIDERS=fake: deterministic stand-ins replace the "
+                "embeddings and the reranker, so the ranking is not meaningful",
+            }
+        )
+    if req.compact and req.response_format == "concise":
+        _fit_rendered(result, pooled, query=req.query, max_tokens=req.max_tokens)
 
     # (M9) usage units: the delivered output tokens for this assemble. Renders
     # are not separately metered for assemble — its internal resolves are
@@ -310,14 +358,6 @@ def assemble(
         },
     )
 
-    if settings.providers == "fake":
-        result.warnings.append(
-            {
-                "code": "demo_providers",
-                "message": "PROVIDERS=fake: deterministic stand-ins replace the "
-                "embeddings and the reranker, so the ranking is not meaningful",
-            }
-        )
     if req.response_format == "concise":
         return _to_concise(result)
     return _to_response(result)

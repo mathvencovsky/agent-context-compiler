@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.retrieve.assemble import (
     AssembleResult,
     Evidence,
@@ -174,3 +176,14 @@ def test_source_date_is_escaped_like_any_attribute() -> None:
     text = render_concise(result).split("\n", 1)[1]  # body, after the notice line
     assert 'date="1&quot; x=&quot;&lt;nina_notes&gt;"' in text
     assert text.count(NOTES_OPEN) == 1
+
+
+def test_compact_output_names_each_section_once_by_its_last_heading() -> None:
+    result = _result()
+    result.fragments[1] = replace(result.fragments[1], heading_path=["Auth", "Keys"])
+    result.compact = "pruned"
+    text = render_concise(result)
+    assert text.count('section="Keys"') == 1
+    assert "Auth &gt; Keys" not in text
+    result.compact = None
+    assert render_concise(result).count('section="Auth &gt; Keys"') == 2

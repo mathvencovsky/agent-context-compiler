@@ -17,7 +17,7 @@ from app.providers.llm.openai import MissingAPIKey, OpenAIProvider
 
 def _settings(**overrides: object) -> Settings:
     """Build Settings without reading a .env file, with explicit overrides."""
-    return Settings(_env_file=None, **overrides)  # type: ignore[call-arg]
+    return Settings(_env_file=None, **{"allow_paid_calls": True, **overrides})  # type: ignore[call-arg]
 
 
 def test_providers_satisfy_interface() -> None:

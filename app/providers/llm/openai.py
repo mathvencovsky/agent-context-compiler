@@ -18,6 +18,20 @@ class MissingAPIKey(RuntimeError):
     """Raised when a real provider is used without its API key configured."""
 
 
+class PaidCallsDisabled(MissingAPIKey):
+    """Raised instead of calling a paid API without ALLOW_PAID_CALLS=true."""
+
+
+def require_paid_calls(settings: Settings, provider: str) -> None:
+    """Refuse a paid call unless the human turned paid calls on."""
+    if not settings.allow_paid_calls:
+        raise PaidCallsDisabled(
+            f"Paid calls are off, so {provider} was not called. Set "
+            "ALLOW_PAID_CALLS=true only when you mean to spend, or set "
+            "EMBEDDINGS_BASE_URL and RERANKER_BASE_URL to use local models."
+        )
+
+
 class OpenAIProvider:
     """Answerer backed by the OpenAI API (``gpt-6.1-sol``)."""
 
@@ -47,6 +61,7 @@ class OpenAIProvider:
                 "requires it. Set it in .env for the real benchmark run, or use "
                 "FakeLLMProvider in tests."
             )
+        require_paid_calls(self._settings, "OpenAI")
 
         # Lazy import: keep the SDK off the import path for construction/tests.
         from openai import OpenAI

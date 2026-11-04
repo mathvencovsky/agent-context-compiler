@@ -13,8 +13,8 @@ budget of :data:`POOL_FACTOR` × ``max_tokens`` (capped at 32,000), then fills
    followed by whitespace). A unit is a ``[start, end)`` span of the chunk, so
    kept text is always a literal substring of the page's Markdown.
 2. **Score.** BM25 (k1 = 1.2, b = 0.75; Lucene's ``PassageScorer``) of the
-   query's terms (lowercase alphanumeric runs, minus :data:`STOPWORDS`) over
-   the units of the pool, IDF counted over the same units, plus
+   query's terms (lowercase, accent-free alphanumeric runs, minus
+   :data:`STOPWORDS`) over the units of the pool, IDF counted over the same units, plus
    :data:`IDENTIFIER_BONUS` for each identifier of the query (``foo_bar``,
    ``--flag``, ``Class.method``, ``camelCase``, a backtick span) found
    literally (case-sensitive) in the unit. A unit then gains
@@ -31,7 +31,8 @@ budget of :data:`POOL_FACTOR` × ``max_tokens`` (capped at 32,000), then fills
    ``cl100k_base`` and the lowest-ranked units leave until it fits.
 4. **Fallback.** When no unit of the pool overlaps the query, whole chunks are
    kept by value / sqrt(tokens) under ``max_tokens`` (``λ = 0`` selection) and
-   nothing is pruned.
+   nothing is pruned; the outcome says ``matched=False`` so the caller can tell
+   this apart from "nothing needed pruning".
 
 The constants are fixed before any measurement (DECISIONS.md 2026-10-29); the
 acceptance rule lives in ``bench/compact_eval.py``. Pure and deterministic: no
@@ -47,6 +48,7 @@ from dataclasses import dataclass, replace
 
 from app.index.tokens import count_tokens
 from app.retrieve.assemble import AssembleResult
+from app.retrieve.lexical import tokenize
 
 __all__ = [
     "ELISION",
@@ -72,10 +74,14 @@ WINDOW_WEIGHT = 0.25
 STOPWORDS = frozenset(
     "a an and are as at be by can could do does for from how i if in into is it "
     "its me my of on or should that the this to use used using was what when "
-    "where which who why will with would you your".split()
+    "where which who why will with would you your "
+    # Portuguese, accents removed like :func:`tokenize` does.
+    "como para uma um uns umas de do da dos das em no na nos nas o os as e ou "
+    "que por com se qual quais quando onde ao aos pelo pela pelos pelas sao "
+    "sou ser foi era esta este isso isto ha mais mas sem sobre entre ate "
+    "meu minha seu sua posso pode devo preciso fazer".split()
 )
 
-_TERM = re.compile(r"[a-z0-9]+")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
@@ -111,12 +117,14 @@ class CompactOutcome:
     """The compacted text of each piece (``None``: dropped) and what happened.
 
     ``pruned`` is true when any unit was left out. ``dropped_relevant`` is true
-    when a unit that overlaps the query did not fit the budget.
+    when a unit that overlaps the query did not fit the budget. ``matched`` is
+    false when no unit overlapped the query (the fallback kept whole chunks).
     """
 
     texts: list[str | None]
     pruned: bool
     dropped_relevant: bool
+    matched: bool = True
 
 
 def _units(md: str, piece: int) -> list[_Unit]:
@@ -189,7 +197,7 @@ def _identifiers(query: str) -> list[str]:
 
 
 def _terms(text: str) -> list[str]:
-    return [t for t in _TERM.findall(text.lower()) if t not in STOPWORDS]
+    return [t for t in tokenize(text) if t not in STOPWORDS]
 
 
 def _scores(query: str, texts: Sequence[str], units: Sequence[_Unit]) -> list[float]:
@@ -264,6 +272,7 @@ def _fallback(
         texts=[t if i in chosen else None for i, t in enumerate(texts)],
         pruned=False,
         dropped_relevant=False,
+        matched=False,
     )
 
 
@@ -358,4 +367,7 @@ def compact_result(result: AssembleResult, *, query: str, budget: int) -> None:
     result.output_tokens = sum(f.tokens for f in fragments)
     result.budget_tokens = budget
     result.budget_limited = result.budget_limited or outcome.dropped_relevant
-    result.compact = "pruned" if outcome.pruned else "whole"
+    if not outcome.matched:
+        result.compact = "no_match"
+    else:
+        result.compact = "pruned" if outcome.pruned else "whole"

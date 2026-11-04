@@ -110,11 +110,13 @@ def render_concise(result: AssembleResult) -> str:
     for frag in result.fragments:
         count_by_doc[frag.document_id] = count_by_doc.get(frag.document_id, 0) + 1
     document = None
+    section = None
     for frag in result.fragments:
         if frag.document_id != document:
             if document is not None:
                 lines.append("</document>")
             document = frag.document_id
+            section = None
             lines += [
                 "",
                 f'<document source="{_attr(frag.source_url)}" '
@@ -124,8 +126,12 @@ def render_concise(result: AssembleResult) -> str:
                 + ">",
             ]
         attrs = f'chunk="{_attr(frag.chunk_id)}"'
-        if frag.heading_path:
+        if frag.heading_path and result.compact is None:
             attrs += f' section="{_attr(" > ".join(frag.heading_path))}"'
+        elif frag.heading_path and frag.heading_path[-1] != section:
+            # Low budgets: long breadcrumbs on short fragments cost more than the text.
+            section = frag.heading_path[-1]
+            attrs += f' section="{_attr(section)}"'
         pages = sorted({ev.page for ev in frag.evidence if ev.page is not None})
         if pages:
             attrs += f' page="{",".join(map(str, pages))}"'

@@ -50,6 +50,7 @@ from urllib.parse import urlsplit
 
 from app.api.documents import resolve_document
 from app.api.schemas import AssembleRequest, ResolveRequest, ResolveResponse
+from app.fetch.errors import refusal_note
 from app.index.indexer import index_version
 from app.providers.embeddings.base import embed_query
 from app.retrieve.lexical import LexicalConfig, lexical_search_ranked
@@ -155,7 +156,8 @@ class AssembleResult:
     #: ``version_mismatch`` hint. Set by the API layer, never by selection.
     requested_version: str | None = None
     #: Low-budget mode outcome (:mod:`app.retrieve.compact`): ``None`` when
-    #: ``compact`` was not asked, else ``"pruned"`` or ``"whole"``.
+    #: ``compact`` was not asked, else ``"pruned"``, ``"whole"`` or ``"no_match"`` (no
+    #: sentence overlapped the query: whole fragments).
     compact: str | None = None
 
 
@@ -211,6 +213,9 @@ def _failed(url: str, exc: Exception) -> _UrlOutcome:
     code = getattr(exc, "code", "fetch_failed")
     upstream = getattr(exc, "details", {}).get("upstream_status")
     reason = f"{code} (HTTP {upstream})" if upstream else code
+    note = refusal_note(upstream) if isinstance(upstream, int) else None
+    if note:
+        reason = f"{code}: {note}"
     return _UrlOutcome(
         source=SourceStatus(
             url=url,
@@ -452,7 +457,13 @@ def _best_quote(
 
 
 def _coverage(max_rerank: float | None, settings: Settings) -> str:
-    """Classify coverage from the max rerank score (SPEC §6 step 7 heuristic)."""
+    """Classify coverage from the max rerank score (SPEC §6 step 7 heuristic).
+
+    The thresholds were calibrated on Jina scores: with a local reranker
+    (``reranker_base_url``) the scale differs and the label is ``"unknown"``.
+    """
+    if settings.reranker_base_url:
+        return "unknown"
     score = max_rerank if max_rerank is not None else 0.0
     if score < settings.coverage_low:
         return "insufficient"
@@ -565,6 +576,7 @@ def assemble_context(
         use_rerank=req.use_rerank,
         documents=documents,
     )
+    reranked = _drop_copies(reranked, {k: c.text for k, c in chunk_by_key.items()})
     rerank_by_key = {key: score for key, _, score in reranked}
 
     candidates = [
@@ -629,11 +641,33 @@ def assemble_context(
     max_rerank = max(rerank_scores) if rerank_scores else None
     result.coverage = _coverage(max_rerank, settings)
     chosen = {(c.document_id, c.ord) for c in selected}
-    result.budget_limited = any(
-        key not in chosen and score is not None and score >= settings.coverage_low
-        for key, score in rerank_by_key.items()
-    )
+    if not settings.reranker_base_url:
+        result.budget_limited = any(
+            key not in chosen and score is not None and score >= settings.coverage_low
+            for key, score in rerank_by_key.items()
+        )
+    elif not req.compact:
+        # Uncalibrated scores: no threshold; any unchosen candidate counts. In
+        # compact mode, compact_result decides from the text it dropped.
+        result.budget_limited = any(key not in chosen for key in rerank_by_key)
     return result
+
+
+def _drop_copies[T](
+    ranked: list[tuple[Key, float, T]], text_by_key: dict[Key, str]
+) -> list[tuple[Key, float, T]]:
+    """Drop later entries whose text equals an earlier one (whitespace-normalized).
+
+    ``ranked`` is best first, so the highest-ranked copy stays. Exact copies only.
+    """
+    seen: set[str] = set()
+    kept = []
+    for entry in ranked:
+        text = " ".join(text_by_key[entry[0]].split())
+        if text not in seen:
+            seen.add(text)
+            kept.append(entry)
+    return kept
 
 
 def _key(chunk: Chunk, doc_id_by_version: dict[str, str]) -> Key:

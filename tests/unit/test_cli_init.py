@@ -31,7 +31,7 @@ def test_block_is_short_and_names_the_tools() -> None:
 
 def test_appends_and_keeps_existing_text_byte_for_byte(tmp_path: Path) -> None:
     original = "# Project\n\nUse tabs.\n"
-    (tmp_path / "AGENTS.md").write_text(original, encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(original, encoding="utf-8", newline="\n")
     main(["init", "--path", str(tmp_path)])
     text = _read(tmp_path / "AGENTS.md")
     assert text.startswith(original)
@@ -41,7 +41,7 @@ def test_appends_and_keeps_existing_text_byte_for_byte(tmp_path: Path) -> None:
 def test_second_run_is_a_no_op(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (tmp_path / "AGENTS.md").write_text("intro\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("intro\n", encoding="utf-8", newline="\n")
     main(["init", "--path", str(tmp_path)])
     first = _read(tmp_path / "AGENTS.md")
     mtime = (tmp_path / "AGENTS.md").stat().st_mtime_ns
@@ -54,7 +54,7 @@ def test_second_run_is_a_no_op(
 
 def test_replaces_only_between_markers(tmp_path: Path) -> None:
     before = f"top\n{START}\nold NINA text\n{END}\nbottom\n"
-    (tmp_path / "AGENTS.md").write_text(before, encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(before, encoding="utf-8", newline="\n")
     main(["init", "--path", str(tmp_path)])
     assert _read(tmp_path / "AGENTS.md") == f"top\n{BLOCK}\nbottom\n"
 
@@ -73,7 +73,7 @@ def test_keeps_crlf_line_endings() -> None:
 def test_broken_markers_leave_the_file_untouched(tmp_path: Path, broken: str) -> None:
     with pytest.raises(MarkerError):
         apply_block(broken, BLOCK)
-    (tmp_path / "AGENTS.md").write_text(broken, encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(broken, encoding="utf-8", newline="\n")
     assert main(["init", "--path", str(tmp_path)]) == 2
     assert _read(tmp_path / "AGENTS.md") == broken
 
@@ -81,7 +81,7 @@ def test_broken_markers_leave_the_file_untouched(tmp_path: Path, broken: str) ->
 def test_dry_run_writes_nothing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (tmp_path / "CLAUDE.md").write_text("rules\n", encoding="utf-8")
+    (tmp_path / "CLAUDE.md").write_text("rules\n", encoding="utf-8", newline="\n")
     assert main(["init", "--path", str(tmp_path), "--dry-run"]) == 0
     assert not (tmp_path / "AGENTS.md").exists()
     assert _read(tmp_path / "CLAUDE.md") == "rules\n"
@@ -90,7 +90,7 @@ def test_dry_run_writes_nothing(
 
 
 def test_existing_claude_md_gets_the_import(tmp_path: Path) -> None:
-    (tmp_path / "CLAUDE.md").write_text("# Rules\n", encoding="utf-8")
+    (tmp_path / "CLAUDE.md").write_text("# Rules\n", encoding="utf-8", newline="\n")
     main(["init", "--path", str(tmp_path)])
     assert _read(tmp_path / "CLAUDE.md") == "# Rules\n\n" + CLAUDE_BLOCK + "\n"
     main(["init", "--path", str(tmp_path)])  # idempotent
@@ -98,13 +98,13 @@ def test_existing_claude_md_gets_the_import(tmp_path: Path) -> None:
 
 
 def test_claude_md_that_already_imports_agents_md_is_untouched(tmp_path: Path) -> None:
-    (tmp_path / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+    (tmp_path / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8", newline="\n")
     main(["init", "--path", str(tmp_path)])
     assert _read(tmp_path / "CLAUDE.md") == "@AGENTS.md\n"
 
 
 def test_claude_md_symlinked_to_agents_md_is_written_once(tmp_path: Path) -> None:
-    (tmp_path / "AGENTS.md").write_text("shared\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("shared\n", encoding="utf-8", newline="\n")
     (tmp_path / "CLAUDE.md").symlink_to("AGENTS.md")
     main(["init", "--path", str(tmp_path)])
     assert (tmp_path / "CLAUDE.md").is_symlink()  # the link survives
