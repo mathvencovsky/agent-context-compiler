@@ -1350,11 +1350,11 @@ def _looks_like_widget(el: HtmlElement, text: str) -> bool:
 def _prune_to_readability(root: HtmlElement, kept: HtmlElement) -> None:
     """Drop from the cleaned original ``root`` what readability dropped, in place.
 
-    The original order and structure stay (so no ``<pre>``/``<table>`` is lost),
-    but a paragraph, heading or other leaf whose text is not in readability's
-    output goes, and so does a list that is link-dense. ``pre`` and ``table`` are
-    always kept. A heading stays only if kept content follows it before the next
-    heading of the same or a higher level.
+    The original order and structure stay (so no ``<pre>``/``<table>`` is lost).
+    A leaf or list goes only if readability dropped its text and it is link-dense;
+    lists on a page with code or right under a heading stay. ``pre`` and ``table``
+    are always kept. A heading goes only if pruning emptied its section. Nothing
+    is pruned if that would remove over half of the text.
     """
     kept_text = normalize_text(kept.text_content() or "")
     leaves: list[tuple[HtmlElement, bool]] = []  # (element, still in the tree)

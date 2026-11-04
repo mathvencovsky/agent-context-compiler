@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: fase 2, poda do plano B da extração
+Contexto: o plano B do readability dispara em cerca de 2 de cada 3 páginas e entregava o contêiner inteiro, com menus e widgets. A regra foi escrita antes de qualquer correção, em `bench/extract_eval/wcxb_types.py`: `without` cai em ao menos 4 dos 6 tipos fora de documentação e não sobe mais de 1 ponto em nenhum; F1 cai no máximo 1 ponto por tipo e sobe no total; em documentação, recall cai no máximo 0,5 ponto, código e tabelas no máximo 1 ponto.
+Decisão: podar o contêiner (SPEC, "Extração HTML"), em vez de trocar de extrator. Dados: WCXB commit c039d5ee. Ajuste em dev (1497 páginas); teste (511) aberto uma vez, depois do ajuste, e passou em todas as linhas. Teste: F1 0,800 para 0,804; `without` 14,0% para 11,3%; caiu em 5 dos 6 tipos (fórum não mudou); pior variação de F1 por tipo -0,002 (service). Dev: F1 0,775 para 0,781; `without` 14,2% para 11,0%. ESC restante (`[2J`) resolvido removendo ANSI antes do parsing.
+Alternativas: regra de rótulo curto ("Add to cart"), rejeitada porque removia "Tip", "Caution" e "Python 3.10+"; soltar toda lista densa em links, rejeitada por derrubar o recall de documentação; trafilatura no produto continua decisão do humano, pela licença da dependência `tld`.
+Consequências: o ganho é pequeno. No teste, o trafilatura segue melhor em F1 em todos os 7 tipos (total 0,863 contra 0,804; fórum 0,739 contra 0,502; em documentação 0,933 contra 0,926) e em `without` em todos menos coleção, onde o NINA ganha, e listagem, empate (total 7,3% contra 11,3%). O plano B segue disparando em 66% das páginas. Efeito no custo não medido. A saída padrão muda: entra na emenda de recongelamento do M10.
+
 ## 2026-11-04: fase 2, frases escolhidas pelo reranker local
 Contexto: o `compact` escolhia frases por coincidência de palavras e perdia respostas. A regra foi escrita antes de medir, em `bench/compact_rerank_eval.py`.
 Decisão: com reranker local, `compact` usa a nota dele por frase, sem piso. Medição na metade A, 99 de 138 tarefas (`bench/results/m10a/compact_rerank_A.md`): `answer_hit` 0,636 contra 0,576 em 1000 tokens e 0,556 contra 0,465 em 500; mediana de 3,6 s por chamada. Aceito pela regra (a).
