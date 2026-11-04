@@ -1,0 +1,170 @@
+# Harness para tarefas delegadas
+
+Objetivo: uma tarefa entregue ao agente deixa três coisas.
+
+- um resultado que você abre;
+- evidência que você inspeciona;
+- progresso salvo para continuar amanhã.
+
+Este guia adapta ao NINA a proposta "Make Opus 5.5 Finish Long Tasks: A Reusable Harness Engineering Setup" (beamnxw, 6 out 2026). A proposta usa como exemplo um fluxo de artigos. Aqui o trabalho é código, benchmark e análise.
+
+O método de trabalho dos agentes vem de "Critical thinking when agents do the work" (Addy Osmani, 3 nov 2026). Os agentes fazem o trabalho e a responsabilidade continua sendo do humano.
+
+## As sete camadas no repositório
+
+| Camada | Onde está |
+|---|---|
+| 1. Fatos estáveis | `CLAUDE.md`, seção "Tarefas delegadas e longas" |
+| 2. Procedimento | skill `/delegate-task` (`.claude/skills/delegate-task/SKILL.md`) |
+| 3. Fontes externas (MCP) | nenhum conector no projeto; ver abaixo |
+| 4. Regras de ação | `.claude/settings.json` (permissões e hook) e `.claude/hooks/paid_calls_guard.py` |
+| 5. Revisor com evidência | `.claude/agents/nina-critic.md` (tabela de evidência, esforço `high`) |
+| 6. Esforço | sessão principal em `medium`; o crítico em `high` pelo frontmatter |
+| 7. O que a execução prova | `/goal`, modelo abaixo; o aceite de cada tarefa fica em `task.md` |
+
+Os dois agentes têm papéis separados:
+
+- **`nina-worker`** faz o trabalho e registra hipótese, aceite, decisões e evidência.
+- **`nina-critic`** revisa em contexto novo, só lendo.
+
+O padrão técnico e de segurança continua no `nina-engineer.md`, que os dois leem.
+
+## Antes da primeira execução
+
+Comece na raiz do repositório:
+
+```
+claude --effort medium
+```
+
+Escolha o modelo com `--model` se quiser. Confira o modelo e o esforço no cabeçalho da sessão.
+
+Depois confira o que foi carregado:
+
+- `/context`: o `CLAUDE.md` está carregado e nada grande ocupa o contexto à toa.
+- `/agents`: `nina-worker`, `nina-critic` e `nina-engineer` aparecem.
+- `/permissions`: as regras de `.claude/settings.json` estão ativas. Configurações gerenciadas ou locais podem mudar o resultado efetivo.
+- `/hooks`: o hook `PreToolUse` do Bash aparece.
+
+Se faltar a skill, confira o caminho e o frontmatter. Se faltar um agente, confira o `name` e a `description`.
+
+## Rodar uma tarefa
+
+1. Escreva o pedido com suas palavras: para quem é, o que fica fora, como saber que terminou. Se não conseguir escrever, a ideia ainda não está clara.
+2. Formule sua hipótese antes de rodar, nem que seja um palpite ruim.
+3. Rode com um objetivo. Por exemplo:
+
+```
+/goal Use /delegate-task para <tarefa>. Conclusão exige que .agents/tasks/<slug>/task.md, checks.md, review.md e progress.md existam; que achados confirmados estejam corrigidos ou marcados como não resolvidos em checks.md; que make check tenha rodado com o resultado mostrado; e que os caminhos dos arquivos e os resultados da verificação apareçam na conversa. Pare após 12 turnos se a condição não for atendida e relate o bloqueio.
+```
+
+Sobre o `/goal`:
+
+- O limite de turnos é avaliado pelo modelo. Limite rígido de tempo ou gasto exige controle de execução.
+- `/goal clear` encerra o objetivo.
+
+Sem `/goal`, basta `/delegate-task <tarefa>`.
+
+## Ao terminar
+
+Leia na ordem abaixo. A evidência vem antes do resumo.
+
+1. **Os comandos e as saídas**, antes do resumo.
+2. **`checks.md`**: escolha duas linhas e confira contra o arquivo ou o comando.
+3. **`review.md`**: veja o que o crítico achou e o que ficou não resolvido.
+4. **`progress.md`**: confira se bate com `git log` e `git status`.
+5. **O quiz**: só faça o merge se acertar todas as perguntas.
+6. **Anote uma coisa que nenhum check cobriu.**
+
+## Retomar em outra sessão
+
+Na mesma pasta de trabalho, cole:
+
+```
+/delegate-task <slug>
+```
+
+Ou, sem a skill:
+
+```
+Leia .agents/tasks/<slug>/progress.md e inspecione os arquivos e commits que ele cita.
+Continue da próxima ação registrada e atualize a nota de progresso.
+```
+
+A sessão deve reconhecer o trabalho salvo e continuar dali. Se recomeçar do zero, falta algo na nota: acrescente a decisão ou o caminho que faltou.
+
+O `.agents/` fica fora do git. Em sessão na nuvem ele some com o contêiner, por isso o relatório final traz o `progress.md` inteiro. Para retomar ali, recrie a pasta a partir desse texto.
+
+## Regras de ação (camada 4)
+
+**Negado.** Nem a sua aprovação libera, porque `deny` vence `ask` e `allow`:
+
+- ler e editar `.env`;
+- editar `bench/results/**`, onde os resultados medidos só podem mudar pelos scripts que os geram.
+
+**Pede aprovação a cada edição:**
+
+- `bench/PREREG.md`;
+- `CLAUDE.md`;
+- `.claude/settings.json`;
+- `.claude/agents/**`, `.claude/skills/**` e `.claude/hooks/**`.
+
+**Hook `PreToolUse` no Bash.** Pede aprovação quando um comando liga `ALLOW_PAID_CALLS`, seja na linha de comando, com `export` ou editando o `.env` com `sed`. A trava principal continua no código (`ALLOW_PAID_CALLS`, padrão `false`). O hook é uma segunda camada.
+
+Teste sem risco: crie um arquivo qualquer em `bench/results/` e peça ao Claude para editá-lo com a ferramenta de edição. A ação deve ser negada. Apague o arquivo depois.
+
+Limites conhecidos:
+
+- **Scripts escapam das regras de arquivo.** Elas valem para as ferramentas do Claude e para os comandos de arquivo que ele reconhece no Bash (`cat`, `sed`, `tee`, redirecionamentos). Um script Python ou Node que abre arquivos por conta própria não passa por elas. Para isso existe o sandbox do sistema operacional.
+- **O hook não vê tudo.** Ele não enxerga um valor ligado de outro jeito, como um script que edita o `.env` ou uma variável já exportada no shell.
+- **Falha do hook não bloqueia.** Se o hook falhar (por exemplo, sem `uv` no PATH), o comando segue, e a trava do código continua valendo.
+- **Worktrees ficam de fora.** Os padrões são ancorados na raiz do projeto, então não cobrem cópias em `.claude/worktrees/`.
+- **Só o `.env` é protegido.** Variantes `.env.*` ficam de fora, para que o `.env.example` continue legível.
+
+**Escrita externa.** Antes de aprovar, identifique o destino e o conteúdo exato. Se o conteúdo mudar, revise de novo. Depois de um timeout, inspecione o destino antes de repetir, porque a primeira tentativa pode ter funcionado.
+
+## Fontes externas (camada 3)
+
+Nenhum conector MCP está configurado no projeto, porque as fontes das tarefas do NINA são arquivos locais: SPEC, código, DECISIONS e resultados do benchmark. O NINA como ferramenta de leitura de páginas fica no escopo do usuário, não do projeto.
+
+Adicione um conector só quando um passo da tarefa precisar dele. Antes de depender dele numa tarefa longa:
+
+- busque uma página conhecida e confira o conteúdo;
+- diga à skill qual trecho usar e que ações o conector pode fazer;
+- desligue em `/mcp` os servidores sem papel na tarefa.
+
+## Recuperação
+
+- `/rewind` restaura edições de arquivos rastreadas.
+- Mudanças feitas pelo shell e a maioria das edições de subagentes não voltam pelo `/rewind`: use o git.
+- Commits pequenos por etapa (`CLAUDE.md`, regra 5) são o histórico durável.
+
+## Medir em trabalho aceito
+
+Por tarefa, registre:
+
+- `/usage`, incluindo a revisão delegada e as retentativas;
+- `/context` para ver o que ocupa o contexto;
+- seu tempo de revisão;
+- as correções que o resultado precisou.
+
+Um resultado que precisou de muito conserto muda o valor da execução inteira.
+
+Para testar uma mudança de configuração:
+
+- mantenha a mesma tarefa e o mesmo aceite;
+- mude um componente por vez;
+- compare o resultado salvo e a evidência.
+
+Ganhos anunciados por terceiros valem para os experimentos deles. A economia deste harness só se mede em tarefas concluídas aqui.
+
+## Quando algo dá errado de novo
+
+Se uma correção se repete (um check esquecido, um achado que volta), registre o motivo onde ele vale da próxima vez:
+
+- um teste;
+- uma regra de lint;
+- um passo novo na skill;
+- uma linha no `CLAUDE.md`.
+
+Mudanças nos arquivos de agente, na skill, nos hooks e no `CLAUDE.md` passam pelo humano.

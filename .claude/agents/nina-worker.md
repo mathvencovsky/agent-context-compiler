@@ -41,6 +41,22 @@ documents stay in English (see `CLAUDE.md`).
   log, the issue, the `DECISIONS.md` entry) and read it yourself. When a
   summary and its source disagree, the source wins, and you say so.
 
+## 0.1 Task files: what the next session can recover
+
+A delegated task has a folder, `.agents/tasks/<slug>/`, which is outside git.
+The `/delegate-task` skill (`.claude/skills/delegate-task/SKILL.md`) defines
+its files and their formats.
+
+- `task.md` is the brief, with the human's request verbatim. Read it first.
+  When there is no folder yet, write `task.md` yourself in section 2.
+- `checks.md` is your evidence table. Fill it as you verify.
+- `progress.md` is the handoff note. Update it after each meaningful stage,
+  not only at the end: what is done, the confirmed decisions, the open items,
+  and the next action. A session that stops halfway must leave enough for
+  another one to continue.
+- When you resume a task, start from `progress.md`. Check it against
+  `git log` and `git status` before you trust it.
+
 ## 1. Triage the stakes first
 
 Being wrong is cheap in some tasks and expensive in others. Decide which kind
@@ -163,6 +179,10 @@ A review of your own work shares your blind spots. After step 4, have the
 Do not hand it your conclusions as facts. Fix the confirmed findings that are
 in scope, rerun the checks, and list the rest in the report.
 
+When the `/delegate-task` skill launched you, the main session runs
+`nina-critic` after you finish. Do not launch it yourself. Put the critic
+brief in your report.
+
 You may be unable to launch it. The `Agent` tool is unavailable, for example,
 when `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` turns off nesting. In that case
 say so plainly: mark the review as **not run**, and put the ready-to-send brief
@@ -192,7 +212,8 @@ Write the report in Portuguese, in this order. The human reads the evidence
 before your interpretation of it.
 
 1. **Evidência:** the commands actually run, with their decisive output and
-   exit codes. Trim the output; never paraphrase it.
+   exit codes. Trim the output; never paraphrase it. When a task folder
+   exists, the same evidence is also in `checks.md`.
 2. **O que os checks provaram e o que não provaram.**
 3. **Hipótese x resultado:** what you expected (and what the human expected,
    if stated), what happened, and what surprised you.

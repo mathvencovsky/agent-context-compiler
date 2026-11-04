@@ -30,6 +30,26 @@ A tese do produto só vale se o benchmark provar vantagem sobre extratores exist
 7. Ao terminar um marco, atualize `PROGRESS.md` com: o que foi feito, o que ficou pendente, dívidas técnicas e como testar manualmente.
 8. Quando algo depender do humano (chave de API, escolha de site, validação de tarefa do benchmark), pare e diga exatamente o que precisa.
 
+## Tarefas delegadas e longas
+
+Use a skill `/delegate-task` para tarefas delegadas. O `nina-worker` faz o trabalho e o `nina-critic` revisa em contexto novo. Guia em `docs/HARNESS.md`.
+
+Cada tarefa tem a pasta `.agents/tasks/<slug>/`, fora do git, com quatro arquivos:
+
+- `task.md`: o pedido verbatim e o aceite checável;
+- `checks.md`: a tabela de evidência;
+- `review.md`: a revisão do crítico;
+- `progress.md`: a passagem de bastão para a próxima sessão.
+
+Regras:
+
+- Atualize o `progress.md` da tarefa a cada etapa concluída, com as decisões confirmadas e a próxima ação.
+- O `PROGRESS.md` da raiz continua sendo o registro do projeto, atualizado ao fim de cada marco.
+- Afirmação técnica sobre algo externo (API, biblioteca, concorrente) cita fonte primária, com a URL e a data em que foi lida.
+- Ao terminar, devolva os caminhos das saídas e os resultados da verificação.
+- Em sessão na nuvem, `.agents/` se perde com o contêiner. Por isso o relatório final traz o `progress.md` inteiro.
+- Uma preferência descoberta numa tarefa só vira regra aqui depois que o humano confirmar.
+
 ## Stack (fixa, salvo decisão registrada em DECISIONS.md)
 
 Python 3.12, uv, FastAPI, Pydantic v2, SQLAlchemy 2 + Alembic, Postgres 16 + pgvector, httpx, lxml, readability-lxml, extruct, trafilatura (somente em baselines), Playwright com Chromium, pdfplumber, tiktoken, SeaweedFS como S3 local (boto3; AWS S3 em produção — ver DECISIONS.md 2026-10-11), pytest, syrupy (snapshots), ruff, mypy (strict em `app/`), structlog, Docker Compose, SDK oficial de MCP para Python.
