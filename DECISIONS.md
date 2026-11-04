@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: modo web em 560 tokens, por decisão do humano contra a regra
+Contexto: o limite 560 não passou na regra da entrada abaixo, que pedia `NINA VENCE` contra `c7_fetch`.
+Decisão (humano, 2026-11-04): adotar 560 como exceção, sabendo que a regra não passou. `WEB_MAX_TOKENS` vale 560.
+Alternativas: manter 1000, que entrega mais respostas pelo `soft_hit` (0,725 contra 0,613 nas 80 tarefas) e gasta 960 tokens em vez de 535.
+Consequências: a regra não foi alterada e o resultado continua `SEM VANTAGEM` contra `c7_fetch`. O agente pode ler mais chamando de novo com `exclude_chunk_ids`, o que custa outra chamada. Só o modo web muda; os padrões do modo de documentação, congelados para o M10, não mudam.
+
 ## 2026-11-04: limite 560 não passou na regra; forma enxuta fica
 Contexto: regra na entrada abaixo, 71 discordâncias lidas às cegas.
 Decisão: o modo web continua em 1000 tokens, porque a condição 1 falhou. Nas 80 tarefas, contra `c7_fetch`: acerto 0,487 contra 0,425, `d` +0,062, CI [-0,013; +0,150], 535 tokens contra 509 (1,05x), `SEM VANTAGEM`, não `NINA VENCE`. A condição 2 passou nas 30 tarefas novas: 0,533 contra 0,533, 530 tokens contra 605 (0,88x). Contra `c7_docs`, nas 80: 0,375 contra 0,287, CI [-0,013; +0,188], 535 contra 821 (0,65x), `NINA VENCE`.

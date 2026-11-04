@@ -428,7 +428,7 @@ async def test_web_scope_first_pass_is_small_and_relevant() -> None:
     result = await build_server(client=client, web=True).call_tool(
         "assemble_context", {"query": "q", "urls": ["https://x.org/a"]}
     )
-    assert (sent[0]["max_tokens"], sent[0]["compact"]) == (1000, True)
+    assert (sent[0]["max_tokens"], sent[0]["compact"]) == (560, True)
     text = result.content[0].text  # type: ignore[union-attr]
     assert "Option: max_tokens=9." in text  # page text stays literal
     assert "Option: call again with exclude_chunk_ids." in text
