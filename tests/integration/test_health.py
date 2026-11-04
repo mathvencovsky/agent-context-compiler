@@ -17,4 +17,9 @@ def test_health_ok_with_services_up() -> None:
     client = TestClient(create_app())
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "db": "ok", "blobs": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "db": "ok",
+        "blobs": "ok",
+        "version": "dev",
+    }

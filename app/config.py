@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # DECISIONS.md 2026-10-17).
     providers: Literal["real", "fake"] = "real"
 
+    # What GET /health reports; scripts/nina-local.ps1 sets it to the git commit.
+    nina_version: str = "dev"
+
     # Postgres (discrete fields; database_url is computed below).
     postgres_host: str = "localhost"
     postgres_port: int = 5432
