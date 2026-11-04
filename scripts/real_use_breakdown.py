@@ -74,7 +74,8 @@ def main() -> None:
         print(f"log(com/sem): media {mean:+.3f}, desvio {spread:.3f}")
     spread = statistics.stdev(all_logs)
     print(
-        f"\nDesvio nas 3 rodadas: {spread:.3f}; pares para ver 20%: {pairs_needed(spread)}"
+        f"\nDesvio nas 3 rodadas: {spread:.3f}; "
+        f"pares para ver 20%: {pairs_needed(spread)}"
     )
 
 
