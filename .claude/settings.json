@@ -2,10 +2,14 @@
   "permissions": {
     "deny": [
       "Read(.env)",
+      "Read(.env.*)",
+      "Read(!.env.example)",
       "Edit(.env)",
-      "Edit(/bench/results/**)"
+      "Edit(.env.*)",
+      "Edit(!.env.example)"
     ],
     "ask": [
+      "Edit(/bench/results/**)",
       "Edit(/bench/PREREG.md)",
       "Edit(/CLAUDE.md)",
       "Edit(/.claude/settings.json)",
@@ -17,11 +21,18 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-project --quiet python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/paid_calls_guard.py\"",
+            "command": "uv",
+            "args": [
+              "run",
+              "--no-project",
+              "--quiet",
+              "python",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/paid_calls_guard.py"
+            ],
             "timeout": 30
           }
         ]

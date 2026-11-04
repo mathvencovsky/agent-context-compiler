@@ -1,13 +1,15 @@
-"""PreToolUse hook: ask the human before a Bash command turns paid calls on.
+"""PreToolUse hook: ask the human before a shell command turns paid calls on.
 
 The code-level lock is ``ALLOW_PAID_CALLS`` (default false; DECISIONS
-2026-11-04). This hook is a second layer at the tool boundary: when a Bash
-command sets that variable to a true value (inline, by ``export``, or by
-editing ``.env`` with sed), Claude Code asks the human before running it.
+2026-11-04). This hook is a second layer at the tool boundary: when a Bash or
+PowerShell command sets that variable to a true value (inline, by ``export``
+or ``$env:``, or by editing ``.env`` with sed), Claude Code asks the human
+before running it. On Windows the PowerShell tool is on by default, so both
+tools are covered.
 
 It cannot see a value set some other way (a script that opens ``.env`` itself,
-a variable already exported in the shell). Any parsing failure makes no
-decision: the code-level lock still holds.
+a variable already exported in the shell, an ``--env-file``). Any parsing
+failure makes no decision: the code-level lock still holds.
 """
 
 from __future__ import annotations
@@ -15,6 +17,8 @@ from __future__ import annotations
 import json
 import re
 import sys
+
+SHELL_TOOLS = frozenset({"Bash", "PowerShell"})
 
 # The values pydantic-settings reads as true, case-insensitively.
 _TURNS_ON = re.compile(
@@ -24,14 +28,14 @@ _TURNS_ON = re.compile(
 
 REASON = (
     "This command turns ALLOW_PAID_CALLS on, so it can spend money on paid "
-    "APIs. Paid runs need the human's approval and a stated expected cost "
-    "(CLAUDE.md, DECISIONS 2026-11-04)."
+    "APIs. Paid runs need the human's approval (DECISIONS 2026-11-04) and a "
+    "stated expected cost (.claude/agents/nina-engineer.md, section 4)."
 )
 
 
 def decide(event: dict[str, object]) -> dict[str, object] | None:
     """Return the hook output for one PreToolUse event, or None for no decision."""
-    if event.get("tool_name") != "Bash":
+    if event.get("tool_name") not in SHELL_TOOLS:
         return None
     tool_input = event.get("tool_input")
     if not isinstance(tool_input, dict):
