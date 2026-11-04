@@ -20,13 +20,24 @@ If the task names an existing `.agents/tasks/<slug>/`, resume it:
    the note (`git log`, `git status`). Report any mismatch before going on.
 3. Continue from its **Próxima ação**.
 
+The folder may be missing while the human pasted a previous report holding
+`task.md`, `checks.md` and `progress.md`. A cloud container loses
+`.agents/`, so this is the normal way to resume there. In that case:
+
+1. Recreate the folder from the pasted text.
+2. Check the commits it names exist (`git fetch` the branch if needed).
+3. Resume as above.
+
+Never start over silently. If neither the folder nor pasted files exist for a
+named slug, say so and ask the human for the last report.
+
 Otherwise, choose a short slug for the task and create the folder.
 
 ## 1. Brief: `task.md`
 
-Write `.agents/tasks/<slug>/task.md` with the template below, and copy the
-human's request into it verbatim. Every later step reads this file, not a
-summary of it.
+Write `.agents/tasks/<slug>/task.md` with the template below. Copy the human's
+request into it verbatim: the exact words and any pasted document, not a
+summary. Every later step reads this file, not a summary of it.
 
 The **Aceite** field must be checkable: a command and its expected output, a
 test that goes from red to green, a file that must exist. If you cannot write
@@ -63,7 +74,7 @@ Launch `nina-critic` and give it:
 
 - the request, verbatim;
 - `task.md`;
-- the worker's decision log;
+- the worker's hypothesis, its definition of "verified" and its decision log;
 - the commit range;
 - the verification commands.
 
@@ -77,6 +88,9 @@ Send the confirmed findings back to the same `nina-worker` with
 the checks and updates `checks.md`. A fix that changes behavior goes back to
 `nina-critic` for that part only. Any finding left unresolved stays visibly
 marked in `checks.md`, with what is missing to resolve it.
+
+Check every finding against its evidence before acting on it. A confident
+review still needs usable evidence, and the critic can be wrong.
 
 ## 5. Check the outcome, not the transcript
 
@@ -97,8 +111,10 @@ Reply to the human with:
 4. the open findings and the decisions that wait for the human;
 5. the worker's quiz.
 
-The `.agents/` folder is not in git. In a cloud session the container is
-discarded, so also paste the full `progress.md` in the reply.
+In a cloud session the container, and `.agents/` with it, is discarded. In
+that case also paste `task.md`, `checks.md` and `progress.md` in full, so the
+next session can recreate the folder (step 0). `review.md` is covered by
+item 4.
 
 ## File formats
 

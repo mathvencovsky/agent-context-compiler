@@ -6,9 +6,9 @@ Objetivo: uma tarefa entregue ao agente deixa três coisas.
 - evidência que você inspeciona;
 - progresso salvo para continuar amanhã.
 
-Este guia adapta ao NINA a proposta "Make Opus 5.5 Finish Long Tasks: A Reusable Harness Engineering Setup" (beamnxw, 6 out 2026). A proposta usa como exemplo um fluxo de artigos. Aqui o trabalho é código, benchmark e análise.
+Este guia adapta ao NINA a proposta "Make Opus 5.5 Finish Long Tasks: A Reusable Harness Engineering Setup" (beamnxw, 6 out). A proposta usa como exemplo um fluxo de artigos. Aqui o trabalho é código, benchmark e análise.
 
-O método de trabalho dos agentes vem de "Critical thinking when agents do the work" (Addy Osmani, 3 nov 2026). Os agentes fazem o trabalho e a responsabilidade continua sendo do humano.
+O método de trabalho dos agentes vem de "Critical thinking when agents do the work" (Addy Osmani, 3 nov). Os agentes fazem o trabalho e a responsabilidade continua sendo do humano.
 
 ## As sete camadas no repositório
 
@@ -44,7 +44,7 @@ Depois confira o que foi carregado:
 - `/context`: o `CLAUDE.md` está carregado e nada grande ocupa o contexto à toa.
 - `/agents`: `nina-worker`, `nina-critic` e `nina-engineer` aparecem.
 - `/permissions`: as regras de `.claude/settings.json` estão ativas. Configurações gerenciadas ou locais podem mudar o resultado efetivo.
-- `/hooks`: o hook `PreToolUse` do Bash aparece.
+- `/hooks`: o hook `PreToolUse` de `Bash|PowerShell` aparece.
 
 Se faltar a skill, confira o caminho e o frontmatter. Se faltar um agente, confira o `name` e a `description`.
 
@@ -62,6 +62,7 @@ Sobre o `/goal`:
 
 - O limite de turnos é avaliado pelo modelo. Limite rígido de tempo ou gasto exige controle de execução.
 - `/goal clear` encerra o objetivo.
+- O comando existe no Claude Code 2.1.318, mas a habilitação depende da conta. Se `/goal` não aparecer, use só a skill.
 
 Sem `/goal`, basta `/delegate-task <tarefa>`.
 
@@ -93,39 +94,44 @@ Continue da próxima ação registrada e atualize a nota de progresso.
 
 A sessão deve reconhecer o trabalho salvo e continuar dali. Se recomeçar do zero, falta algo na nota: acrescente a decisão ou o caminho que faltou.
 
-O `.agents/` fica fora do git. Em sessão na nuvem ele some com o contêiner, por isso o relatório final traz o `progress.md` inteiro. Para retomar ali, recrie a pasta a partir desse texto.
+O `.agents/` fica fora do git. Em sessão na nuvem ele some com o contêiner, por isso o relatório final traz `task.md`, `checks.md` e `progress.md` inteiros. Para retomar numa sessão nova, cole esse relatório junto com `/delegate-task <slug>`: a skill recria a pasta a partir do texto e confere os commits citados.
 
 ## Regras de ação (camada 4)
 
 **Negado.** Nem a sua aprovação libera, porque `deny` vence `ask` e `allow`:
 
-- ler e editar `.env`;
-- editar `bench/results/**`, onde os resultados medidos só podem mudar pelos scripts que os geram.
+- ler e editar `.env` e `.env.*`, em qualquer profundidade;
+- a exceção é `.env.example`, reaberto com `!.env.example` (negação no estilo gitignore).
 
 **Pede aprovação a cada edição:**
 
+- `bench/results/**`. Os resultados medidos vêm de scripts, mas o `bench/results/m10a/changes.md` é um registro mantido à mão. Por isso a regra pede aprovação em vez de negar.
 - `bench/PREREG.md`;
 - `CLAUDE.md`;
 - `.claude/settings.json`;
 - `.claude/agents/**`, `.claude/skills/**` e `.claude/hooks/**`.
 
-**Hook `PreToolUse` no Bash.** Pede aprovação quando um comando liga `ALLOW_PAID_CALLS`, seja na linha de comando, com `export` ou editando o `.env` com `sed`. A trava principal continua no código (`ALLOW_PAID_CALLS`, padrão `false`). O hook é uma segunda camada.
+**Hook `PreToolUse` em `Bash|PowerShell`.** Pede aprovação quando um comando liga `ALLOW_PAID_CALLS`: na linha de comando, com `export` ou `$env:`, ou editando o `.env` com `sed`. A ferramenta PowerShell entra porque vem ligada por padrão no Windows com Git Bash. O hook roda na forma com `args`, sem shell, como a documentação recomenda para comandos com `${CLAUDE_PROJECT_DIR}`. A trava principal continua no código (`ALLOW_PAID_CALLS`, padrão `false`). O hook é uma segunda camada.
 
-Teste sem risco: crie um arquivo qualquer em `bench/results/` e peça ao Claude para editá-lo com a ferramenta de edição. A ação deve ser negada. Apague o arquivo depois.
+Os testes em `tests/unit/test_claude_hooks.py` conferem o script e também a ligação em `settings.json`. O matcher precisa cobrir as duas ferramentas, e o comando configurado precisa rodar o script e devolver `ask`.
+
+Testes sem risco:
+
+- crie um arquivo qualquer em `bench/results/` e peça ao Claude para editá-lo: deve aparecer um pedido de aprovação; recuse e apague o arquivo;
+- peça para ler `.env.production` (pode não existir): deve ser negado; `.env.example` deve abrir normalmente.
 
 Limites conhecidos:
 
 - **Scripts escapam das regras de arquivo.** Elas valem para as ferramentas do Claude e para os comandos de arquivo que ele reconhece no Bash (`cat`, `sed`, `tee`, redirecionamentos). Um script Python ou Node que abre arquivos por conta própria não passa por elas. Para isso existe o sandbox do sistema operacional.
-- **O hook não vê tudo.** Ele não enxerga um valor ligado de outro jeito, como um script que edita o `.env` ou uma variável já exportada no shell.
-- **Falha do hook não bloqueia.** Se o hook falhar (por exemplo, sem `uv` no PATH), o comando segue, e a trava do código continua valendo.
-- **Worktrees ficam de fora.** Os padrões são ancorados na raiz do projeto, então não cobrem cópias em `.claude/worktrees/`.
-- **Só o `.env` é protegido.** Variantes `.env.*` ficam de fora, para que o `.env.example` continue legível.
+- **O hook não vê tudo.** Ele não enxerga um valor ligado de outro jeito: um script que edita o `.env`, uma variável já exportada no shell ou `uv run --env-file`.
+- **Falha do hook não bloqueia.** Se o hook falhar (por exemplo, sem `uv` no PATH), o comando segue, e a trava do código continua valendo. O teste da ligação falha nesse mesmo caso, o que serve de aviso.
+- **Âncoras e worktrees.** Regras com `/` se ancoram no diretório de trabalho principal da sessão. Elas protegem o checkout principal, não as cópias em `.claude/worktrees/` quando a sessão roda na raiz. As regras sem barra (`.env`, `.env.*`) casam em qualquer profundidade abaixo do diretório atual, então cobrem os worktrees. Uma sessão aberta num subdiretório não protege o `.env` da raiz.
 
 **Escrita externa.** Antes de aprovar, identifique o destino e o conteúdo exato. Se o conteúdo mudar, revise de novo. Depois de um timeout, inspecione o destino antes de repetir, porque a primeira tentativa pode ter funcionado.
 
 ## Fontes externas (camada 3)
 
-Nenhum conector MCP está configurado no projeto, porque as fontes das tarefas do NINA são arquivos locais: SPEC, código, DECISIONS e resultados do benchmark. O NINA como ferramenta de leitura de páginas fica no escopo do usuário, não do projeto.
+Nenhum conector MCP está configurado no projeto (não há `.mcp.json`), porque as fontes das tarefas do NINA são arquivos locais: SPEC, código, DECISIONS e resultados do benchmark. Se você usa o NINA como ferramenta MCP para ler páginas, essa configuração fica fora do repositório.
 
 Adicione um conector só quando um passo da tarefa precisar dele. Antes de depender dele numa tarefa longa:
 
@@ -136,7 +142,7 @@ Adicione um conector só quando um passo da tarefa precisar dele. Antes de depen
 ## Recuperação
 
 - `/rewind` restaura edições de arquivos rastreadas.
-- Mudanças feitas pelo shell e a maioria das edições de subagentes não voltam pelo `/rewind`: use o git.
+- Mudanças feitas pelo shell e a maioria das edições de subagentes não voltam pelo `/rewind`: use o git. (Os dois pontos vêm da proposta; não foram conferidos na documentação.)
 - Commits pequenos por etapa (`CLAUDE.md`, regra 5) são o histórico durável.
 
 ## Medir em trabalho aceito
