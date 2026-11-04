@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: forma enxuta do `compact` e regra do teste de tokens (antes de medir)
+Contexto: o humano pediu para pesquisar e melhorar. Nas 80 respostas, 35% dos tokens do NINA eram marcações e notas (331 de 945); o texto era 614. O Context7 usa cerca de 45 tokens de cabeçalho.
+Decisão: só com `compact` e `concise`, um `<document>` por página com `source` e `chunks`, sem `<fragment>`, sem ids, sem cobertura e com notas curtas. Depois, testar limites 500, 560, 620, 700 e 1000 nas mesmas 80 tarefas: passa com média <= 560 tokens e `soft_hit` >= 0,450. Nenhum passando encerra esta aposta, sem novo ajuste; passar só dá direito à leitura às cegas e ao teste em tarefas novas.
+Alternativas: um limite menor sem mexer nas marcações, rejeitado porque cortaria texto da página antes do que não é texto; piso de nota, já rejeitado na fase 2.
+Consequências: esta é uma leitura da regra de proveniência para decisão do humano: o texto do contexto compacto mantém URL e `chunks`, e `document_id`, `version_id` e PDFs seguem nos campos JSON e em `pages`, mas o agente do MCP não vê mais os ids. O formato padrão, congelado para o M10, não muda.
+
 ## 2026-11-04: NINA contra Context7, resultado: SEM VANTAGEM
 Contexto: regra na entrada abaixo. 80 tarefas da metade B, 65 discordâncias lidas às cegas por um leitor Haiku; só documentação pública, 64% das tarefas em docs.python.org.
 Decisão: pela regra, `SEM VANTAGEM` contra os dois braços, então não há razão mostrada para escolher o NINA em documentação pública. Contra `c7_fetch`: acerto 0,512 contra 0,463, `d` +0,050, CI [-0,013; +0,125], 945 tokens contra 509 (1,85x). Contra `c7_docs`: 0,388 contra 0,350, `d` +0,037, CI [-0,062; +0,150], 945 contra 821 (1,15x). `c7_fetch` respondeu `no_relevant_content` em 24 das 80 tarefas; nas 56 restantes, 728 tokens.

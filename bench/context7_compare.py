@@ -41,7 +41,17 @@ public documentation. Anything else means no shown reason to pick it over a free
 product already on the market. This judges answer presence and tokens on public
 documentation only, not private documents, provenance or a model's final answer.
 
+**Token sweep (written before measuring, DECISIONS.md 2026-11-04).** The first
+verdict was ``SEM VANTAGEM`` at 1.85x the tokens, and 35% of NINA's reply was tags
+and notes. After the leaner compact form, :data:`BUDGETS` run on these same 80
+tasks with Context7's stored replies (no Context7 call). A budget passes if NINA's
+mean tokens are at most :data:`MAX_TOKENS_SEEN` (110% of ``c7_fetch``'s 509) and its
+soft hit is not below ``c7_fetch``'s 0.450; the highest soft hit wins, then fewest
+tokens. None passing kills this bet, with no retuning. These tasks were already
+seen, so a pass only earns the blind review and a check on new tasks.
+
     uv run python -m bench.context7_compare run
+    uv run python -m bench.context7_compare sweep
     uv run python -m bench.context7_compare sheet
     uv run python -m bench.context7_compare verdict
 """
@@ -71,6 +81,9 @@ SAMPLE = 80
 SOFT_SHARE = 0.8
 WINDOW_LINES = 3
 ARMS = ("nina", "c7_fetch", "c7_docs")
+BUDGETS = (500, 560, 620, 700, 1000)
+MAX_TOKENS_SEEN = 560
+MIN_HIT_SEEN = 0.45
 RIVALS = ("c7_fetch", "c7_docs")
 #: The first result of Context7's library search per site, taken before measuring.
 LIBRARIES = {
@@ -187,13 +200,15 @@ def _context7(path: str, **params: str) -> dict[str, Any]:  # pragma: no cover -
     }
 
 
-def _nina(api: Any, question: str, url: str) -> dict[str, Any]:  # pragma: no cover
+def _nina(
+    api: Any, question: str, url: str, max_tokens: int = 1000
+) -> dict[str, Any]:  # pragma: no cover
     started = time.perf_counter()
     try:
         body = api.assemble(
             query=question,
             urls=[url],
-            max_tokens=1000,
+            max_tokens=max_tokens,
             response_format="concise",
             compact=True,
         )
@@ -243,6 +258,49 @@ def run() -> None:  # pragma: no cover - network and local API
         path.write_text(json.dumps(replies, ensure_ascii=False), encoding="utf-8")
         left = replies["c7_fetch"].get("left")
         print(f"{done + 1}/{len(keys)} {host} quota left {left}", flush=True)
+
+
+def sweep_passes(tokens: float, hit: float) -> bool:
+    """The sweep rule of the module docstring."""
+    return tokens <= MAX_TOKENS_SEEN and hit >= MIN_HIT_SEEN
+
+
+def sweep() -> None:  # pragma: no cover - local API and data
+    from app.index.tokens import count_tokens
+    from app.mcp_server.client import NinaApiClient
+
+    api = NinaApiClient(base_url="http://127.0.0.1:8000", api_key="nina_local_dev")
+    api.set_caller("teste-context7")
+    rows = _rows()
+    keys = {k["task_id"]: k for k in _keys()}
+    lines = ["| budget | soft hit | mean tokens | median s | failed | passes |"]
+    lines.append("|---|---|---|---|---|---|")
+    for budget in BUDGETS:
+        folder = _OUT / f"budget_{budget}"
+        folder.mkdir(exist_ok=True)
+        hits, tokens, seconds, failed = [], [], [], 0
+        for row in rows:
+            path = folder / f"{row['task']}.json"
+            key = keys[row["task"]]
+            if path.exists():
+                reply = json.loads(path.read_text("utf-8"))
+            else:
+                url = urldefrag(key["url"])[0]
+                reply = _nina(api, row["question"], url, budget)
+                path.write_text(json.dumps(reply, ensure_ascii=False), "utf-8")
+            hits.append(soft_hit(units(key["section"]), reply["text"]))
+            tokens.append(count_tokens(reply["text"]))
+            seconds.append(reply["seconds"])
+            failed += reply["status"] != 200
+        hit, mean = statistics.mean(hits), statistics.mean(tokens)
+        lines.append(
+            f"| {budget} | {hit:.3f} | {mean:,.0f} | "
+            f"{statistics.median(seconds):.1f} | {failed} | "
+            f"{'yes' if sweep_passes(mean, hit) else ''} |"
+        )
+        print(lines[-1], flush=True)
+    text = "\n".join(lines) + "\n"
+    (_OUT.parent / "context7_sweep.md").write_text(text, encoding="utf-8")
 
 
 def _rows() -> list[dict[str, Any]]:  # pragma: no cover - local data
@@ -341,8 +399,9 @@ def report() -> None:  # pragma: no cover - local data
 
 def main() -> None:  # pragma: no cover - dispatch
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["run", "sheet", "verdict"])
-    {"run": run, "sheet": sheet, "verdict": report}[parser.parse_args().step]()
+    parser.add_argument("step", choices=["run", "sheet", "verdict", "sweep"])
+    steps = {"run": run, "sheet": sheet, "verdict": report, "sweep": sweep}
+    steps[parser.parse_args().step]()
 
 
 if __name__ == "__main__":

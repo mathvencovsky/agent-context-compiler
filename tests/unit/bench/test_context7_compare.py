@@ -6,7 +6,14 @@ import hashlib
 
 import pytest
 
-from bench.context7_compare import adjusted, blind_sheet, sample, soft_hit, verdict
+from bench.context7_compare import (
+    adjusted,
+    blind_sheet,
+    sample,
+    soft_hit,
+    sweep_passes,
+    verdict,
+)
 
 UNIT = "you can loop over the file object for reading lines from a file"
 
@@ -50,6 +57,12 @@ def test_verdict_rule(
     d: float, lo: float, hi: float, share: float, expected: str
 ) -> None:
     assert verdict(d, lo, hi, share) == expected
+
+
+def test_sweep_rule_needs_both_tokens_and_answers() -> None:
+    assert sweep_passes(560, 0.45)
+    assert not sweep_passes(561, 0.60)
+    assert not sweep_passes(400, 0.44)
 
 
 def _row() -> dict[str, object]:
