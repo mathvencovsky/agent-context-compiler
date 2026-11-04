@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from math import ceil
 
 from sqlalchemy import select
@@ -72,6 +72,19 @@ class UsageEventRepo:
         self._session.add(event)
         self._session.flush()
         return event
+
+    def recent(self, limit: int) -> list[UsageEvent]:
+        """The newest keyless local calls, leaving out reads of the usage itself."""
+        stmt = (
+            select(UsageEvent)
+            .where(
+                UsageEvent.api_key_id.is_(None),
+                UsageEvent.endpoint != "/v1/usage",
+            )
+            .order_by(UsageEvent.ts.desc())
+            .limit(limit)
+        )
+        return list(self._session.scalars(stmt).all())
 
     def aggregate(self, api_key_id: str | None) -> list[UsageBucket]:
         """Roll a key's events (``None``: keyless local use) up by (day, endpoint).
@@ -138,6 +151,26 @@ def _unit_int(units: object, name: str) -> int:
     return 0
 
 
+def panel_row(event: UsageEvent) -> dict[str, object]:
+    """One call for the local panel; ``units`` is read defensively."""
+    units = event.units if isinstance(event.units, dict) else {}
+    hosts = units.get("hosts")
+    client = units.get("client")
+    return {
+        "ts": event.ts.replace(tzinfo=event.ts.tzinfo or UTC).isoformat(),
+        "endpoint": event.endpoint,
+        "status": event.status_code,
+        "latency_ms": event.latency_ms,
+        "output_tokens": _unit_int(units, "output_tokens"),
+        "page_tokens": _unit_int(units, "page_tokens"),
+        "failed": _unit_int(units, "failed"),
+        "hosts": [h for h in hosts if isinstance(h, str)]
+        if isinstance(hosts, list)
+        else [],
+        "client": client if isinstance(client, str) else None,
+    }
+
+
 def _percentile(values: list[int], pct: int) -> int:
     """Nearest-rank percentile of ``values`` (0 for an empty list).
 
@@ -150,4 +183,4 @@ def _percentile(values: list[int], pct: int) -> int:
     return ordered[rank - 1]
 
 
-__all__ = ["UsageBucket", "UsageEventRepo"]
+__all__ = ["UsageBucket", "UsageEventRepo", "panel_row"]

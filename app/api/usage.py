@@ -32,10 +32,12 @@ and no cross-test state leak.
 
 from __future__ import annotations
 
+import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session, sessionmaker
@@ -45,7 +47,7 @@ from app.api.auth import REQUEST_STATE_API_KEY, require_api_key
 from app.api.errors import RateLimited
 from app.api.schemas import UsageByDay, UsageByEndpoint, UsageResponse
 from app.config import Settings, get_settings
-from app.logging import logger
+from app.logging import CLIENT_HEADER, logger
 from app.store.models import ApiKey
 from app.store.repo import make_session_factory, shared_engine
 from app.usage.events import UsageBucket, UsageEventRepo
@@ -64,6 +66,8 @@ REQUEST_STATE_USAGE_UNITS = "usage_units"
 REQUEST_STATE_LIMITER = "usage_limiter"
 #: scope["state"] key telling the middleware to record a keyless (local) request.
 REQUEST_STATE_RECORD_LOCAL = "usage_record_local"
+#: What an MCP client may call itself in the record (it is not authenticated).
+_CLIENT_NAME = re.compile(r"[A-Za-z0-9._-]{1,40}")
 
 
 def records_local_usage(settings: Settings) -> bool:
@@ -171,8 +175,21 @@ def set_usage_units(request: Request, units: dict[str, object]) -> None:
     The handlers call this with ``{output_tokens, renders}`` (assemble) or
     ``{renders}`` (resolve); the :class:`UsageMiddleware` reads it back off the
     ASGI ``scope["state"]`` after the response and stores it on the event.
+    Later calls add to the earlier counters of the same request.
     """
-    setattr(request.state, REQUEST_STATE_USAGE_UNITS, units)
+    known = getattr(request.state, REQUEST_STATE_USAGE_UNITS, None) or {}
+    setattr(request.state, REQUEST_STATE_USAGE_UNITS, {**known, **units})
+
+
+def source_hosts(urls: Iterable[str]) -> list[str]:
+    """The host names of ``urls``: never a path, a query or credentials."""
+    hosts = set()
+    for url in urls:
+        try:
+            hosts.add(urlsplit(url).hostname)
+        except ValueError:
+            continue
+    return sorted(host for host in hosts if host)
 
 
 # --------------------------------------------------------------------------- #
@@ -327,6 +344,10 @@ class UsageMiddleware:
         units = state.get(REQUEST_STATE_USAGE_UNITS)
         if not isinstance(units, dict):
             units = {}
+        raw = dict(scope.get("headers") or []).get(CLIENT_HEADER.lower().encode())
+        client = raw.decode("latin-1") if raw else ""
+        if _CLIENT_NAME.fullmatch(client):
+            units = {**units, "client": client}
 
         session = self._resolve_factory()()
         try:
@@ -362,4 +383,5 @@ __all__ = [
     "require_quota",
     "router",
     "set_usage_units",
+    "source_hosts",
 ]

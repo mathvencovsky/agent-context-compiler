@@ -38,6 +38,14 @@ Windows, ele abre o Docker Desktop se preciso e sobe o NINA escondido, na branch
 ativa na pasta. O registro fica em `.nina-local\boot.log`. Para desfazer, use `autostart-off`.
 `GET /health` mostra a versão em execução (`version`, o commit).
 
+## Ver o uso no painel local
+
+Com o NINA ligado, abra <http://127.0.0.1:8000/painel>. A página se atualiza a cada 5 segundos, sem
+gastar limite nem API, e mostra cada chamada: quando, origem (chat ou Claude Code), site, tokens
+entregues, tamanho da página, tempo e erros ou recusas. Ela não mostra as leituras que o chat fez sem
+o NINA nem o custo da conversa, e a pergunta não é guardada. A origem aparece depois que o app do
+Claude reinicia; chamadas anteriores ficam como "Sem origem".
+
 ## Contar o uso real por tarefa
 
 ```powershell

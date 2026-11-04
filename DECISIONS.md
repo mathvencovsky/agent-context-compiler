@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: painel local de uso, exceção ao "painel web" fora do escopo
+Contexto: o humano pediu para ver o uso do chat atualizado sozinho. O painel no claude.ai só muda com chamadas do Claude, que gastam limite, e o chat não grava histórico neste PC.
+Decisão (humano, 2026-11-04): página em `/painel`, servida pela própria API e só local (`ENV=dev`, `RECORD_LOCAL_USAGE` e `Host` de loopback), que consulta os dados a cada 5 s. `units` ganha `client`, `hosts` e `failed`, sem migração. O nome do cliente vem de `clientInfo` do MCP, não é autenticado e serve só para separar a origem.
+Alternativas: atualizar o painel do claude.ai por tarefa agendada, rejeitada porque cada atualização gasta limite; página fora da API, rejeitada porque precisaria de CORS.
+Consequências: exceção só para este uso local; não é painel de produto nem vale com chave de API. Não mostra leituras do chat sem o NINA nem custo, então não mede a regra de chamadas sem ser pedido no chat. Os nomes `claude-ai` e `claude-code` que a página reconhece não foram vistos em chamada real até o app reiniciar; outro nome aparece como está, em "Outro".
+
 ## 2026-11-04: fase 3, uso real
 Contexto: a regra de saída do plano pede saber se o NINA é chamado sem ser pedido, e o NINA só valia enquanto alguém o ligasse. Sem versão visível, não dava para saber qual código estava respondendo.
 Decisão: `GET /health` passa a devolver `version` (`NINA_VERSION`, o commit, definido por `scripts/nina-local.ps1`; `dev` fora dele). `nina-local.ps1 autostart` cria um atalho na pasta Inicializar do usuário, e `start -Boot` abre o Docker Desktop se preciso e não refaz o registro do MCP. `Stop-All` só mata `llama-server` e `uv`, porque `pids.txt` sobrevive à reinicialização e o número pode ser de outro programa. `nina_usage --tasks` conta por tarefa, usando o `promptId` do histórico.
