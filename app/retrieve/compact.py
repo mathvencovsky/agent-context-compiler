@@ -70,6 +70,8 @@ K1 = 1.2
 B = 0.75
 IDENTIFIER_BONUS = 2.0
 WINDOW_WEIGHT = 0.25
+#: Fill order: score / tokens^exponent (sqrt, like chunk selection).
+DENSITY_EXPONENT = 0.5
 
 #: Function words that carry no topic; IDF alone is unreliable over few units.
 STOPWORDS = frozenset(
@@ -329,7 +331,7 @@ def compact_pieces(
     eligible.sort(
         key=lambda u: (
             -effective[(u.piece, u.index)]
-            / math.sqrt(max(tokens[(u.piece, u.index)], 1)),
+            / max(tokens[(u.piece, u.index)], 1) ** DENSITY_EXPONENT,
             u.piece,
             u.index,
         )

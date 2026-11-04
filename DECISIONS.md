@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: como escolher frases dentro de 560 tokens (regra antes de medir)
+Contexto: o humano pediu para seguir melhorando a escolha das frases. Em 80 respostas, linhas de 1 a 4 palavras são só 6,4% do texto, então o lixo visto em um teste real não é a causa principal. A pesquisa aponta pontuar a frase com seu contexto e decidir por pergunta.
+Decisão: medir em `bench/compact_select_eval.py` as variantes `short5`, `context`, `heading`, `paragraph`, `density_quarter`, `density_none` e `window`, mais a combinação das duas melhores. A metade A (138 tarefas) escolhe: ganho de pelo menos 3 pontos de `soft_hit`, em até 560 tokens. A metade B (110 tarefas) decide: ganho de pelo menos 2 pontos, e o leitor às cegas aprova a variante ao menos tanto quanto a base nas discordâncias.
+Alternativas: um reranker maior, adiado por exigir outro modelo e mais tempo por chamada.
+Consequências: sem variante aprovada, o produto não muda. O teste usa só modelos locais. Comparar de novo com o Context7 em tarefas novas depende da cota grátis, que volta perto de 2026-12-01.
+
 ## 2026-11-04: modo web em 560 tokens, por decisão do humano contra a regra
 Contexto: o limite 560 não passou na regra da entrada abaixo, que pedia `NINA VENCE` contra `c7_fetch`.
 Decisão (humano, 2026-11-04): adotar 560 como exceção, sabendo que a regra não passou. `WEB_MAX_TOKENS` vale 560.
