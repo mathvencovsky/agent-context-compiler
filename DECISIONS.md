@@ -10,6 +10,12 @@ Alternativas: o que foi descartado e por quê.
 Consequências: o que muda na SPEC ou no código.
 ```
 
+## 2026-11-04: fase 1 do plano, defeitos óbvios
+Contexto: defeitos verificados no pente fino (`reports/Custo do NINA e correção.md`).
+Decisão: remover cópias exatas de pedaços; não emitir título vazio; `tokenize` sem acentos e para qualquer alfabeto; stopwords em português; nota `no_lexical_match`; `coverage` `unknown` com reranker local; `max_tokens` cobre a resposta inteira em `compact` conciso; mensagem clara para 401, 403 e 429; `exclude_chunk_ids` aceita números.
+Alternativas: recalibrar os limiares agora (fase 2); piso de relevância (fase 2).
+Consequências: SPEC §9 lista as mudanças, que entram na emenda de recongelamento do M10: remoção de cópias, título vazio e `tokenize` mudam a saída padrão em casos raros. `identifier_tokenize`, `assemble._tokenize` e os tokenizadores dos baselines não mudaram. Abertos: `test_claude_md_symlinked_to_agents_md_is_written_once` exige privilégio de symlink no Windows; `test_tag_smuggling_is_removed_with_one_warning` falha aqui porque o lxml local remove o ESC antes do filtro e `[2J` sobra no texto: defeito pequeno, a tratar na fase 2.
+
 ## 2026-11-04: chamada paga só com autorização; sem leitura forçada
 Contexto: `compact_eval` gastou nas contas do humano porque uma chave no `.env` bastava para pagar, e `make dev` também pagaria. A regra de ler toda página de uma busca respondeu por cerca de 60% do gasto a mais medido. O humano aprovou o plano do pente fino em 2026-11-04.
 Decisão: `ALLOW_PAID_CALLS` (padrão `false`) é exigida por OpenAI, Anthropic, Jina e pelo `m10_agent` antes de qualquer chamada. A falha usa o mesmo caminho de chave ausente (503 na API). `WEB_INSTRUCTIONS` e a regra do `CLAUDE.md` global passam de "leia toda página encontrada" para "quando precisar abrir uma página, use o NINA".
