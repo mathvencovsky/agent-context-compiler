@@ -304,7 +304,7 @@ def build_server(
             Field(description='"detailed": JSON with ids, scores and evidence.'),
         ] = "concise",
         exclude_chunk_ids: Annotated[
-            list[str] | None,
+            list[str | int] | None,
             Field(
                 description="Chunk ids you have; not returned again. If they "
                 "were cleared from your context, omit them to get them back."
@@ -323,7 +323,10 @@ def build_server(
                 urls=urls,
                 max_tokens=max_tokens,
                 response_format=response_format,
-                exclude_chunk_ids=exclude_chunk_ids,
+                # fragments show chunk="1353"; agents often pass the number
+                exclude_chunk_ids=[str(c) for c in exclude_chunk_ids]
+                if exclude_chunk_ids
+                else None,
                 version=version or None,
                 compact=compact,
             )
