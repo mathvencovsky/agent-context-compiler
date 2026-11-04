@@ -137,3 +137,7 @@ def test_assemble_failed_source_carries_refusal_text() -> None:
     assert outcome.source.status == "upstream_status"
     assert outcome.warning is not None
     assert "refused the identified NINA bot" in str(outcome.warning["message"])
+
+
+def test_unknown_coverage_has_no_low_coverage_hint() -> None:
+    assert _codes(AssembleResult(query="q", coverage="unknown")) == []
