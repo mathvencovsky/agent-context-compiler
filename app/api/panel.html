@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NINA no uso real</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #fff; --text: #1f2328; --muted: #646b73;
+  --line: #e2e3df; --chat: #2a6f97; --code: #6a4c93; --none: #9aa0a6;
+  --bad: #b3261e; --ok: #1e7b4f;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a; --panel: #1e2125; --text: #e8eaed; --muted: #a0a6ad;
+    --line: #33373c; --chat: #6db3d9; --code: #b79ad9; --none: #7d838a;
+    --bad: #f2877f; --ok: #6fcf97;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1040px; margin: 0 auto; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 15px; margin: 28px 0 8px; }
+#status { color: var(--muted); font-size: 13px; }
+#status.down { color: var(--bad); font-weight: 600; }
+.note { color: var(--muted); font-size: 13px; margin: 8px 0 0; max-width: 72ch; }
+.tiles {
+  display: grid; gap: 10px; margin-top: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.tile b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--muted); font-size: 13px; }
+.wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.sites { white-space: normal; min-width: 180px; overflow-wrap: anywhere; }
+.chat { color: var(--chat); font-weight: 600; }
+.code { color: var(--code); font-weight: 600; }
+.none { color: var(--none); }
+.bad { color: var(--bad); }
+.good { color: var(--ok); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+button {
+  font: inherit; font-size: 13px; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.empty { padding: 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>NINA no uso real</h1>
+    <span id="status" role="status">Carregando…</span>
+  </header>
+  <p class="note">
+    Atualiza sozinho e não gasta limite nem API. Mostra só o que passou pelo NINA:
+    leituras que o chat fez sem o NINA não aparecem, e o custo da conversa não é conhecido aqui.
+    A pergunta não é guardada.
+  </p>
+  <div class="tiles" id="tiles"></div>
+  <h2>Por dia</h2>
+  <div class="wrap" id="days"></div>
+  <h2>Chamadas recentes</h2>
+  <div class="filters" id="filters" role="group" aria-label="Filtrar por origem"></div>
+  <div class="wrap" id="calls" style="margin-top:8px"></div>
+</main>
+<script>
+"use strict";
+const ORIGINS = { chat: "Chat", code: "Claude Code", other: "Outro", none: "Sem origem" };
+const TOOLS = [
+  ["/v1/context/assemble", "Resposta"],
+  ["/v1/documents/resolve", "Página inteira"],
+  ["/v1/documents/", "Página guardada"],
+  ["/v1/sites/index", "Índice do site"],
+];
+let data = null;
+let filter = "all";
+
+function origin(e) {
+  if (!e.client) return "none";
+  if (e.client === "claude-code") return "code";
+  if (e.client === "claude-ai") return "chat";
+  return "other";
+}
+function originLabel(e) {
+  const kind = origin(e);
+  return kind === "other" ? e.client : ORIGINS[kind];
+}
+function tool(e) {
+  const found = TOOLS.find(([prefix]) => e.endpoint.startsWith(prefix));
+  return found ? found[1] : e.endpoint;
+}
+function problem(e) {
+  if (e.status >= 400) return "erro " + e.status;
+  if (e.failed) return e.failed + (e.failed === 1 ? " fonte recusada" : " fontes recusadas");
+  return "";
+}
+function localDay(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+}
+function number(n) { return n ? n.toLocaleString("pt-BR") : "—"; }
+function seconds(ms) { return (ms / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " s"; }
+function median(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+}
+function el(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+function table(head, rows) {
+  const out = el("table");
+  const top = el("tr");
+  head.forEach(([label, cls]) => { const th = el("th", label, cls); th.scope = "col"; top.append(th); });
+  const thead = el("thead"); thead.append(top); out.append(thead);
+  const body = el("tbody");
+  rows.forEach((cells) => {
+    const tr = el("tr");
+    cells.forEach(([text, cls]) => tr.append(el("td", text, cls)));
+    body.append(tr);
+  });
+  out.append(body);
+  return out;
+}
+function renderTiles(events) {
+  const today = localDay(new Date());
+  const now = events.filter((e) => e.day === today);
+  const latency = median(now.map((e) => e.latency_ms));
+  const tiles = [
+    [now.filter((e) => origin(e) === "chat").length, "chamadas do chat hoje"],
+    [now.filter((e) => origin(e) === "code").length, "do Claude Code hoje"],
+    [now.filter((e) => problem(e)).length, "com erro ou recusa hoje"],
+    [number(now.reduce((sum, e) => sum + e.output_tokens, 0)), "tokens entregues hoje"],
+    [latency === null ? "—" : seconds(latency), "tempo mediano hoje"],
+  ];
+  document.getElementById("tiles").replaceChildren(...tiles.map(([value, label]) => {
+    const tile = el("div", undefined, "tile");
+    tile.append(el("b", String(value)), el("span", label));
+    return tile;
+  }));
+}
+function renderDays(events) {
+  const days = new Map();
+  events.forEach((e) => {
+    const row = days.get(e.day) || { chat: 0, code: 0, rest: 0, problems: 0, tokens: 0 };
+    const kind = origin(e);
+    row[kind === "chat" || kind === "code" ? kind : "rest"] += 1;
+    if (problem(e)) row.problems += 1;
+    row.tokens += e.output_tokens;
+    days.set(e.day, row);
+  });
+  const box = document.getElementById("days");
+  if (!days.size) { box.replaceChildren(el("div", "Nenhuma chamada ainda.", "empty")); return; }
+  const rows = [...days.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([day, r]) => [
+    [day], [number(r.chat), "num"], [number(r.code), "num"], [number(r.rest), "num"],
+    [number(r.problems), "num"], [number(r.tokens), "num"],
+  ]);
+  box.replaceChildren(table([
+    ["Dia"], ["Chat", "num"], ["Claude Code", "num"], ["Outros e sem origem", "num"],
+    ["Erro ou recusa", "num"], ["Tokens entregues", "num"],
+  ], rows));
+}
+function renderFilters(events) {
+  const kinds = ["all", ...Object.keys(ORIGINS)];
+  document.getElementById("filters").replaceChildren(...kinds.map((kind) => {
+    const count = kind === "all" ? events.length : events.filter((e) => origin(e) === kind).length;
+    const button = el("button", (kind === "all" ? "Todas" : ORIGINS[kind]) + " (" + count + ")");
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(filter === kind));
+    button.onclick = () => { filter = kind; render(); };
+    return button;
+  }));
+}
+function renderCalls(events) {
+  const shown = events.filter((e) => filter === "all" || origin(e) === filter).slice(0, 100);
+  const box = document.getElementById("calls");
+  if (!shown.length) { box.replaceChildren(el("div", "Nenhuma chamada neste filtro.", "empty")); return; }
+  const rows = shown.map((e) => {
+    const bad = problem(e);
+    return [
+      [e.date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" })],
+      [originLabel(e), origin(e) === "chat" ? "chat" : origin(e) === "code" ? "code" : "none"],
+      [tool(e)],
+      [e.hosts.join(", ") || "—", "sites"],
+      [number(e.output_tokens), "num"],
+      [number(e.page_tokens), "num"],
+      [seconds(e.latency_ms), "num"],
+      [bad || "ok", bad ? "bad" : "good"],
+    ];
+  });
+  box.replaceChildren(table([
+    ["Quando"], ["Origem"], ["Ferramenta"], ["Sites"], ["Tokens entregues", "num"],
+    ["Tamanho da página", "num"], ["Tempo", "num"], ["Resultado"],
+  ], rows));
+}
+function render() {
+  if (!data) return;
+  const events = data.events;
+  renderTiles(events);
+  renderDays(events);
+  renderFilters(events);
+  renderCalls(events);
+}
+async function refresh() {
+  const status = document.getElementById("status");
+  try {
+    const response = await fetch("/painel/dados", { cache: "no-store" });
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    body.events.forEach((e) => { e.date = new Date(e.ts); e.day = localDay(e.date); });
+    data = body;
+    render();
+    status.className = "";
+    status.textContent = "Atualizado às " + new Date().toLocaleTimeString("pt-BR") + " · versão " + body.version;
+  } catch (error) {
+    status.className = "down";
+    status.textContent = "NINA fora do ar: mostrando os últimos dados que chegaram.";
+  }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

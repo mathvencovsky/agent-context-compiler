@@ -23,6 +23,7 @@ from app.api.errors import (
     generic_exception_handler,
     missing_key_handler,
 )
+from app.api.panel import router as panel_router
 from app.api.sites import router as sites_router
 from app.api.usage import UsageMiddleware
 from app.api.usage import router as usage_router
@@ -116,6 +117,8 @@ def create_app() -> FastAPI:
     app.router.routes.extend(usage_router.routes)
     # The llms.txt site index (POST /v1/sites/index) mounts the same way.
     app.router.routes.extend(sites_router.routes)
+    # The local usage panel, outside /v1 (DECISIONS.md 2026-11-04).
+    app.router.routes.extend(panel_router.routes)
     # Extending the routes directly (above) keeps them enumerable in
     # ``app.routes``, but — unlike ``include_router`` — it leaves each route's
     # ``dependency_overrides_provider`` unset. The provider is captured when the
@@ -130,6 +133,7 @@ def create_app() -> FastAPI:
         *assemble_router.routes,
         *usage_router.routes,
         *sites_router.routes,
+        *panel_router.routes,
     ):
         if isinstance(route, APIRoute):
             route.dependency_overrides_provider = app
