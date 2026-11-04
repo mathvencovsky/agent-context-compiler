@@ -27,15 +27,28 @@ from app.extract.ir import Block, Warning, normalize_text
 
 INVISIBLE_TEXT_REMOVED_WARNING_CODE = "invisible_text_removed"
 
-_INVISIBLE = re.compile(
+_ANSI = (
     r"\x1b\[[0-?]*[ -/]*[@-~]"  # ANSI CSI sequence (colors, cursor moves)
     r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?"  # ANSI OSC sequence
     r"|\x1b[@-Z\\-_]?"  # other ESC sequences, or a lone ESC
-    r"|[\U000E0000-\U000E007F]"  # Unicode tag characters
+)
+_ANSI_RE = re.compile(_ANSI)
+_INVISIBLE = re.compile(
+    _ANSI + r"|[\U000E0000-\U000E007F]"  # Unicode tag characters
     r"|[\u202A-\u202E\u2066-\u2069]"  # bidi embeddings, overrides, isolates
     r"|[\u200B\u2060\uFEFF]"  # zero-width space, word joiner, BOM
     r"|[\x00-\x08\x0e-\x1a\x1c-\x1f\x7f-\x9f]"  # other C0 (but ESC) and C1
 )
+
+
+def strip_ansi(text: str) -> tuple[str, int]:
+    """``text`` without ANSI escapes, and the removed length.
+
+    Run on raw HTML before parsing: lxml drops a bare ESC while parsing, which
+    would leave the rest of the sequence (``[2J``) behind as visible text.
+    """
+    clean = _ANSI_RE.sub("", text)
+    return clean, len(text) - len(clean)
 
 
 def strip_invisible(text: str) -> tuple[str, int]:

@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
 from app.index.tokens import count_tokens
@@ -54,6 +54,7 @@ __all__ = [
     "ELISION",
     "POOL_FACTOR",
     "CompactOutcome",
+    "cached_scorer",
     "compact_pieces",
     "compact_result",
     "pool_budget",
@@ -227,6 +228,18 @@ def _scores(query: str, texts: Sequence[str], units: Sequence[_Unit]) -> list[fl
     return scores
 
 
+def _scored_by(
+    scorer: Callable[[Sequence[str]], Sequence[float]],
+    texts: Sequence[str],
+    units: Sequence[_Unit],
+) -> list[float]:
+    """``scorer`` over the non-heading units, with headings at 0 as in BM25."""
+    body = [u for u in units if u.kind != "heading"]
+    scores = scorer([texts[u.piece][u.start : u.end] for u in body]) if body else []
+    by_unit = dict(zip(((u.piece, u.index) for u in body), scores, strict=True))
+    return [by_unit.get((u.piece, u.index), 0.0) for u in units]
+
+
 def _render(md: str, units: Sequence[_Unit], kept: set[int]) -> str | None:
     """The kept units of one piece in page order, gaps as :data:`ELISION`."""
     if not kept:
@@ -277,15 +290,25 @@ def _fallback(
 
 
 def compact_pieces(
-    query: str, texts: Sequence[str], values: Sequence[float], budget: int
+    query: str,
+    texts: Sequence[str],
+    values: Sequence[float],
+    budget: int,
+    *,
+    unit_scorer: Callable[[Sequence[str]], Sequence[float]] | None = None,
 ) -> CompactOutcome:
     """Compact the pooled chunks ``texts`` (page order) to ``budget`` tokens.
 
     ``values`` are the chunks' selection values, used only by the fallback.
+    ``unit_scorer`` replaces BM25 with a score per unit text; headings stay at 0.
     """
     per_piece = [_units(md, i) for i, md in enumerate(texts)]
     units = [u for piece in per_piece for u in piece]
-    own = _scores(query, texts, units)
+    own = (
+        _scores(query, texts, units)
+        if unit_scorer is None
+        else _scored_by(unit_scorer, texts, units)
+    )
     if not any(s > 0 for s in own):
         return _fallback(texts, values, budget)
     score_of = {(u.piece, u.index): s for u, s in zip(units, own, strict=True)}
@@ -345,7 +368,28 @@ def compact_pieces(
     )
 
 
-def compact_result(result: AssembleResult, *, query: str, budget: int) -> None:
+def cached_scorer(
+    rerank: Callable[[str, list[str]], list[float]], query: str
+) -> Callable[[Sequence[str]], list[float]]:
+    """A ``unit_scorer`` that scores each distinct unit text once per request."""
+    known: dict[str, float] = {}
+
+    def score(texts: Sequence[str]) -> list[float]:
+        missing = [t for t in dict.fromkeys(texts) if t not in known]
+        if missing:
+            known.update(zip(missing, rerank(query, missing), strict=True))
+        return [known[t] for t in texts]
+
+    return score
+
+
+def compact_result(
+    result: AssembleResult,
+    *,
+    query: str,
+    budget: int,
+    unit_scorer: Callable[[Sequence[str]], Sequence[float]] | None = None,
+) -> None:
     """Compact ``result`` (selected with :func:`pool_budget`) to ``budget``.
 
     Fragments keep their ids, provenance, scores and evidence (the evidence
@@ -358,7 +402,9 @@ def compact_result(result: AssembleResult, *, query: str, budget: int) -> None:
         f.scores.rerank if f.scores.rerank is not None else f.scores.rrf
         for f in result.fragments
     ]
-    outcome = compact_pieces(query, [f.md for f in result.fragments], values, budget)
+    outcome = compact_pieces(
+        query, [f.md for f in result.fragments], values, budget, unit_scorer=unit_scorer
+    )
     fragments = []
     for fragment, text in zip(result.fragments, outcome.texts, strict=True):
         if text is not None:
@@ -367,7 +413,8 @@ def compact_result(result: AssembleResult, *, query: str, budget: int) -> None:
     result.output_tokens = sum(f.tokens for f in fragments)
     result.budget_tokens = budget
     result.budget_limited = result.budget_limited or outcome.dropped_relevant
-    if not outcome.matched:
+    if not outcome.matched and unit_scorer is None:
+        # Only BM25 can say the words differ; a scorer rating all units 0 cannot.
         result.compact = "no_match"
     else:
         result.compact = "pruned" if outcome.pruned else "whole"

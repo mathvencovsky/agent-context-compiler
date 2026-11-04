@@ -129,7 +129,7 @@ def _compacted(result: AssembleResult) -> list[dict[str, object]]:
         return [
             {
                 "code": "compacted",
-                "message": "Sentences with little overlap with the query were left "
+                "message": "Less relevant sentences were left "
                 "out of the fragments and replaced by [\u2026]; kept text is "
                 "verbatim. Option: compact=false for whole fragments.",
                 "details": {},
