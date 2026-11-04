@@ -35,10 +35,10 @@ def test_base_scores_the_units_and_leaves_headings_at_zero() -> None:
 
 
 def test_short_units_score_zero_of_their_own() -> None:
-    units = _units_of()
-    scores = scored(ARMS["short5"], _by_length, [MD], units)
+    md = "# Install\n\nRun pip install nina right now. Docs.\n"
+    scores = scored(ARMS["short5"], _by_length, [md], _units_of(md))
     assert scores[-1] == 0.0  # "Docs."
-    assert scores[1] == 21.0
+    assert scores[1] == len("Run pip install nina right now.")
 
 
 def test_context_arm_reads_the_unit_under_its_heading() -> None:
