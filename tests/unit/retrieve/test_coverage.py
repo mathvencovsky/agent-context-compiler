@@ -52,3 +52,10 @@ def test_coverage_does_not_collapse_over_spread_distribution() -> None:
     assert len(buckets) >= 2
     assert "sufficient" in buckets  # the top maxima are sufficient
     assert buckets != {"sufficient"}  # ...but NOT every task is sufficient
+
+
+def test_local_reranker_makes_coverage_unknown() -> None:
+    """The thresholds are Jina-calibrated: a local reranker has no label."""
+    s = Settings(reranker_base_url="http://127.0.0.1:8080")
+    assert _coverage(0.9, s) == "unknown"
+    assert _coverage(None, s) == "unknown"

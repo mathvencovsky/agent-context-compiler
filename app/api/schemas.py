@@ -224,7 +224,7 @@ class AssembleResponse(BaseModel):
     fragments: list[FragmentModel]
     sources: list[SourceStatusModel]
     token_usage: TokenUsage
-    coverage: Literal["insufficient", "partial", "sufficient"]
+    coverage: Literal["insufficient", "partial", "sufficient", "unknown"]
     warnings: list[dict[str, object]]
     hints: list[HintModel] = Field(default_factory=list)
     trust: Literal["untrusted_source"] = "untrusted_source"
@@ -250,7 +250,7 @@ class ConciseAssembleResponse(BaseModel):
     context: str
     sources: list[SourceStatusModel]
     token_usage: TokenUsage
-    coverage: Literal["insufficient", "partial", "sufficient"]
+    coverage: Literal["insufficient", "partial", "sufficient", "unknown"]
     warnings: list[dict[str, object]]
     hints: list[HintModel] = Field(default_factory=list)
     trust: Literal["untrusted_source"] = "untrusted_source"

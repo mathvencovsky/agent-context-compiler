@@ -126,3 +126,7 @@ def test_one_release_per_site_has_no_version_hint() -> None:
         ],
     )
     assert build_hints(result) == []
+
+
+def test_unknown_coverage_has_no_low_coverage_hint() -> None:
+    assert _codes(AssembleResult(query="q", coverage="unknown")) == []
