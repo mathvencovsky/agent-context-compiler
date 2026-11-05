@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(!.env.example)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Edit(!.env.example)"
+    ],
+    "ask": [
+      "Edit(/bench/results/**)",
+      "Edit(/bench/PREREG.md)",
+      "Edit(/CLAUDE.md)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/agents/**)",
+      "Edit(/.claude/skills/**)",
+      "Edit(/.claude/hooks/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": [
+              "run",
+              "--no-project",
+              "--quiet",
+              "python",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/paid_calls_guard.py"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
